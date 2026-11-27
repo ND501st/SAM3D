@@ -345,8 +345,26 @@ void USimCrewVoiceComponent::Play(TArray<int16>&& Pcm, int32 SampleRate, const F
 	UAudioComponent* Audio = ChannelComponent(Channel);
 	Audio->Stop();
 	Audio->SetSound(Wave);
+	// A line on a radio net is heard through the set the headset is on, at its ГРОМКОСТЬ (simcore::HeadsetSound::volume);
+	// every line in the headset at the player's box's own ГРОМКОСТЬ, the A-1's knob (simcore::HeadsetLevel).
+	float SetLevel = 1.0f;
+	{
+		const UWorld* World = GetWorld();
+		const USimWorldSubsystem* Sim = World ? World->GetSubsystem<USimWorldSubsystem>() : nullptr;
+		if (const simcore::ScenarioRunner* Runner = Sim ? Sim->GetScenarioRunner() : nullptr)
+		{
+			const ASimOsaVehicle* Vehicle = Cast<ASimOsaVehicle>(GetOwner());
+			const std::string Station = Vehicle != nullptr ? std::string(TCHAR_TO_UTF8(*Vehicle->GetStationId())) : Runner->Cmdr();
+			if (Settings.radio)
+			{
+				const simcore::HeadsetSound H = simcore::HeadsetSoundNow(*Runner, Station);
+				SetLevel = H.on_radio ? static_cast<float>(H.volume) : 1.0f;
+			}
+			SetLevel *= static_cast<float>(simcore::HeadsetLevel(Runner->Console(), Station));
+		}
+	}
 	// Louder under stress (VoiceSettings.volume); ducked by Duck while a more urgent line plays.
-	const float Volume = FMath::Clamp(CVarVoiceVolume.GetValueOnGameThread(), 0.0f, 2.0f) * static_cast<float>(Settings.volume);
+	const float Volume = FMath::Clamp(CVarVoiceVolume.GetValueOnGameThread(), 0.0f, 2.0f) * static_cast<float>(Settings.volume) * SetLevel;
 	ChannelVolume.Add(Channel, Volume);
 	ChannelPriority.Add(Channel, Priority);
 	Ducked.Remove(Channel);

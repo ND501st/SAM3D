@@ -1,0 +1,474 @@
+{
+ "photo": "g091-d",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle beside the left radio station, raised (standing), close",
+  "looks": "left (-x) and steeply down into the radio well under SL-1M; image left aft, right forward",
+  "covers": [
+   "radio.r123m_left",
+   "cover.radio_steel",
+   "new.sponson.left_radio_well",
+   "rack.sl1m"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.sl1m",
+   "class": "rack",
+   "seen_as": "lower blocks of SL-1M and the frame's bottom rail at the top",
+   "bbox": [
+    0.0,
+    0.0,
+    0.82,
+    0.28
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_ok81_4m2",
+   "class": "block",
+   "seen_as": "aft block with the vertical socket and white cover box",
+   "bbox": [
+    0.0,
+    0.0,
+    0.43,
+    0.2
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_0009_5m",
+   "class": "block",
+   "seen_as": "forward bottom block with the oval windows",
+   "bbox": [
+    0.44,
+    0.0,
+    0.78,
+    0.15
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.left_radio_well",
+   "class": "sponson",
+   "seen_as": "recessed well in the hull side under the rack, sloping walls",
+   "bbox": [
+    0.0,
+    0.22,
+    0.85,
+    0.85
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "below",
+     "rack.sl1m"
+    ]
+   ],
+   "size_cue": "as long as radio and BP-26 together",
+   "material": "grey painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "cover.radio_steel",
+   "class": "cover",
+   "seen_as": "steel tread plate with pressed sunburst ribs overhanging the radio, two studs",
+   "bbox": [
+    0.03,
+    0.33,
+    0.98,
+    0.66
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "above",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "longer than the radio and BP-26 together",
+   "material": "steel plate, rust worn",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "radio.r123m_left",
+   "class": "radio",
+   "seen_as": "R-123M face under the tread plate's forward end",
+   "bbox": [
+    0.48,
+    0.43,
+    0.94,
+    0.79
+   ],
+   "zone": "compartment.left_wall",
+   "on": "mount.r123m_left",
+   "relations": [
+    [
+     "forward_of",
+     "psu.bp26_left"
+    ],
+    [
+     "in",
+     "new.sponson.left_radio_well"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "psu.bp26_left",
+   "class": "power",
+   "seen_as": "BP-26 hidden behind the canvas under the plate's aft end",
+   "bbox": [
+    0.04,
+    0.58,
+    0.48,
+    0.86
+   ],
+   "zone": "compartment.left_wall",
+   "on": "mount.r123m_left",
+   "relations": [
+    [
+     "aft_of",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "placed by g091-b; not itself seen here"
+  },
+  {
+   "id": "new.cover.r123m_left_canvas",
+   "class": "cover",
+   "seen_as": "khaki canvas hanging over the aft part of the station",
+   "bbox": [
+    0.1,
+    0.6,
+    0.5,
+    0.82
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "mount.r123m_left",
+   "class": "mount",
+   "seen_as": "tubular tray frame under the radio",
+   "bbox": [
+    0.14,
+    0.62,
+    0.95,
+    0.88
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.r123m_left_braided",
+   "class": "cable",
+   "seen_as": "braided cable down to the floor",
+   "bbox": [
+    0.38,
+    0.7,
+    0.58,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.bp26_left_white",
+   "class": "cable",
+   "seen_as": "white wires under the tray",
+   "bbox": [
+    0.25,
+    0.73,
+    0.64,
+    0.85
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.left_well_strip",
+   "class": "bracket",
+   "seen_as": "long aluminium strip bracket on the well's sloping wall",
+   "bbox": [
+    0.11,
+    0.3,
+    0.54,
+    0.42
+   ],
+   "zone": "compartment.left_wall",
+   "on": "new.sponson.left_radio_well",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hook.left_well_eyebolt",
+   "class": "hook",
+   "seen_as": "eye bolt in the well wall",
+   "bbox": [
+    0.24,
+    0.43,
+    0.27,
+    0.46
+   ],
+   "zone": "compartment.left_wall",
+   "on": "new.sponson.left_radio_well",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.strap.left_well",
+   "class": "strap",
+   "seen_as": "brown leather strap on a metal bracket at the top of the well, aft",
+   "bbox": [
+    0.12,
+    0.25,
+    0.25,
+    0.34
+   ],
+   "zone": "compartment.left_wall",
+   "on": "new.sponson.left_radio_well",
+   "relations": [],
+   "size_cue": "",
+   "material": "leather",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.strap.below_sl1m_fwd",
+   "class": "strap",
+   "seen_as": "brown strap on the rack's bottom rail, forward",
+   "bbox": [
+    0.74,
+    0.16,
+    0.8,
+    0.19
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.switch.left_well_red_lever_box",
+   "class": "switch",
+   "seen_as": "grey switch box with a red lever, upright at the well's forward end",
+   "bbox": [
+    0.61,
+    0.23,
+    0.79,
+    0.35
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "new.kit.canister_n542"
+    ],
+    [
+     "above",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "about a third of the radio's width",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.canister_n542",
+   "class": "kit",
+   "seen_as": "yellow cylindrical canister stencilled N-542(?)",
+   "bbox": [
+    0.53,
+    0.31,
+    0.63,
+    0.38
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "aft_of",
+     "new.switch.left_well_red_lever_box"
+    ]
+   ],
+   "size_cue": "fist-thick, hand-tall",
+   "material": "yellow painted metal",
+   "confidence": "medium",
+   "notes": "purpose unknown"
+  },
+  {
+   "id": "new.unknown.box_fwd_of_left_radio",
+   "class": "unknown",
+   "seen_as": "large grey box face with a handle forward of the well",
+   "bbox": [
+    0.81,
+    0.17,
+    1.0,
+    0.4
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "new.sponson.left_radio_well"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.bag_fwd_of_left_radio",
+   "class": "kit",
+   "seen_as": "khaki bag with a brown strap forward of the radio",
+   "bbox": [
+    0.88,
+    0.33,
+    1.0,
+    0.62
+   ],
+   "zone": "cab.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.left_wall_fwd_of_sl1m",
+   "class": "loom",
+   "seen_as": "white cables at the top right, forward of the rack",
+   "bbox": [
+    0.85,
+    0.0,
+    0.93,
+    0.16
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "slotted floor grating to the aisle side, lower right",
+   "bbox": [
+    0.65,
+    0.66,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "cover.floor_radio_well",
+   "class": "cover",
+   "seen_as": "grey floor plates at the well's bottom, lower left",
+   "bbox": [
+    0.0,
+    0.85,
+    0.65,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.post_aft_of_left_radio_well",
+   "class": "frame",
+   "seen_as": "riveted green-grey vertical member at the left (aft) edge with a cable bundle",
+   "bbox": [
+    0.0,
+    0.45,
+    0.07,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "aft_of",
+     "new.sponson.left_radio_well"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "could be frame.post_sl1m_sl2m or the bench end"
+  }
+ ],
+ "not_in_register": [
+  "radio well in the left hull side",
+  "switch box with red lever and yellow canister at the well's forward end",
+  "strip bracket and eye bolt in the well"
+ ],
+ "doubts": [
+  "Register zone for radio.r123m_left is cab.left_wall; this photo puts it under SL-1M in the compartment.",
+  "The riveted member at the aft edge is unidentified.",
+  "The items at the right edge (box, bag) may belong to the driver's seat area."
+ ]
+}

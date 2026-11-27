@@ -91,8 +91,15 @@ def test_osa_map_is_clean(tmp_path):
     assert "__DATA__" not in page
     data = json.loads(page.split("const DATA = ", 1)[1].split(";\nconst N =", 1)[0])
     ids = {n["id"] for n in data["nodes"]}
-    assert "c:fo.launch" in ids and "e:launch" in ids and "p:mc" in ids and "m:launcher" in ids
+    assert "c:fo.launch" in ids and "e:launch" in ids and "p:0062" in ids and "m:launcher" in ids
     assert "p:eccm" not in ids and "p:qcscale" not in ids  # built: 9.4 counter-jamming, 6.5 Qc scale and drift
+    assert "p:mc" not in ids and "p:fk_meters" not in ids  # built: МЦ (C9), the function-check meters (C4)
+    # The vehicle's systems (data/vehicles/osa_ak_systems.json) and the checks feed their models: none of it inert.
+    assert {"m:veh_engine", "m:veh_drive", "m:veh_lights", "m:veh_fire", "m:checks"} <= ids
+    status = {n["id"]: n.get("status") for n in data["nodes"]}
+    for cid in ("veh.starter", "veh.gear", "veh.light_switch", "fire.button", "fk.systems", "err.output", "ssc.noise_fire", "fo.mc",
+                "ind.select", "pwr.relay_heat"):
+        assert status["c:" + cid] in ("wired", "model"), (cid, status["c:" + cid])
     assert "c:ssc.rgpo" in ids and "i:range_pulled" in ids and "m:orient" in ids
     assert data["counts"]["controls"] == len(json.loads((ROOT / "data/procedures/osa_ak.json").read_text(encoding="utf-8"))["controls"])
 
@@ -119,3 +126,46 @@ def test_osa_launcher_reads_the_channel_selector_and_lights_the_channel_lamps():
         assert ("m:launcher", "i:" + inp) in edges
     planned = {p[0] for p in button_map.PLANNED["osa_ak"]}
     assert not planned & {"p:containers", "p:select", "p:channels", "p:chanlamps", "p:fuse"}  # built in 6.3
+
+
+def test_picture_knobs_meter_selectors_and_named_elsewhere():
+    con = _console()
+    con["controls"] += [
+        {"id": "bright", "label": "BRIGHT", "kind": "wheel", "station": "operator"},
+        {"id": "meter_sel", "label": "METER", "kind": "rotary", "station": "operator"},
+        {"id": "by_code", "label": "CALL", "kind": "button", "station": "operator"},
+        {"id": "drilled", "label": "HEAT", "kind": "switch", "station": "operator"},
+    ]
+    cab = _cabin()
+    cab["displays"] = [
+        {"id": "scope", "label": "Scope", "kind": "ppi", "panel": "panel", "picture": {"brightness": "bright"}},
+        {"id": "meter", "label": "Meter", "kind": "meter", "panel": "panel",
+         "levels": [{"when": [{"control": "meter_sel", "is": 1}], "value": 3}]},
+    ]
+    refs = {"by_code": {"code": ["simcore/include/simcore/x.hpp"]}, "drilled": {"drill": ["data/crew/test_crew.json"]}}
+    mb = button_map.build(con, cab, refs)
+    nodes = _nodes(mb)
+    assert nodes["c:bright"]["status"] == "display"
+    assert nodes["c:meter_sel"]["status"] == "display"
+    assert nodes["c:by_code"]["status"] == "code"
+    assert nodes["c:drilled"]["status"] == "drill"
+    assert nodes["c:spare"]["status"] == "inert"
+    counts = mb.data()["counts"]
+    assert sum(counts[s] for s in button_map.STATES) == counts["controls"]
+
+
+def test_the_list_names_every_control(tmp_path):
+    mb = button_map.build(_console(), _cabin())
+    out = tmp_path / "list.md"
+    button_map.write_list(mb, out)
+    text = out.read_text(encoding="utf-8")
+    for cid in ("power", "hv", "lamp_test", "spare", "launch"):
+        assert f"`{cid}`" in text
+    assert "## inert (1)" in text
+
+
+def test_find_refs_reads_the_crew_files():
+    refs = button_map.find_refs(["gyro.heat", "pvs1.call", "no.such_control"])
+    assert any("osa_ak_crew.json" in f for f in refs["gyro.heat"]["drill"])
+    assert any("scenario_runner.hpp" in f for f in refs["pvs1.call"]["code"])
+    assert "no.such_control" not in refs

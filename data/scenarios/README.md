@@ -53,6 +53,7 @@ the readiness state they start in (march, deployed, powered).
                                                       // battery or a post): the battery commander says it on the battery net; the regiment's
                                                       // he passes on (at a post it comes on the regiment's net); each commander tells his crew
   "assistance": "guided",                             // optional: the training overlay's level: demonstrate, guided (default), hint, unassisted, exam
+  "faults": { "random": true, "maintenance": "kept", "since_check_h": 4 },  // optional: faults by chance (docs/FAULTS.md); "random": false for a lesson
   "crew_commander": "npc",                            // optional: "npc" runs the crew by doctrine (docs/crew/), "script" (default) leaves the orders to the triggers
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
             { "name": "Deputy commander", "role": "deputy_commander", "skill": "class2" } ],   // role = a console station, one each; skill: a tier of data/crew/skill_levels.json
@@ -170,6 +171,8 @@ that sets its pace, slips, omissions and aim. With `"crew_commander": "npc"` no 
 work: the NPC commander brings the vehicle to readiness and engages by doctrine (`osa_crew_practice.json`). A player
 may take any seat (`ScenarioRunner::TakeSeat`): he gets that seat's orders and is reminded when the crew waits for him.
 `"assistance"` sets the training overlay's level for him (`docs/crew/08_TRAINING_AND_ASSISTANCE.md`).
+
+`"faults"` (a system with `data/gameplay/<system>_faults.json`): faults come about by themselves, by their circuits' hours, the racks' heat and the maintenance (`"kept"`, `"due"`, `"overdue"`), from the seed; `"since_check_h"` is the hours of work since the vehicle's last check, whose faults are there at the start for the function check to find. `"random": false` keeps the dice off (the lessons, the trainer); faults the scenario sets (`own_unit.inputs`, `set_input`) or the instructor does (`"instructor": "fault"`) come regardless. The missions menu's Faults off turns the dice off too (`docs/FAULTS.md`).
 
 Each trigger fires once, when every part of `when` holds. Positions: `east_m`/`north_m`/`up_m` are the local frame
 at `origin` (ENU metres); `lat_deg`/`lon_deg`/`alt_m` are converted to it.

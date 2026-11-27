@@ -19,6 +19,8 @@
 //     both channels and the next launch waits for it.
 //   * Emergency launch: ИЗДЕЛИЯ picks a container and АВАРИЙНЫЙ ПУСК throws that missile off unguided; it climbs for
 //     flight_s and self-destructs. It uses no channel and no outcome model, and counts as no guided launch.
+//   * Refusal (C9): the indication panel's selector on a container and ОТКАЗ drop that missile if it stands prepared on
+//     a channel (voenizdat_osa_1991 p151, p156): it rests as an overheated one does, and the pair is prepared again.
 // Deterministic; it reads the console and sets the console's inputs, nothing else.
 #pragma once
 
@@ -68,6 +70,7 @@ public:
             if (c.flying && t >= c.end_s) c.flying = false;  // the nominal flight is over
         }
         StepLetter(t, console);
+        StepRefuse(t, console);
         const bool jamming = !def_.jam_control.empty() && console.panel.Get(def_.jam_control) == 1;
         Set(eq, def_.hold_input, NextChannel(t, console) == 0);
         for (std::size_t i = 0; i < def_.containers.size(); ++i) {
@@ -118,6 +121,7 @@ public:
         return false;
     }
     int Overheats() const { return overheats_; }
+    int Refusals() const { return refusals_; }
 
     // The letter has been changed this many times (the command transmitters' frequency letter).
     int LetterChanges() const { return letter_changes_; }
@@ -208,6 +212,17 @@ public:
         }
     }
 
+    // Shots whose channel's ВОЗВРАТ is pressed while they fly (voenizdat_osa_1991 p120: the button gives the command
+    // «Сброс» and returns the missile range finder to its start): that missile's range is lost, and with it the missile.
+    std::vector<int> Returned(const ConsoleData& console) const {
+        std::vector<int> out;
+        for (std::size_t k = 0; k < channels_.size() && k < def_.channels.size(); ++k) {
+            const std::string& button = def_.channels[k].return_control;
+            if (channels_[k].flying && !button.empty() && console.panel.Get(button) == 1) out.push_back(channels_[k].shot);
+        }
+        return out;
+    }
+
     // Shots still flying (their numbers), for the runner to ask the outcome model about.
     // A channel's command transmitter (roadmap E5, the EM layer's emitter): 0 off, 1 on (ВКЛ ВЫС: a missile selected,
     // the transmitter's high voltage on), 2 guiding its missile in flight. Whether it radiates before the launch is
@@ -291,6 +306,32 @@ private:
             restart = true;
         }
         if (restart) console.equipment.Restart(def_.pair_preparation);
+    }
+
+    // ОТКАЗ, pressed once: the selector's container, if a channel's prepared missile, is dropped and rests.
+    void StepRefuse(double t, ConsoleData& console) {
+        if (!def_.has_refuse) return;
+        const LauncherRefuseDef& r = def_.refuse;
+        const bool pressed = console.panel.Get(r.button) == 1;
+        const bool edge = pressed && !refuse_pressed_;
+        refuse_pressed_ = pressed;
+        if (edge) {
+            const int pos = console.panel.Get(r.select_control);
+            const std::string id = pos >= 0 && pos < static_cast<int>(r.select_containers.size())
+                                       ? r.select_containers[static_cast<std::size_t>(pos)] : std::string();
+            for (Channel& c : channels_) {
+                if (id.empty() || c.selected < 0 || c.flying) continue;
+                const std::size_t i = static_cast<std::size_t>(c.selected);
+                if (def_.containers[i].id != id) continue;
+                rest_until_s_[i] = t + (def_.has_prep_hold ? def_.prep_hold.rest_s : 0.0);
+                c.selected = -1;
+                c.held_s = 0.0;
+                ++refusals_;
+                refused_until_s_ = std::max(refused_until_s_, rest_until_s_[i]);
+                console.equipment.Restart(def_.pair_preparation);
+            }
+        }
+        Set(console.equipment, r.refused_input, t < refused_until_s_);
     }
 
     // The letter change is the control entering its change position, once.
@@ -395,6 +436,9 @@ private:
     std::vector<double> rest_until_s_;  // per container: its missile can't be prepared before this time
     std::vector<int> cycles_;           // per container: holds so far since the last long rest
     int overheats_ = 0;
+    int refusals_ = 0;
+    bool refuse_pressed_ = false;
+    double refused_until_s_ = -1.0;
     int letter_pos_ = -1;
     int letter_changes_ = 0;
     double relock_until_s_ = -1e9;

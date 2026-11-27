@@ -73,6 +73,9 @@ add_executable(simcore_tests
   tests/test_comms.cpp
   tests/test_voice_comms.cpp
   tests/test_fuel.cpp
+  tests/test_vehicle_systems.cpp
+  tests/test_checks.cpp
+  tests/test_faults.cpp
   tests/test_orientation.cpp
   tests/test_radio_setup.cpp
   tests/test_threats.cpp

@@ -79,9 +79,11 @@
         "improvement_db": { "value": 25, "source": "estimate; mon_2112_80 p15, p23 (TES, double inter-period subtraction)", "confidence": "estimate" },
         "notch_mps": { "value": 15, "source": "estimate", "confidence": "estimate" },
         "notch_attenuation_db": { "value": 30, "source": "estimate", "confidence": "estimate" },
+        "afc_tolerance_hz": { "value": 500000, "source": "voenizdat_osa_1991 p33-36 (АПЧМ holds the magnetron to ±0.5 MHz, the mistune the MTI's phasing takes)", "confidence": "high" },
         "max_range_m": { "value": 35000, "source": "voenizdat_osa_1991 p30 (the working range in СДЦ is 35 km; to see targets beyond it the normal channel is gated in from 35 to 45 km, where passive jamming is not suppressed)", "confidence": "high" },
         "notes": "Internal or external coherence (mon_2112_80 p15): external takes the phase reference from the chaff, cancelling wind-blown chaff (MtiMode::External)."
       },
+      "sa_loss_db": { "value": 1, "source": "estimate; voenizdat_osa_1991 p30, p36 (СА, the anti-asynchronous blanker, on the search radar)", "confidence": "estimate" },
       "clutter": {
         "cnr_db_at_10km": { "value": 45, "source": "estimate", "confidence": "estimate" },
         "max_elevation_deg": { "value": 1.5, "source": "estimate", "confidence": "estimate" }
@@ -132,7 +134,8 @@
       "range_resolution_m": { "value": 34, "source": "derived from the 0.225 us pulse (voenizdat_osa_1991 p78); p66 guarantees 55 m or better", "confidence": "medium" },
       "mti": {
         "improvement_db": { "value": 25, "source": "estimate; korovin_tiv_2010 (SSC had MTI against chaff)", "confidence": "estimate" },
-        "notch_mps": { "value": 10, "source": "estimate", "confidence": "estimate" }
+        "notch_mps": { "value": 10, "source": "estimate", "confidence": "estimate" },
+        "afc_tolerance_hz": { "value": 500000, "source": "voenizdat_osa_1991 p33-36, p80 (АПЧМ's ±0.5 MHz, the same circuit on the tracking radar)", "confidence": "medium" }
       },
       "clutter": {
         "cnr_db_at_10km": { "value": 35, "source": "estimate", "confidence": "estimate" },

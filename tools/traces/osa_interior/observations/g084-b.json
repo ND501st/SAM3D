@@ -1,0 +1,167 @@
+{
+ "photo": "g084-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "close in front of the driver left cheek",
+  "looks": "square-on at PU-303",
+  "covers": [
+   "console.pu303"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "console.pu303",
+   "class": "console",
+   "seen_as": "PU-303 black-faced panel in a light grey frame, two vertical handles, two domed lamps, plate at the bottom",
+   "bbox": [
+    0.3,
+    0.07,
+    0.97,
+    0.83
+   ],
+   "zone": "cab.dash",
+   "on": "new.bracket.pu303",
+   "relations": [
+    [
+     "right_of",
+     "new.instrument.gauge_by_pu303"
+    ]
+   ],
+   "size_cue": "about 0.30 x 0.40 m (from lamp lenses and handles)",
+   "material": "black face, grey frame",
+   "confidence": "high",
+   "notes": "Face to be traced from g084-d."
+  },
+  {
+   "id": "new.instrument.gauge_by_pu303",
+   "class": "instrument",
+   "seen_as": "round gauge 0-1 in a light blue square cast bezel, made in USSR",
+   "bbox": [
+    0.05,
+    0.1,
+    0.36,
+    0.35
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "console.pu303"
+    ],
+    [
+     "above",
+     "new.loom.pu303_braided"
+    ]
+   ],
+   "size_cue": "bezel about a quarter of the panel width",
+   "material": "blue cast bezel",
+   "confidence": "high",
+   "notes": "Unit read as kPa or MPa at this resolution."
+  },
+  {
+   "id": "new.bracket.pu303",
+   "class": "bracket",
+   "seen_as": "grey frame/bracket the panel sits on, with slotted base",
+   "bbox": [
+    0.29,
+    0.66,
+    0.9,
+    0.97
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "below",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "panel width",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.pu303_braided",
+   "class": "loom",
+   "seen_as": "braided cables entering from the left behind the panel",
+   "bbox": [
+    0.0,
+    0.4,
+    0.33,
+    0.68
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "thumb-thick",
+   "material": "metal braid, tape",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.fuse_panel.right_of_pu303",
+   "class": "fuse_panel",
+   "seen_as": "strip of fuses with orange tips at the right edge",
+   "bbox": [
+    0.93,
+    0.44,
+    0.98,
+    0.59
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "right_of",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "finger-sized fuses",
+   "material": "orange caps",
+   "confidence": "low",
+   "notes": "Owner unknown; could be part of the driver panel."
+  },
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "dark curved rim at the bottom left",
+   "bbox": [
+    0.0,
+    0.83,
+    0.3,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "black",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "grey structure above and around the panel",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.1
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "Detail view: vehicle sides from g084-a (panel on the left cheek, gauge further left)."
+ ]
+}

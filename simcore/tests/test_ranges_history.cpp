@@ -199,3 +199,28 @@ SC_TEST("history: at Cuito Cuanavale the crew gets missiles away at the Mirages 
     std::printf("    missiles at the Mirages: %d\n", at_mirages);
     SC_EXPECT(at_mirages >= 1);
 }
+
+// The high drone over seeds (sam3d, found with the faults' work): the tracking antenna's elevation search sweeps it once a
+// second and its echo flashes on the range indicator each time; the range operator keeps the gate on it between flashes,
+// led on as he saw it close, and the commander orders the capture once and asks who it is while it is taken. Before, the
+// gate drifted off the echo between flashes and the high drone was fought on 6 seeds of 10. Faults off: this is the drill.
+SC_TEST("range: at Ashuluk the high drone is taken and fought on most seeds, not by luck") {
+    const std::string text = Scenario("osa_range_ashuluk");
+    int la1 = 0, la2 = 0;
+    for (int seed = 1; seed <= 10; ++seed) {
+        ScenarioDef def;
+        ConsoleData console;
+        std::string error;
+        SC_EXPECT(LoadScenario(text, kData, def, console, &error));
+        def.seed = static_cast<unsigned>(seed);
+        ScenarioRunner r(std::move(def), std::move(console));
+        r.SetRandomFaults(false);
+        r.RunToEnd(0.1, 1000.0);
+        const std::string d = r.Debrief();
+        la1 += Has(d, "guided at la1") ? 1 : 0;
+        la2 += Has(d, "guided at la2") ? 1 : 0;
+    }
+    std::printf("    over 10 seeds: the high drone fought %d times, the low one %d\n", la1, la2);
+    SC_EXPECT(la1 >= 7);
+    SC_EXPECT(la2 >= 9);
+}

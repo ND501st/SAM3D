@@ -9,6 +9,7 @@
   "terrain": { "type": "flat", "height_m": 110 },
   "environment": { "visibility_km": 30, "daylight": true },
   "crew_commander": "npc",
+  "faults": { "random": false, "notes": "The trainer's faults are the instructor's." },
   "own_unit": {
     "console": "procedures/osa_ak.json",
     "tuning": "gameplay/osa_ak.json",
@@ -46,7 +47,11 @@
     { "id": "back_low", "when": { "after_s": 260 },
       "do": [ { "instructor": "height", "target": "t1", "to": 100 }, { "instructor": "turn", "target": "t1", "to": 132 } ] },
     { "id": "pod_on", "when": { "target": "t2", "target_within_m": 20000 },
-      "do": [ { "instructor": "jam", "target": "t2", "to": 1 } ] }
+      "do": [ { "instructor": "jam", "target": "t2", "to": 1 } ] },
+    { "id": "phase_lost", "when": { "after_s": 200 }, "notes": "The instructor's problem (SAM3D's: the 9F632 simulates the air picture and the jamming, not faults): the scanner's supply phase lost while the drone is turned away. ОБРЫВ ФАЗЫ ГОН lights; the operator reports it; the tracking radar cannot track in angle until the instructor puts it right.",
+      "do": [ { "instructor": "fault", "target": "scanner_phase_break", "to": 1 } ] },
+    { "id": "phase_back", "when": { "after_s": 245 },
+      "do": [ { "instructor": "fault", "target": "scanner_phase_break", "to": 0 } ] }
   ],
   "end": { "time_limit_s": 900, "when_targets_gone": true }
 }

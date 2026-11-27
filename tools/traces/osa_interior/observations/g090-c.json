@@ -1,0 +1,415 @@
+{
+ "photo": "g090-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in front of the ZIP box on the aisle side, raised",
+  "looks": "right (+x) and down into the opened box; image left forward",
+  "covers": [
+   "box.zczz1a_2",
+   "mount.r123m_right"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "box.zczz1a_2",
+   "class": "box",
+   "seen_as": "the aluminium spares box opened, its lid hinged down toward the camera",
+   "bbox": [
+    0.05,
+    0.16,
+    0.96,
+    0.98
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "below",
+     "mount.r123m_right"
+    ]
+   ],
+   "size_cue": "as wide as the frame; three card boxes fit in its left half",
+   "material": "aluminium",
+   "confidence": "high",
+   "notes": "same box as g090-a: the radio tray shows at the top"
+  },
+  {
+   "id": "new.cover.zczz1a_2_lid",
+   "class": "cover",
+   "seen_as": "box lid lying open, lined with yellow foam",
+   "bbox": [
+    0.03,
+    0.6,
+    0.97,
+    0.98
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [],
+   "size_cue": "",
+   "material": "aluminium lid, yellow foam lining",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.zczz1a_2_korobka_1",
+   "class": "kit",
+   "seen_as": "blue-grey card box No 1 with a contents label (fuses)",
+   "bbox": [
+    0.08,
+    0.36,
+    0.26,
+    0.57
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "in",
+     "box.zczz1a_2"
+    ],
+    [
+     "forward_of",
+     "new.kit.zczz1a_2_korobka_2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "card",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.zczz1a_2_korobka_2",
+   "class": "kit",
+   "seen_as": "blue-grey card box No 2 with a contents label",
+   "bbox": [
+    0.26,
+    0.36,
+    0.42,
+    0.57
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "in",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "card",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.zczz1a_2_korobka_3",
+   "class": "kit",
+   "seen_as": "blue-grey card box No 3 with a contents label",
+   "bbox": [
+    0.43,
+    0.36,
+    0.59,
+    0.57
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "in",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "card",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.shelf.zczz1a_2_p1",
+   "class": "shelf",
+   "seen_as": "tilted tray P1 over the card boxes holding cable reels and loose cables",
+   "bbox": [
+    0.08,
+    0.18,
+    0.59,
+    0.35
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "in",
+     "box.zczz1a_2"
+    ],
+    [
+     "above",
+     "new.kit.zczz1a_2_korobka_2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "pale green sheet",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.shelf.zczz1a_2_p2",
+   "class": "shelf",
+   "seen_as": "shelf P2 in the right compartment (coil, pouch, cylinder)",
+   "bbox": [
+    0.6,
+    0.19,
+    0.92,
+    0.31
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "in",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "pale green sheet",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.shelf.zczz1a_2_p3",
+   "class": "shelf",
+   "seen_as": "shelf P3 with spare valves held by clips",
+   "bbox": [
+    0.59,
+    0.31,
+    0.9,
+    0.45
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "in",
+     "box.zczz1a_2"
+    ],
+    [
+     "below",
+     "new.shelf.zczz1a_2_p2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "pale green sheet",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.shelf.zczz1a_2_p4",
+   "class": "shelf",
+   "seen_as": "shelf P4 with valves and orange cartridges",
+   "bbox": [
+    0.59,
+    0.45,
+    0.89,
+    0.53
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "in",
+     "box.zczz1a_2"
+    ],
+    [
+     "below",
+     "new.shelf.zczz1a_2_p3"
+    ]
+   ],
+   "size_cue": "",
+   "material": "pale green sheet",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.zczz1a_2_pouch",
+   "class": "kit",
+   "seen_as": "white cloth wrap at the bottom of the right compartment",
+   "bbox": [
+    0.59,
+    0.51,
+    0.83,
+    0.58
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "in",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "cloth",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "mount.r123m_right",
+   "class": "mount",
+   "seen_as": "the radio's tubular tray and shock mounts at the top",
+   "bbox": [
+    0.26,
+    0.02,
+    0.83,
+    0.13
+   ],
+   "zone": "cab.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "above",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.r123m_right_braided",
+   "class": "cable",
+   "seen_as": "braided cable under the radio tray",
+   "bbox": [
+    0.22,
+    0.03,
+    0.37,
+    0.09
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.zczz1a_2_top_fittings",
+   "class": "bracket",
+   "seen_as": "bolts, small cylinders and fittings on the ledge between box and radio tray",
+   "bbox": [
+    0.2,
+    0.1,
+    0.42,
+    0.16
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.red_items_beside_radio_right",
+   "class": "unknown",
+   "seen_as": "red-brown blocks and a yellow disc lying at the top left",
+   "bbox": [
+    0.01,
+    0.03,
+    0.25,
+    0.1
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "forward_of",
+     "mount.r123m_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.round_item_p123",
+   "class": "unknown",
+   "seen_as": "round grey item stencilled \"Р-123\" at the left edge, beside the box",
+   "bbox": [
+    0.0,
+    0.37,
+    0.07,
+    0.56
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "possibly an R-123 related part (cap, reel); not identified"
+  },
+  {
+   "id": "rack.sp1m",
+   "class": "rack",
+   "seen_as": "grey panel behind the radio tray at the top right",
+   "bbox": [
+    0.8,
+    0.02,
+    0.93,
+    0.11
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "hull.wall_right",
+   "class": "hull_wall",
+   "seen_as": "grey wall surface aft of the box at the right edge, with brass studs",
+   "bbox": [
+    0.92,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "slotted floor grating strip at the bottom edge",
+   "bbox": [
+    0.24,
+    0.97,
+    0.7,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "ZIP box contents: three card boxes, four shelves P1-P4 of spare valves and lamps, foam-lined lid"
+ ],
+ "doubts": [
+  "The item labelled R-123 at the left edge is unidentified.",
+  "Brass studs on the wall at the right edge may be strikers for the box's retaining clamps."
+ ]
+}

@@ -1,0 +1,437 @@
+{
+ "photo": "g087-d",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "behind the commander's seat, a little left, seated height",
+  "looks": "forward at the commander's windscreen and dash",
+  "covers": [
+   "hull.windscreen_right",
+   "plate.lowering_board",
+   "instrument.dp3b"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "new.kit.sun_visor_right",
+   "class": "kit",
+   "seen_as": "pressed visor with a rolled edge, Rothmans sticker, on a hinge rod",
+   "bbox": [
+    0.06,
+    0.13,
+    0.53,
+    0.32
+   ],
+   "zone": "cab.roof",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "about half the screen's width",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": "part of kit.sun_visors"
+  },
+  {
+   "id": "new.loom.cab_header",
+   "class": "loom",
+   "seen_as": "white, black and blue cables clipped along the roof edge",
+   "bbox": [
+    0.0,
+    0.0,
+    0.92,
+    0.15
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": "register kit.sun_visors mentions header cables"
+  },
+  {
+   "id": "new.instrument.cab_roof_gauge_right",
+   "class": "instrument",
+   "seen_as": "small round pressure gauge on a bracket, upper right",
+   "bbox": [
+    0.81,
+    0.15,
+    0.9,
+    0.21
+   ],
+   "zone": "cab.roof",
+   "relations": [
+    [
+     "right_of",
+     "new.kit.sun_visor_right"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.gauge_feed_right",
+   "class": "pipe",
+   "seen_as": "thin pipe with an orange tag down from the gauge",
+   "bbox": [
+    0.83,
+    0.21,
+    0.87,
+    0.56
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "connects",
+     "new.instrument.cab_roof_gauge_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "the right windscreen from inside",
+   "bbox": [
+    0.0,
+    0.15,
+    0.85,
+    0.52
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "the dash structure under the screen",
+   "bbox": [
+    0.0,
+    0.52,
+    0.75,
+    0.92
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "below",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "plate.lowering_board",
+   "class": "plate",
+   "seen_as": "panel of nine toggles over a blue inset with five round push buttons, two tubular handles",
+   "bbox": [
+    0.03,
+    0.6,
+    0.32,
+    0.83
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "about twice the DP-3B's width",
+   "material": "grey, blue inset",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "instrument.dp3b",
+   "class": "instrument",
+   "seen_as": "square case with meter, green and red lamps, black plate, fuse box with two connectors below",
+   "bbox": [
+    0.38,
+    0.61,
+    0.58,
+    0.82
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "plate.lowering_board"
+    ],
+    [
+     "left_of",
+     "new.box.heater_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey case",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.dp3b_left",
+   "class": "handle",
+   "seen_as": "tubular handle left of the DP-3B",
+   "bbox": [
+    0.35,
+    0.66,
+    0.4,
+    0.79
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "hand-width",
+   "material": "grey tube",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.dp3b_leads",
+   "class": "cable",
+   "seen_as": "black leads down from the DP-3B's connectors",
+   "bbox": [
+    0.41,
+    0.81,
+    0.58,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "connects",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.heater_control",
+   "class": "box",
+   "seen_as": "heater control box: knob, red lamp, toggle",
+   "bbox": [
+    0.68,
+    0.51,
+    0.81,
+    0.66
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "right_of",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.heater_lever_diagram",
+   "class": "plate",
+   "seen_as": "vertical black plate with a lever diagram",
+   "bbox": [
+    0.75,
+    0.57,
+    0.83,
+    0.67
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "beside",
+     "new.box.heater_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.heater_instructions",
+   "class": "plate",
+   "seen_as": "black instruction plate on the sloped casing",
+   "bbox": [
+    0.65,
+    0.65,
+    0.76,
+    0.75
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.duct.heater_commander_footwell",
+   "relations": [
+    [
+     "below",
+     "new.box.heater_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.heater_commander_footwell",
+   "class": "duct",
+   "seen_as": "sloped casing under the heater box",
+   "bbox": [
+    0.55,
+    0.64,
+    0.78,
+    0.86
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey sheet",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.cab_right_pillar",
+   "class": "frame",
+   "seen_as": "the cab's right pillar rising at the right",
+   "bbox": [
+    0.72,
+    0.4,
+    0.98,
+    0.94
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "right_of",
+     "new.box.heater_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.green_white_banded",
+   "class": "pipe",
+   "seen_as": "grey pipe with a green band, low centre",
+   "bbox": [
+    0.45,
+    0.76,
+    0.7,
+    0.88
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey, green band",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "seat.commander",
+   "class": "seat",
+   "seen_as": "nail-trimmed seat edge in the right foreground",
+   "bbox": [
+    0.6,
+    0.82,
+    1.0,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive leatherette",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "seat.driver",
+   "class": "seat",
+   "seen_as": "nail-trimmed seat edge in the left foreground",
+   "bbox": [
+    0.0,
+    0.82,
+    0.31,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "olive leatherette",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.cab_roof_holder_right",
+   "class": "clamp",
+   "seen_as": "white plastic holder at the roof corner, top right",
+   "bbox": [
+    0.86,
+    0.02,
+    0.92,
+    0.1
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "white plastic",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.flag_bag",
+   "class": "kit",
+   "seen_as": "olive canvas hanging at the top right corner",
+   "bbox": [
+    0.94,
+    0.0,
+    1.0,
+    0.2
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "canvas",
+   "confidence": "low",
+   "notes": "by g089-d"
+  }
+ ],
+ "not_in_register": [
+  "the gauge, heater box and plates, DP-3B handle and leads"
+ ],
+ "doubts": [
+  "the foreground seat edges are not clearly which seat"
+ ]
+}

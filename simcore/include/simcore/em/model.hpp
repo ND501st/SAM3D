@@ -140,6 +140,9 @@ struct RadarDef {
     double mti_notch_mps = 15.0;            // radial speeds below this are cancelled with the clutter
     double mti_notch_attenuation_db = 30.0;
     double mti_max_range_m = 0.0;           // the MTI's working range (0: all of it); beyond it the normal channel, uncancelled
+    double afc_tolerance_hz = 0.0;          // the magnetron's mistune the MTI's phasing takes (0: not modelled); beyond it the
+                                            // cancellation fades, gone at twice it
+    double sa_loss_db = 0.0;                // what the anti-asynchronous blanker (СА) costs the echo when it is in
     double clutter_cnr_db_at_10km = 40.0;   // ground clutter-to-noise in the target's cell at 10 km
     double clutter_max_elevation_rad = 0.026;  // targets below ~1.5 deg share cells with the ground
     // Tracking.
@@ -237,6 +240,8 @@ struct JammerDef {
     int false_targets = 0;           // false-target repeater: echoes it adds behind itself
     double false_spacing_m = 1000.0; // ... this far apart in range
     double false_jn_needed_db = 6.0; // ... once its repeated power is this far above the radar's noise
+    bool synchronous = true;         // ... at the radar's own repetition (false: its echoes fall at random ranges each sweep,
+                                     // and the СА blanker takes them out)
     std::string source;
     std::string confidence;
 };
@@ -351,6 +356,14 @@ struct RadarState {
     int iff_code = 0;  // the code its interrogator asks on: a transponder replies only on the same (roadmap B10)
 
     MtiMode mti = MtiMode::Off;
+    // The receiver's settings (roadmap C5): the wind compensation's Doppler offset (internal coherence: the canceller's
+    // notch moves to it), the magnetron's mistune off the local oscillator (0 under АПЧМ), the СА blanker.
+    double mti_comp_mps = 0.0;
+    double mistune_hz = 0.0;
+    bool sa_on = false;
+    // A receiver whose noise figure is worse than its norm (a fault the noise check finds, simcore/checks.hpp): every
+    // echo and the clutter lose this much against the noise (dB).
+    double rx_loss_db = 0.0;
     std::vector<int> beam_program;  // indices into the emitter's beams, one per revolution
     std::size_t program_pos = 0;
     long long last_revolution = 0;

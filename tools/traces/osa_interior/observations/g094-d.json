@@ -1,0 +1,322 @@
+{
+ "photo": "g094-d",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle over the bench, raised",
+  "looks": "down and left at two seats folded onto the bench, the console's foot behind",
+  "covers": [
+   "seat.senior_operator",
+   "seat.deputy_commander",
+   "bench.operators",
+   "rack.sl2m"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "seat.senior_operator",
+   "class": "seat",
+   "seen_as": "grey steel back pan folded down over the bench, tubular hoop, gas-mask bag on it",
+   "bbox": [
+    0.03,
+    0.17,
+    0.42,
+    0.68
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "aft_of",
+     "seat.deputy_commander"
+    ],
+    [
+     "in_front_of",
+     "block.s_ok81_4m"
+    ]
+   ],
+   "size_cue": "about as wide as a console block",
+   "material": "grey-green steel, rivets",
+   "confidence": "low",
+   "notes": "under the middle column, so taken as the senior operator's"
+  },
+  {
+   "id": "seat.deputy_commander",
+   "class": "seat",
+   "seen_as": "second back pan folded down, the same",
+   "bbox": [
+    0.47,
+    0.17,
+    0.86,
+    0.68
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "forward_of",
+     "seat.senior_operator"
+    ],
+    [
+     "in_front_of",
+     "block.g_ok51_6m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey-green steel",
+   "confidence": "low",
+   "notes": "under the forward column"
+  },
+  {
+   "id": "new.kit.gas_mask_bag_senior_operator",
+   "class": "kit",
+   "seen_as": "canvas bag with a flap and a leather tab lying on the back pan",
+   "bbox": [
+    0.06,
+    0.27,
+    0.32,
+    0.66
+   ],
+   "zone": "compartment.aisle",
+   "on": "seat.senior_operator",
+   "relations": [],
+   "size_cue": "about a seat pan's half",
+   "material": "khaki canvas, leather",
+   "confidence": "medium",
+   "notes": "gas-mask bag by shape"
+  },
+  {
+   "id": "new.kit.gas_mask_bag_deputy_commander",
+   "class": "kit",
+   "seen_as": "the same bag on the other back",
+   "bbox": [
+    0.56,
+    0.28,
+    0.82,
+    0.68
+   ],
+   "zone": "compartment.aisle",
+   "on": "seat.deputy_commander",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas, leather",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.seat_back_stickers",
+   "class": "plate",
+   "seen_as": "small printed stickers on the back pans' corners",
+   "bbox": [
+    0.31,
+    0.21,
+    0.83,
+    0.34
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "paper stickers",
+   "confidence": "high",
+   "notes": "later additions, not original fittings"
+  },
+  {
+   "id": "belt.operators",
+   "class": "belt",
+   "seen_as": "khaki harness straps hanging over the bench",
+   "bbox": [
+    0.1,
+    0.38,
+    0.9,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [],
+   "size_cue": "a hand wide",
+   "material": "khaki webbing",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "bench.operators",
+   "class": "bench",
+   "seen_as": "long green cushion, hinge brackets, frame rails below",
+   "bbox": [
+    0.0,
+    0.6,
+    0.97,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "relations": [
+    [
+     "below",
+     "seat.senior_operator"
+    ]
+   ],
+   "size_cue": "",
+   "material": "green leatherette, grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "foot of the console behind the seats",
+   "bbox": [
+    0.0,
+    0.0,
+    0.8,
+    0.3
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey frame, white faces",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.r_0051_7m",
+   "class": "block",
+   "seen_as": "bottom rear block, red connector strip, at the left edge",
+   "bbox": [
+    0.0,
+    0.1,
+    0.09,
+    0.3
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_ok81_4m",
+   "class": "block",
+   "seen_as": "bottom middle block with its white cover box",
+   "bbox": [
+    0.1,
+    0.1,
+    0.46,
+    0.3
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_ok51_6m",
+   "class": "block",
+   "seen_as": "bottom forward block, plate strip",
+   "bbox": [
+    0.47,
+    0.09,
+    0.74,
+    0.28
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "new.fuse_panel.sl2m_front_lower",
+   "class": "fuse_panel",
+   "seen_as": "fuse caps and plugs forward of the bottom forward block",
+   "bbox": [
+    0.74,
+    0.08,
+    0.79,
+    0.18
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "forward_of",
+     "block.g_ok51_6m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "brown and black plastic",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.s_os52_12m",
+   "class": "block",
+   "seen_as": "lower edge of a block in the row above (lamps)",
+   "bbox": [
+    0.1,
+    0.0,
+    0.46,
+    0.09
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "low",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_os52_14m",
+   "class": "block",
+   "seen_as": "lower edge of the forward column's block above",
+   "bbox": [
+    0.47,
+    0.0,
+    0.74,
+    0.09
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "low",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "hull.wall_left",
+   "class": "hull_wall",
+   "seen_as": "grey, stained sloping surface forward of the console",
+   "bbox": [
+    0.78,
+    0.0,
+    0.97,
+    0.6
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": "may be the post forward of SŁ-2M"
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "which seats: by the blocks behind them (OK81-4M, OK51-6M), the senior operator's and the deputy commander's",
+  "the folded parts are taken as the backs (steel pans); the book calls them the folded seats"
+ ]
+}

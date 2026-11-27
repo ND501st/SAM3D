@@ -70,7 +70,8 @@ void USimCrewAudioComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	}
 	const simcore::HeadsetSound H = simcore::HeadsetSoundNow(*Runner, TCHAR_TO_UTF8(*Seat));
 	HissLevel.store(static_cast<float>(H.hiss) * Volume);
-	ToneLevel.store(H.tone ? 0.25f * Volume : 0.0f);
+	ToneLevel.store(H.tone ? 0.25f * static_cast<float>(H.volume * H.box_level) * Volume : 0.0f);   // through the set and the A-1: their ГРОМКОСТЬ
+
 }
 
 void USimCrewAudioComponent::Generate(USoundWaveProcedural* InWave, int32 SamplesRequired)

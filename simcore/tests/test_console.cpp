@@ -2,6 +2,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/cabin.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/json.hpp"
@@ -166,6 +167,25 @@ SC_TEST("panel: a push-button reads pressed until the step's release") {
     SC_EXPECT(p.Get("fire") == 0);
 }
 
+SC_TEST("panel: a spring lever stays where the hand holds it and returns to its rest when let go") {
+    ControlPanel p;
+    ControlDef lever{"slew", "LEFT - RIGHT", 3, 1};
+    lever.springs_back = true;
+    SC_EXPECT(p.AddControl(lever));
+    ControlDef toggle{"sw", "SW", 2, 0};
+    SC_EXPECT(p.AddControl(toggle));
+    ControlDef bad{"b", "B", 2, 0};
+    bad.kind = ControlKind::Momentary;
+    bad.springs_back = true;
+    SC_EXPECT(!p.AddControl(bad));  // a button lets go by itself already
+    SC_EXPECT(p.Set("slew", 0) && p.Get("slew") == 0);
+    p.ReleaseMomentaries();
+    SC_EXPECT(p.Get("slew") == 0);  // held: the step's release of buttons leaves it
+    SC_EXPECT(p.LetGo("slew") && p.Get("slew") == 1);
+    SC_EXPECT(p.Set("sw", 1) && !p.LetGo("sw") && p.Get("sw") == 1);  // a plain switch stays
+    SC_EXPECT(!p.LetGo("nope"));
+}
+
 SC_TEST("equipment: a button latches a mode until its release; inputs and any-of enables") {
     ControlPanel p;
     ControlDef on{"on", "ON", 2, 0};
@@ -209,6 +229,53 @@ SC_TEST("equipment: a button latches a mode until its release; inputs and any-of
     SC_EXPECT(eq.IsReady("prep"));
 }
 
+SC_TEST("equipment: a latched mode is released by all of `release` or by any one of `release_any`") {
+    ControlPanel p;
+    ControlDef on{"on", "ON", 2, 0};
+    on.kind = ControlKind::Momentary;
+    ControlDef a = on;
+    a.id = "a";
+    ControlDef b = on;
+    b.id = "b";
+    p.AddControl(on);
+    p.AddControl(a);
+    p.AddControl(b);
+    p.AddControl({"power", "POWER", 2, 1});
+    Equipment eq;
+    SubsystemDef mode{"mode", "Mode", {Condition::Control("on", 1)}, {}, 0.0, 0.0};
+    mode.latching = true;
+    mode.release_any = {Condition::Control("a", 1), Condition::Control("b", 1)};
+    SC_EXPECT(eq.AddSubsystem(mode, p));  // release_any alone is enough for a latch
+    SubsystemDef both = mode;
+    both.id = "both";
+    both.release = {Condition::Control("power", 0)};
+    SC_EXPECT(eq.AddSubsystem(both, p));
+    SubsystemDef plain{"plain", "Plain", {Condition::Control("power", 1)}, {}, 0.0, 0.0};
+    plain.release_any = {Condition::Control("a", 1)};
+    SC_EXPECT(!eq.AddSubsystem(plain, p));  // only for latching modes
+    SubsystemDef ghost = mode;
+    ghost.id = "ghost";
+    ghost.release_any = {Condition::Control("nope", 1)};
+    SC_EXPECT(!eq.AddSubsystem(ghost, p));
+    auto press = [&](const char* id) {
+        p.Set(id, 1);
+        eq.Update(0.1, p);
+        p.ReleaseMomentaries();
+    };
+    press("on");
+    SC_EXPECT(eq.IsReady("mode") && eq.IsReady("both"));
+    eq.Update(0.1, p);
+    SC_EXPECT(eq.IsReady("mode") && eq.IsReady("both"));  // latched
+    press("b");
+    SC_EXPECT(eq.State("mode") == SubsystemState::Off && eq.State("both") == SubsystemState::Off);
+    press("on");
+    p.Set("power", 0);
+    eq.Update(0.1, p);
+    SC_EXPECT(eq.IsReady("mode") && eq.State("both") == SubsystemState::Off);  // all of `release` held
+    press("a");
+    SC_EXPECT(eq.State("mode") == SubsystemState::Off);
+}
+
 SC_TEST("json: values, escapes, UTF-8 and errors with positions") {
     json::Value v;
     std::string error;
@@ -248,6 +315,10 @@ SC_TEST("console loader: strict validation with paths in the messages") {
                                 "controls[0].guard: unknown control 'b'"));
     SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","controls":[{"id":"w","label":"W","kind":"wheel","source":"s","confidence":"low"}]})",
                                 "a wheel needs min and max"));
+    SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","controls":[{"id":"b","label":"B","kind":"button","springs_back":true,"source":"s","confidence":"low"}]})",
+                                "controls[0].springs_back: for switches only"));
+    SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","controls":[{"id":"k","label":"K","kind":"key","springs_back":true,"source":"s","confidence":"low"}]})",
+                                "controls[0].springs_back: for switches only"));
     SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","subsystems":[{"id":"x","name":"X","enable":[{"subsystem":"y","is":"ready"}],"source":"s","confidence":"low"}]})",
                                 "subsystems[0].enable[0]: unknown subsystem 'y'"));
     SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","procedures":[{"id":"p","name":"P","source":"s","confidence":"low","steps":[{"control":"nope","position":1,"description":"d"}]}]})",
@@ -415,6 +486,7 @@ SC_TEST("osa data: search on the march; tracking needs a halt with the АПУ un
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
     Seats seats(c);
     seats.Order("power_up");
+    seats.Queue("engine_start");     // the driver, next: the drive engine runs on the march (it drives the ГОМ at the halt)
     seats.Order("equipment_on");     // the operator waits for power
     seats.Order("search_on_march");  // the senior operator waits for the raised, stabilised antenna
     const double t = seats.RunUntilIdle();
@@ -606,4 +678,47 @@ SC_TEST("osa data: a player who turns the key before ПУСК ГОТОВ is judg
     c.panel.Set("fo.key", 1);
     SC_EXPECT(tr.Attempt(c.panel, "fo.key", 2, &c.equipment) == StepResult::AcceptedEarly);
     SC_EXPECT(tr.DeviationLog().front().kind == DeviationKind::Early);
+}
+
+SC_TEST("osa data: the receivers' knobs read as the wind compensation's offset, the magnetron's mistune, СДЦ ВНЕШН. and СА") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    ReceiverReading rx = ReadReceiver(c.search.receiver, c.panel);
+    SC_EXPECT(!rx.external && !rx.sa && rx.comp_mps == 0.0 && rx.mistune_hz == 0.0);  // as the crew finds it
+    // The knobs do nothing until their switches are over.
+    SC_EXPECT(c.panel.SetValue("soc.wind_coarse", 1.0) && c.panel.SetValue("soc.wind_fine", 0.0));
+    SC_EXPECT(c.panel.SetValue("soc.afc_trim", 0.75));
+    SC_EXPECT(ReadReceiver(c.search.receiver, c.panel).comp_mps == 0.0);
+    SC_EXPECT(ReadReceiver(c.search.receiver, c.panel).mistune_hz == 0.0);
+    SC_EXPECT(c.panel.Set("soc.wind_comp", 1) && c.panel.Set("soc.afc", 1) && c.panel.Set("soc.mti_ext", 1) && c.panel.Set("soc.sa", 1));
+    rx = ReadReceiver(c.search.receiver, c.panel);
+    SC_EXPECT_NEAR(rx.comp_mps, 30.0 - 5.0, 1e-9);     // coarse at its end, fine at the other
+    SC_EXPECT_NEAR(rx.mistune_hz, 0.5 * 5.0e6, 1e-3);  // halfway to the trim's end
+    SC_EXPECT(rx.external && rx.sa);
+    // The tracking radar's own set: no external coherence, no СА.
+    SC_EXPECT(c.track.receiver.mti_external_control.empty() && c.track.receiver.sa_control.empty());
+    SC_EXPECT(c.panel.Set("ssc.wind_comp", 1) && c.panel.SetValue("ssc.wind_coarse", 0.25));
+    SC_EXPECT_NEAR(ReadReceiver(c.track.receiver, c.panel).comp_mps, -15.0, 1e-9);
+}
+
+SC_TEST("osa data: СВЕТОФИЛЬТР steps its wheel round on each press, blue, clear, orange, and the TV sees through it") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    const ControlDef* f = c.panel.Find("tov.filter");
+    SC_EXPECT(f != nullptr && f->cycles && f->positions == 3 && f->initial == 1);
+    if (f == nullptr) return;
+    SC_EXPECT(CabinClickTarget(*f, 1, 1) == 2 && CabinClickTarget(*f, 2, 1) == 0 && CabinClickTarget(*f, 0, -1) == 1);
+    SC_EXPECT(c.track.filter_control == "tov.filter" && c.track.filter_visibility.size() == 3);
+    SC_EXPECT(c.track.filter_visibility[0] < 1.0 && c.track.filter_visibility[1] == 1.0 && c.track.filter_visibility[2] > 1.0);
+    // A cycling switch neither springs back nor is a button.
+    ControlPanel p;
+    ControlDef bad;
+    bad.id = "x";
+    bad.kind = ControlKind::Momentary;
+    bad.cycles = true;
+    SC_EXPECT(!p.AddControl(bad));
+    bad.kind = ControlKind::Discrete;
+    bad.positions = 3;
+    bad.springs_back = true;
+    SC_EXPECT(!p.AddControl(bad));
 }

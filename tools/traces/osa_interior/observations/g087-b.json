@@ -1,0 +1,306 @@
+{
+ "photo": "g087-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the commander's seat, seated height",
+  "looks": "forward-right into the cab's right front corner",
+  "covers": [
+   "hull.windscreen_right",
+   "hull.side_window_right"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "inside of the right windscreen, large, rounded top outer corner",
+   "bbox": [
+    0.0,
+    0.0,
+    0.62,
+    0.85
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass, rubber seal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.windscreen_right_diagonal_bar",
+   "class": "frame",
+   "seen_as": "diagonal frame bar between the windscreen and the side window",
+   "bbox": [
+    0.0,
+    0.1,
+    0.75,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "beside",
+     "hull.side_window_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.windscreen_right_latch",
+   "class": "clamp",
+   "seen_as": "over-centre clamp latch on the diagonal bar, upper",
+   "bbox": [
+    0.44,
+    0.43,
+    0.55,
+    0.58
+   ],
+   "zone": "cab.dash",
+   "on": "new.frame.windscreen_right_diagonal_bar",
+   "relations": [],
+   "size_cue": "hand-sized",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.windscreen_right_latch_lower",
+   "class": "clamp",
+   "seen_as": "second clamp latch at the bar's lower end",
+   "bbox": [
+    0.09,
+    0.8,
+    0.21,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "on": "new.frame.windscreen_right_diagonal_bar",
+   "relations": [
+    [
+     "below",
+     "new.clamp.windscreen_right_latch"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.windscreen_right",
+   "class": "handle",
+   "seen_as": "U-shaped handle on the screen frame",
+   "bbox": [
+    0.19,
+    0.57,
+    0.32,
+    0.72
+   ],
+   "zone": "cab.dash",
+   "on": "hull.windscreen_right",
+   "relations": [],
+   "size_cue": "hand-width",
+   "material": "grey steel rod",
+   "confidence": "high",
+   "notes": "a second U handle shows as a reflection in the glass"
+  },
+  {
+   "id": "hull.side_window_right",
+   "class": "window",
+   "seen_as": "small near-triangular side window with its own rubber seal",
+   "bbox": [
+    0.28,
+    0.15,
+    0.84,
+    0.73
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "right_of",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "about half the windscreen's height",
+   "material": "glass, black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.cab_right_stowage_upper",
+   "class": "cover",
+   "seen_as": "hinged cover with latch on the right wall, upper",
+   "bbox": [
+    0.85,
+    0.19,
+    0.94,
+    0.52
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [
+    [
+     "above",
+     "new.cover.cab_right_stowage_lower"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.cab_right_stowage_lower",
+   "class": "cover",
+   "seen_as": "hinged cover with latch, lower",
+   "bbox": [
+    0.83,
+    0.52,
+    0.92,
+    0.86
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [
+    [
+     "below",
+     "new.cover.cab_right_stowage_upper"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hull_wall.cab_right",
+   "class": "hull_wall",
+   "seen_as": "cab right wall at the right edge",
+   "bbox": [
+    0.84,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.shelf.cab_right_under_screen",
+   "class": "shelf",
+   "seen_as": "flat ledge with holes under the side window and screen",
+   "bbox": [
+    0.18,
+    0.72,
+    0.86,
+    0.86
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "below",
+     "hull.side_window_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.cab_right_wingnut",
+   "class": "bracket",
+   "seen_as": "small strap bracket with a wing nut on the ledge",
+   "bbox": [
+    0.57,
+    0.72,
+    0.64,
+    0.8
+   ],
+   "zone": "cab.dash",
+   "on": "new.shelf.cab_right_under_screen",
+   "relations": [],
+   "size_cue": "finger-sized",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.cab_right_shelf_small",
+   "class": "plate",
+   "seen_as": "small dark square plate on the ledge",
+   "bbox": [
+    0.69,
+    0.79,
+    0.8,
+    0.83
+   ],
+   "zone": "cab.dash",
+   "on": "new.shelf.cab_right_under_screen",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "",
+   "confidence": "medium",
+   "notes": "unreadable"
+  },
+  {
+   "id": "heater.cab",
+   "class": "heater",
+   "seen_as": "perforated top of a box in the foreground",
+   "bbox": [
+    0.4,
+    0.87,
+    0.88,
+    1.0
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "below",
+     "new.shelf.cab_right_under_screen"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey perforated sheet",
+   "confidence": "low",
+   "notes": "matched to the perforated box of g087-a by look"
+  },
+  {
+   "id": "new.unknown.cab_right_roof_fittings",
+   "class": "unknown",
+   "seen_as": "clamps and a round fitting at the roof corner, top right",
+   "bbox": [
+    0.64,
+    0.0,
+    0.92,
+    0.13
+   ],
+   "zone": "cab.roof",
+   "relations": [
+    [
+     "above",
+     "hull.side_window_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the right screen's inner frame, clamps, side window, two stowage covers"
+ ],
+ "doubts": [
+  "the perforated foreground plate may not be the box of g087-a"
+ ]
+}

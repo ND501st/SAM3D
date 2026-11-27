@@ -1,0 +1,208 @@
+{
+ "photo": "g083-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the cab at seat height",
+  "looks": "aft at the curtain between the cab and the compartment; image left is the vehicle right",
+  "covers": [
+   "curtain.cab"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "curtain.cab",
+   "class": "curtain",
+   "seen_as": "two-part khaki/yellow-tan curtain closed, snap fasteners down the meeting edge",
+   "bbox": [
+    0.01,
+    0.05,
+    0.97,
+    0.92
+   ],
+   "zone": "cab",
+   "on": "new.rail.curtain_cab",
+   "relations": [
+    [
+     "aft_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "floor to roof, the width of the hull",
+   "material": "cotton cloth",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.rail.curtain_cab",
+   "class": "rail",
+   "seen_as": "metal rail along the roof beam carrying the curtain",
+   "bbox": [
+    0.0,
+    0.04,
+    0.97,
+    0.07
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "above",
+     "curtain.cab"
+    ]
+   ],
+   "size_cue": "hull width",
+   "material": "steel rod",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "grey roof beam/edge above the rail",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.05
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "rack.sl1m",
+   "class": "rack",
+   "seen_as": "grey rack blocks with handles and toggles at the right edge",
+   "bbox": [
+    0.93,
+    0.22,
+    1.0,
+    0.85
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "curtain.cab"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey enamel",
+   "confidence": "medium",
+   "notes": "Vehicle left (image right) when looking aft."
+  },
+  {
+   "id": "new.kit.papers_right_wall",
+   "class": "kit",
+   "seen_as": "printed papers/newspaper at the left edge behind the curtain",
+   "bbox": [
+    0.0,
+    0.25,
+    0.06,
+    0.62
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "right_of",
+     "curtain.cab"
+    ]
+   ],
+   "size_cue": "",
+   "material": "paper",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "seat.commander",
+   "class": "seat",
+   "seen_as": "seat hinge frame and folded backrest in the foreground",
+   "bbox": [
+    0.0,
+    0.8,
+    0.45,
+    1.0
+   ],
+   "zone": "cab",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "forward_of",
+     "curtain.cab"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel frame",
+   "confidence": "low",
+   "notes": "Commander seat by its side (vehicle right) and the bag."
+  },
+  {
+   "id": "new.kit.gas_mask_bag_commander",
+   "class": "kit",
+   "seen_as": "khaki canvas bag with leather tab",
+   "bbox": [
+    0.02,
+    0.81,
+    0.3,
+    1.0
+   ],
+   "zone": "cab",
+   "on": "seat.commander",
+   "relations": [
+    [
+     "on",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "canvas",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "grey floor under the curtain",
+   "bbox": [
+    0.3,
+    0.85,
+    0.95,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "cover.radio_steel",
+   "class": "cover",
+   "seen_as": "dark raised block at the bottom right",
+   "bbox": [
+    0.65,
+    0.9,
+    0.8,
+    1.0
+   ],
+   "zone": "cab.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "low",
+   "notes": "Could be the left radio cover or another step."
+  }
+ ],
+ "not_in_register": [
+  "curtain rail",
+  "papers at the right wall"
+ ],
+ "doubts": [
+  "Looking aft is taken from the caption and the rack at the image right; the papers at the left could be on the right radio or the wall."
+ ]
+}

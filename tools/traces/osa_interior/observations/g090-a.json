@@ -1,0 +1,722 @@
+{
+ "photo": "g090-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "at the front of the compartment on the aisle side, just aft of and above the commander's seat back, about eye height",
+  "looks": "right (+x) at the right wall, slightly down; image left is forward, image right aft",
+  "covers": [
+   "radio.r123m_right",
+   "psu.bp26_right",
+   "box.zczz1a_2",
+   "rack.sp1m",
+   "curtain.cab",
+   "seat.commander"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "radio.r123m_right",
+   "class": "radio",
+   "seen_as": "R-123M set, face to the aisle, on its tubular shock frame",
+   "bbox": [
+    0.28,
+    0.26,
+    0.79,
+    0.54
+   ],
+   "zone": "cab.right_wall",
+   "on": "mount.r123m_right",
+   "relations": [
+    [
+     "above",
+     "box.zczz1a_2"
+    ],
+    [
+     "in_front_of",
+     "rack.sp1m"
+    ],
+    [
+     "below",
+     "psu.bp26_right"
+    ]
+   ],
+   "size_cue": "the R-123M face (about 406 mm wide) spans roughly a third of the ZIP box length",
+   "material": "grey painted cast front",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "mount.r123m_right",
+   "class": "mount",
+   "seen_as": "tubular shock-mounted frame and tray carrying the radio, with an upper tray holding the power unit",
+   "bbox": [
+    0.3,
+    0.17,
+    0.8,
+    0.61
+   ],
+   "zone": "cab.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [
+    [
+     "below",
+     "radio.r123m_right"
+    ],
+    [
+     "above",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "frame rises from the box lid to above the radio top, about the radio's height again",
+   "material": "bent steel tube, grey",
+   "confidence": "high",
+   "notes": "round rubber shock mounts visible under the tray"
+  },
+  {
+   "id": "psu.bp26_right",
+   "class": "power",
+   "seen_as": "grey box with rounded front edge on the frame's upper tray, above and behind the radio",
+   "bbox": [
+    0.32,
+    0.05,
+    0.61,
+    0.21
+   ],
+   "zone": "cab.right_wall",
+   "on": "mount.r123m_right",
+   "relations": [
+    [
+     "above",
+     "radio.r123m_right"
+    ],
+    [
+     "in_front_of",
+     "rack.sp1m"
+    ]
+   ],
+   "size_cue": "about half the radio's width, as long as the radio is deep",
+   "material": "grey cast/sheet metal",
+   "confidence": "medium",
+   "notes": "identified as the BP-26 by g090-d, which shows its finned end and orange-capped connectors"
+  },
+  {
+   "id": "new.cover.r123m_right_canvas",
+   "class": "cover",
+   "seen_as": "green canvas dust cover pushed back over the radio top",
+   "bbox": [
+    0.28,
+    0.2,
+    0.78,
+    0.5
+   ],
+   "zone": "cab.right_wall",
+   "on": "radio.r123m_right",
+   "relations": [
+    [
+     "above",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "drapes the full radio width",
+   "material": "olive canvas",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.strap.r123m_right_leather",
+   "class": "strap",
+   "seen_as": "brown leather strap hanging from the frame / power unit",
+   "bbox": [
+    0.51,
+    0.15,
+    0.77,
+    0.42
+   ],
+   "zone": "cab.right_wall",
+   "on": "mount.r123m_right",
+   "relations": [],
+   "size_cue": "hand-width strap",
+   "material": "leather",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.r123m_right_braided",
+   "class": "cable",
+   "seen_as": "braided screened cable from the radio's lower-left connectors up to the power unit",
+   "bbox": [
+    0.28,
+    0.29,
+    0.31,
+    0.56
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "connects",
+     "radio.r123m_right"
+    ],
+    [
+     "connects",
+     "psu.bp26_right"
+    ]
+   ],
+   "size_cue": "thumb-thick",
+   "material": "braided metal sleeve",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.r123m_right_white",
+   "class": "cable",
+   "seen_as": "white cables with a blue tag running down from under the radio",
+   "bbox": [
+    0.16,
+    0.5,
+    0.4,
+    0.59
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "pencil-thick",
+   "material": "white insulated wire",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "box.zczz1a_2",
+   "class": "box",
+   "seen_as": "long aluminium box with an X of pressed stiffeners, black name plate and a latch, under the radio",
+   "bbox": [
+    0.17,
+    0.6,
+    0.91,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "below",
+     "radio.r123m_right"
+    ],
+    [
+     "below",
+     "rack.sp1m"
+    ]
+   ],
+   "size_cue": "longer than two R-123M sets side by side",
+   "material": "aluminium sheet",
+   "confidence": "high",
+   "notes": "plate reads ZIP No 1A, box No 2"
+  },
+  {
+   "id": "new.plate.zczz1a_2_nameplate",
+   "class": "plate",
+   "seen_as": "black name plate on the box's front",
+   "bbox": [
+    0.33,
+    0.64,
+    0.44,
+    0.69
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [],
+   "size_cue": "a hand wide",
+   "material": "black anodised plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.zczz1a_2_latch",
+   "class": "clamp",
+   "seen_as": "lid latch at the box front top, aft end",
+   "bbox": [
+    0.71,
+    0.64,
+    0.79,
+    0.68
+   ],
+   "zone": "compartment.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [],
+   "size_cue": "a few cm",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.indicator_obestochennosti",
+   "class": "box",
+   "seen_as": "small aluminium box with an olive lid stencilled as the de-energisation indicator",
+   "bbox": [
+    0.84,
+    0.76,
+    0.99,
+    0.99
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "aft_of",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "about a fifth of the ZIP box length",
+   "material": "aluminium, olive painted lid",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rack.sp1m",
+   "class": "rack",
+   "seen_as": "light-grey rack of drawer blocks behind the radio, on the right wall",
+   "bbox": [
+    0.23,
+    0.03,
+    0.92,
+    0.6
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "behind",
+     "radio.r123m_right"
+    ],
+    [
+     "above",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "spans from forward of the radio to the curtain",
+   "material": "light grey enamel",
+   "confidence": "high",
+   "notes": "SP-1M by the book's text; five blocks as in the drawing g090-b"
+  },
+  {
+   "id": "new.block.sp1m_fwd_top",
+   "class": "block",
+   "seen_as": "forward column, top block (round lock at its end)",
+   "bbox": [
+    0.24,
+    0.17,
+    0.33,
+    0.31
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp1m",
+   "relations": [
+    [
+     "above",
+     "new.block.sp1m_fwd_mid"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": "positional id; which register sp1_ block it is is not readable"
+  },
+  {
+   "id": "new.block.sp1m_fwd_mid",
+   "class": "block",
+   "seen_as": "forward column, middle block",
+   "bbox": [
+    0.24,
+    0.31,
+    0.33,
+    0.43
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp1m",
+   "relations": [
+    [
+     "above",
+     "new.block.sp1m_fwd_bottom"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.block.sp1m_fwd_bottom",
+   "class": "block",
+   "seen_as": "forward column, bottom block",
+   "bbox": [
+    0.24,
+    0.43,
+    0.33,
+    0.56
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.block.sp1m_aft_top",
+   "class": "block",
+   "seen_as": "aft column top block: a long panel with a row of orange fuse caps, small lamps and jacks",
+   "bbox": [
+    0.61,
+    0.03,
+    0.92,
+    0.23
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp1m",
+   "relations": [
+    [
+     "above",
+     "new.block.sp1m_aft_tall"
+    ],
+    [
+     "aft_of",
+     "new.block.sp1m_fwd_top"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.block.sp1m_aft_tall",
+   "class": "block",
+   "seen_as": "aft column tall lower block (a delta mark at its upper right), partly behind the radio",
+   "bbox": [
+    0.7,
+    0.23,
+    0.92,
+    0.57
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "curtain.cab",
+   "class": "curtain",
+   "seen_as": "yellow-khaki curtain hanging at the image right, aft of the radio",
+   "bbox": [
+    0.89,
+    0.0,
+    1.0,
+    0.87
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "aft_of",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "floor-to-roof drape",
+   "material": "khaki cloth",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "seat.commander",
+   "class": "seat",
+   "seen_as": "back of the commander's seat with a tubular hoop, lower left",
+   "bbox": [
+    0.0,
+    0.58,
+    0.18,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "box.zczz1a_2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel back, olive padding",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.hb_sticker_commander_seat",
+   "class": "plate",
+   "seen_as": "later commercial sticker on the commander's seat back",
+   "bbox": [
+    0.02,
+    0.62,
+    0.13,
+    0.72
+   ],
+   "zone": "cab",
+   "on": "seat.commander",
+   "relations": [],
+   "size_cue": "",
+   "material": "paper sticker",
+   "confidence": "high",
+   "notes": "not original fit; museum-era addition"
+  },
+  {
+   "id": "new.kit.bag_commander_seat",
+   "class": "kit",
+   "seen_as": "olive canvas bag hung on the seat's frame",
+   "bbox": [
+    0.0,
+    0.75,
+    0.13,
+    1.0
+   ],
+   "zone": "cab",
+   "on": "seat.commander",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive canvas",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "grey roof plates over the radio station",
+   "bbox": [
+    0.05,
+    0.0,
+    0.92,
+    0.17
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.roof_white_right",
+   "class": "cable",
+   "seen_as": "single white cable clipped along the roof, running from forward-left to aft",
+   "bbox": [
+    0.15,
+    0.02,
+    0.5,
+    0.18
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "pencil-thick",
+   "material": "white insulated cable",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.vent_lever_roof_right",
+   "class": "control",
+   "seen_as": "grey tubular lever hanging diagonally from the roof at the top right",
+   "bbox": [
+    0.69,
+    0.0,
+    0.75,
+    0.08
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "the ventilation louvre lever by its plate in g090-d"
+  },
+  {
+   "id": "new.handle.roof_over_radio_right_fwd",
+   "class": "handle",
+   "seen_as": "dark fitting at the roof above the power unit (the grab handle of g090-d, cut by the frame)",
+   "bbox": [
+    0.29,
+    0.0,
+    0.4,
+    0.04
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.cab_right_vertical",
+   "class": "duct",
+   "seen_as": "grey pipe rising vertically left of the radio, a black rubber sleeve on it",
+   "bbox": [
+    0.17,
+    0.25,
+    0.22,
+    0.58
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "forward_of",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "forearm-thick",
+   "material": "grey painted tube, black rubber sleeve",
+   "confidence": "low",
+   "notes": "could be a heater or ventilation duct; purpose not seen"
+  },
+  {
+   "id": "new.frame.cab_right_channel",
+   "class": "frame",
+   "seen_as": "slanting grey sheet-metal channel/post forward of the radio, cables clipped to it",
+   "bbox": [
+    0.06,
+    0.16,
+    0.18,
+    0.59
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "forward_of",
+     "new.duct.cab_right_vertical"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey painted sheet",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_right_post",
+   "class": "loom",
+   "seen_as": "white and grey cables running down the slanting post",
+   "bbox": [
+    0.12,
+    0.1,
+    0.2,
+    0.58
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.frame.cab_right_channel",
+   "relations": [],
+   "size_cue": "",
+   "material": "white insulated cables",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.instrument.gauge_cab_right",
+   "class": "instrument",
+   "seen_as": "small round dial gauge on the post at upper left",
+   "bbox": [
+    0.05,
+    0.17,
+    0.1,
+    0.22
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.frame.cab_right_channel",
+   "relations": [],
+   "size_cue": "coin-sized dial",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.box.white_reservoir_cab_right",
+   "class": "box",
+   "seen_as": "white plastic container high on the wall at the upper left",
+   "bbox": [
+    0.05,
+    0.06,
+    0.14,
+    0.13
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "fist-sized",
+   "material": "white plastic",
+   "confidence": "low",
+   "notes": "perhaps a washer-fluid reservoir; not identified"
+  },
+  {
+   "id": "new.switch.cab_right_low_box",
+   "class": "switch",
+   "seen_as": "small grey box with a black switch body at the lower left",
+   "bbox": [
+    0.02,
+    0.45,
+    0.08,
+    0.57
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.red_items_beside_radio_right",
+   "class": "unknown",
+   "seen_as": "orange-red objects lying on the ledge at the radio's lower left",
+   "bbox": [
+    0.22,
+    0.56,
+    0.3,
+    0.6
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "forward_of",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "same red objects show at the top left of g090-c"
+  },
+  {
+   "id": "new.strap.cab_upper_left",
+   "class": "strap",
+   "seen_as": "olive webbing strap hanging at the top left edge",
+   "bbox": [
+    0.0,
+    0.0,
+    0.05,
+    0.3
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive webbing",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "de-energisation indicator box aft of the ZIP box",
+  "canvas dust cover over the right R-123M",
+  "grey vertical pipe and slanting channel with a gauge forward of the right radio",
+  "white roof cable over the right radio"
+ ],
+ "doubts": [
+  "The book places the radio forward of the curtain; the register puts box.zczz1a_2 and rack.sp1m in compartment.right_wall and the radio in cab.right_wall. The curtain hangs aft of SP-1M here, so SP-1M and the box may be on the cab side of it.",
+  "SP-1M's five blocks are named positionally; their register ids (sp1_*) cannot be matched from this photo.",
+  "The items at the left edge (pipe, channel, gauge, white container) are forward of the radio, on the cab right wall or the commander's side; their identity is not clear."
+ ]
+}

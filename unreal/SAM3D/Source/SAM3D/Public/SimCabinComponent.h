@@ -52,6 +52,21 @@ struct SAM3D_API FSimCabinItem
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Pointer;
 
+	/** A locking bar over the control (СМЕНА ЛИТ.'s, SM_LetterBar), swung on its hinge with the control's step; and its bracket. */
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> Bar;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> BarHinge;
+
+	/** A hinged part drawn in the control's place (simcore::CabinFlap): its first moving part is Moving (the one traced),
+	 *  its first fixed part Base; the rest here, swung with it or standing still. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> FlapParts;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> FlapFixed;
+
 	/** Red dot beside the control marking its working position (simcore::CabinLayout::RedDot). May be null. */
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Mark;
@@ -62,6 +77,8 @@ struct SAM3D_API FSimCabinItem
 
 	FLinearColor BaseColor = FLinearColor::Black;
 	FLinearColor MovingColor = FLinearColor::Black;
+	/** A legend lamp's letters while it is dark (the look's "ink": ПУСК ГОТОВ's red; else unlit white glass). */
+	FLinearColor LegendInk = FLinearColor(0.22f, 0.22f, 0.21f);
 
 	/** simcore::CabinLookKind from the layout's "look" (Default = by style), and its size (m, 0 = the style's). */
 	uint8 LookKind = 0;
@@ -70,6 +87,10 @@ struct SAM3D_API FSimCabinItem
 
 	/** Shown with the cabin parts library's meshes (art/cabin_parts) rather than engine basic shapes. */
 	bool bParts = false;
+
+	/** The layout's hinged part was built (its meshes imported); without them the style's stand-in is drawn and moved
+	 *  as any other control, never placed at a full-size part's scale of 1. */
+	bool bFlap = false;
 
 	/** A lamp's filament brightness, 0..1, easing towards lit or dark. */
 	float Glow = 0.0f;
@@ -167,6 +188,14 @@ public:
 	/** Click a switch, selector, key, cover or button. Direction +1 (left click) or -1 (right click). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	ESimPlayerActionResult ClickItem(int32 Item, int32 Direction);
+
+	/** True for a spring lever (a switch held off its rest only while the hand is on it: ВЛЕВО — ВПРАВО). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsSpringLever(int32 Item) const;
+
+	/** Let go of a spring lever: it returns to its rest. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void LetGoItem(int32 Item);
 
 	/** Turn a hand wheel by a number of turns (negative = anticlockwise). False if it is locked. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
@@ -279,6 +308,11 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UPrimitiveComponent>> DecorParts;
 
+	/** The interior meshes' Paint_Scale slots (the PPI's azimuth scale on its cone, SM_RackSL2M) as dynamic instances,
+	 *  lit by ОСВЕЩ. ШКАЛЫ (the PPI's picture's scale_light) while the scope is on. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> ScaleLightMaterials;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USimCabinDisplayComponent>> Displays;
 
@@ -321,10 +355,12 @@ private:
 	/** Panels showing a baked face (their labels are in it). */
 	TSet<FString> FacedPanels;
 
-	/** The hinges' pivots, their subsystems and their folded angles (clockwise from above, degrees). */
+	/** The hinges' pivots, their subsystems, their axes (Unreal's frame, unit) and their folded angles (clockwise seen from
+	 *  the axis's tip, degrees: from above for an upright one). */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USceneComponent>> HingePivots;
 	TArray<FString> HingeSubsystems;
+	TArray<FVector> HingeAxes;
 	TArray<double> HingeFoldedDeg;
 	/** Panels and shell parts that hang from a hinge (by id): their components are tagged as they are built. */
 	TSet<FString> HingedPanels;

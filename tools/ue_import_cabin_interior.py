@@ -8,6 +8,7 @@ crash the editor's mesh builder). Run the art builders first:
     python tools/ue_import_cabin_interior.py              # everything
     python tools/ue_import_cabin_interior.py textures materials   # or some of: textures materials meshes
     python tools/ue_import_cabin_interior.py meshes --only SM_RadioR123M   # only the named meshes (comma-separated)
+    python tools/ue_import_cabin_interior.py textures --only T_Panel_fo_panel   # or only the named textures
 
 1. textures: art/cabin_textures/*.png -> /Game/SAM3D/Cabin/Textures (normal maps as normal maps, the grime masks
    linear, the panel faces sRGB colour).
@@ -49,6 +50,10 @@ MATERIALS = {
     'Vinyl_Olive': ((0.052, 0.054, 0.03), 0.5, 0.0, 0.4, 'VinylN', 0.7, 4.0, None),
     'Vinyl_Brown': ((0.06, 0.042, 0.03), 0.55, 0.0, 0.5, 'VinylN', 0.7, 4.0, None),
     'Metal_Steel': ((0.42, 0.42, 0.43), 0.33, 1.0, 0.25, 'PaintN', 0.1, 4.0, None),
+    # the SŁ-2M's screws: a muted steely brass (SAM Simulator's AK photo, sRGB 124/108/83, at half its chroma)
+    'Metal_Screw': ((0.40, 0.36, 0.28), 0.4, 1.0, 0.25, 'PaintN', 0.1, 4.0, None),
+    # the PPI's azimuth scale on its dark cone: a dim grey (samsim_panels: the figures read about sRGB 90/85/80 on the black)
+    'Paint_Scale': ((0.10, 0.10, 0.095), 0.6, 0.0, 0.05, 'PaintN', 0.04, 3.0, None),
     'Metal_Dark': ((0.03, 0.03, 0.03), 0.5, 0.0, 0.3, 'PaintN', 0.2, 3.0, None),
     'Bakelite_Black': ((0.012, 0.012, 0.012), 0.28, 0.0, 0.1, 'PaintN', 0.05, 4.0, None),
     'Lamp_Glass': ((0.8, 0.78, 0.72), 0.3, 0.0, 0.0, 'PaintN', 0.0, 1.0, (1.0, 0.82, 0.6, 6.0)),
@@ -57,9 +62,11 @@ MATERIALS = {
     'Grate_Rubber': ((0.045, 0.024, 0.014), 0.8, 0.0, 0.5, 'PaintN', 0.3, 2.0, None),
     'Canvas': ((0.14, 0.13, 0.07), 0.9, 0.0, 0.5, 'VinylN', 0.4, 6.0, None),
     'Paint_Letters': ((0.5, 0.48, 0.42), 0.5, 0.0, 0.1, 'PaintN', 0.05, 4.0, None),   # engraved letters filled cream
+    'Paint_Ivory': ((0.5, 0.45, 0.31), 0.45, 0.0, 0.15, 'PaintN', 0.05, 4.0, None),   # SŁ-2M's cream lamp and button mounts (samsim_panels)
     'Paint_Red': ((0.3, 0.035, 0.012), 0.35, 0.0, 0.05, 'PaintN', 0.05, 4.0, None),
     'Metal_Brass': ((0.42, 0.3, 0.12), 0.38, 1.0, 0.35, 'PaintN', 0.1, 4.0, None),   # brass screw heads (r123_kuzmin)
     'Lens_Amber': ((0.45, 0.17, 0.02), 0.22, 0.0, 0.05, 'PaintN', 0.02, 4.0, None),   # the R-111's lamp lenses, unlit (r111_photos)
+    'Lens_Green': ((0.03, 0.16, 0.05), 0.22, 0.0, 0.05, 'PaintN', 0.02, 4.0, None),   # SP-2M2's green lamp lenses, unlit (wwp_gecko p. 93)
     'PanelFace': ((1.0, 1.0, 1.0), 0.5, 0.0, 0.0, 'PaintN', 0.18, 2.0, None),
 }
 
@@ -72,7 +79,9 @@ TEX = '/Game/SAM3D/Cabin/Textures'
 MAT = '/Game/SAM3D/Cabin/Materials'
 INT = '/Game/SAM3D/Cabin/Interior'
 STEPS = %(steps)r
-PLAIN = ('SM_RadioR123M', 'SM_IntercomA1', 'SM_IntercomA2', 'SM_IntercomA4')   # no Nanite: their details are mm thick
+PLAIN = ('SM_Cabinet0096', 'SM_Cabinet0096Lid', 'SM_RadioR123M', 'SM_IntercomA1', 'SM_IntercomA2', 'SM_IntercomA4',
+         'SM_SP2M2Face', 'SM_SP3MFace', 'SM_SP3MFlap', 'SM_SL3MFace', 'SM_SL1MFace', 'SM_SP1MFace', 'SM_CabSeat', 'SM_PanelInd',
+         'SM_RackSL2M')   # no Nanite: their details are mm thick (SŁ-2M's screws and hex nuts: its Nanite build never finished)
 ONLY = %(only)r
 DF_SCALE = {'SM_OsaHull': 8.0, 'SM_RackSL1M': 2.0, 'SM_RackSL2M': 2.0, 'SM_RackSL3M': 2.0, 'SM_RackSP1M': 2.0,
             'SM_RackSP2M': 2.0, 'SM_RackSP3M': 2.0, 'SM_OperatorBench': 2.0}
@@ -97,6 +106,8 @@ def import_files(files, dest, options=None):
 
 def textures():
     files = sorted(glob.glob(os.path.join(%(repo)r, 'art', 'cabin_textures', '*.png')))
+    if ONLY:
+        files = [f for f in files if os.path.splitext(os.path.basename(f))[0] in ONLY]
     import_files(files, TEX)
     for f in files:
         name = os.path.splitext(os.path.basename(f))[0]

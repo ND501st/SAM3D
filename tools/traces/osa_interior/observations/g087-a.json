@@ -1,0 +1,260 @@
+{
+ "photo": "g087-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "outside, on the bow ahead of the commander's screen, raised",
+  "looks": "aft through the right windscreen; image left is the vehicle's right",
+  "covers": [
+   "hull.windscreen_right",
+   "cab.right_wall"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "commander's windscreen in a thick rubber seal, rounded upper outboard corner",
+   "bbox": [
+    0.17,
+    0.29,
+    1.0,
+    0.88
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass, black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hull_wall.bow_upper_plate",
+   "class": "hull_wall",
+   "seen_as": "olive hull plate above the screen (outside)",
+   "bbox": [
+    0.08,
+    0.0,
+    1.0,
+    0.3
+   ],
+   "zone": "outside",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "olive green paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.grab_outside_right",
+   "class": "handle",
+   "seen_as": "tubular grab handle on the hull edge outboard of the screen",
+   "bbox": [
+    0.03,
+    0.32,
+    0.12,
+    0.61
+   ],
+   "zone": "outside",
+   "on": "new.hull_wall.bow_upper_plate",
+   "relations": [
+    [
+     "right_of",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "hand-width grip",
+   "material": "olive steel tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.shutter_lugs_right",
+   "class": "bracket",
+   "seen_as": "triangular lugs with round holes along the top edge",
+   "bbox": [
+    0.27,
+    0.02,
+    1.0,
+    0.22
+   ],
+   "zone": "outside",
+   "on": "new.hull_wall.bow_upper_plate",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "olive steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.wiper_arms_right",
+   "class": "unknown",
+   "seen_as": "two wiper arms hanging from pivots above the glass",
+   "bbox": [
+    0.31,
+    0.14,
+    1.0,
+    0.74
+   ],
+   "zone": "outside",
+   "on": "new.hull_wall.bow_upper_plate",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.screen_latch_right_outside",
+   "class": "bracket",
+   "seen_as": "small hinge/latch fitting with wing nuts above the screen",
+   "bbox": [
+    0.45,
+    0.2,
+    0.55,
+    0.29
+   ],
+   "zone": "outside",
+   "on": "new.hull_wall.bow_upper_plate",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "fist-sized",
+   "material": "olive steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.cab_right_stowage_upper",
+   "class": "cover",
+   "seen_as": "rectangular hinged cover on the right cheek wall, upper",
+   "bbox": [
+    0.3,
+    0.37,
+    0.46,
+    0.53
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [
+    [
+     "above",
+     "new.cover.cab_right_stowage_lower"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "medium",
+   "notes": "through the glass"
+  },
+  {
+   "id": "new.cover.cab_right_stowage_lower",
+   "class": "cover",
+   "seen_as": "rectangular hinged cover, lower",
+   "bbox": [
+    0.3,
+    0.54,
+    0.46,
+    0.73
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [
+    [
+     "below",
+     "new.cover.cab_right_stowage_upper"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.cab_right_web_hole",
+   "class": "frame",
+   "seen_as": "web with a round hole and a pipe through it",
+   "bbox": [
+    0.55,
+    0.43,
+    0.66,
+    0.58
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "new.cover.cab_right_stowage_upper"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "heater.cab",
+   "class": "heater",
+   "seen_as": "perforated grey box low behind the screen",
+   "bbox": [
+    0.5,
+    0.7,
+    0.73,
+    0.86
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "left_of",
+     "new.cover.cab_right_stowage_lower"
+    ]
+   ],
+   "size_cue": "about a stowage cover wide",
+   "material": "grey perforated sheet",
+   "confidence": "low",
+   "notes": "the commander's heater by the notes; not certain"
+  },
+  {
+   "id": "new.unknown.cab_right_dash_side",
+   "class": "unknown",
+   "seen_as": "grey cabinet side with round holes and cables, inboard",
+   "bbox": [
+    0.8,
+    0.37,
+    1.0,
+    0.85
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "heater.cab"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": "perhaps the side of the commander's front panel"
+  }
+ ],
+ "not_in_register": [
+  "outside fittings of the right screen; stowage covers and a perforated box behind it"
+ ],
+ "doubts": [
+  "interior seen through reflecting glass; positions inside rough",
+  "whether the perforated box is the heater itself is not settled"
+ ]
+}

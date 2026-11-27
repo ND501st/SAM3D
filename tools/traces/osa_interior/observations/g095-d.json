@@ -1,0 +1,280 @@
+{
+ "photo": "g095-d",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "over the aisle by the bench, raised",
+  "looks": "down and aft: two square seat cushions folded flat, the bench at the right",
+  "covers": [
+   "seat.senior_operator",
+   "seat.operator",
+   "bench.operators"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "seat.senior_operator",
+   "class": "seat",
+   "seen_as": "square padded cushion with nail-head welt lying flat on its frame, nearer",
+   "bbox": [
+    0.0,
+    0.26,
+    0.51,
+    0.83
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "forward_of",
+     "seat.operator"
+    ]
+   ],
+   "size_cue": "about a seat's width",
+   "material": "green leatherette",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "seat.operator",
+   "class": "seat",
+   "seen_as": "the same cushion further aft",
+   "bbox": [
+    0.41,
+    0.0,
+    0.84,
+    0.4
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "aft_of",
+     "seat.senior_operator"
+    ],
+    [
+     "forward_of",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "green leatherette",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "seat.deputy_commander",
+   "class": "seat",
+   "seen_as": "edge of a third cushion at the bottom left",
+   "bbox": [
+    0.0,
+    0.78,
+    0.06,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [],
+   "size_cue": "",
+   "material": "green leatherette",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "bench.operators",
+   "class": "bench",
+   "seen_as": "long green bench cushion at the right; tubes, links and coil springs between",
+   "bbox": [
+    0.4,
+    0.3,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "",
+   "material": "green leatherette, grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "belt.operators",
+   "class": "belt",
+   "seen_as": "khaki harness straps under the cushions",
+   "bbox": [
+    0.17,
+    0.28,
+    0.98,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki webbing",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.gas_mask_bag_senior_operator",
+   "class": "kit",
+   "seen_as": "canvas under the near cushion",
+   "bbox": [
+    0.25,
+    0.58,
+    0.45,
+    0.85
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.gas_mask_bag_operator",
+   "class": "kit",
+   "seen_as": "canvas under the far cushion",
+   "bbox": [
+    0.55,
+    0.32,
+    0.77,
+    0.5
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "cover.floor_tunnel",
+   "class": "cover",
+   "seen_as": "pressed grey floor with square bays beyond the cushions",
+   "bbox": [
+    0.0,
+    0.03,
+    0.6,
+    0.45
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint, worn",
+   "confidence": "low",
+   "notes": "the same pressing as g093-c's"
+  },
+  {
+   "id": "new.floor.walkway_right",
+   "class": "floor",
+   "seen_as": "dark recess at the top left",
+   "bbox": [
+    0.0,
+    0.05,
+    0.25,
+    0.3
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "dark paint",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.strap.sp2m_bottom",
+   "class": "strap",
+   "seen_as": "two leather straps hanging at the top left",
+   "bbox": [
+    0.18,
+    0.02,
+    0.25,
+    0.12
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "brown leather",
+   "confidence": "medium",
+   "notes": "as in g093-c"
+  },
+  {
+   "id": "rack.sp2m",
+   "class": "rack",
+   "seen_as": "bottom corner of a block with a printed table at the top left",
+   "bbox": [
+    0.0,
+    0.0,
+    0.07,
+    0.08
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.0096_9m_bottom",
+   "class": "loom",
+   "seen_as": "round connectors and silver-sleeved cables with yellow bands",
+   "bbox": [
+    0.78,
+    0.0,
+    1.0,
+    0.3
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel, silver fabric",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "rack.0096_9m",
+   "class": "rack",
+   "seen_as": "foot of the cabinet at the top right",
+   "bbox": [
+    0.83,
+    0.0,
+    1.0,
+    0.03
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "white",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "cushion.floor_mat",
+   "class": "cushion",
+   "seen_as": "green surface under the bench frames",
+   "bbox": [
+    0.43,
+    0.55,
+    0.62,
+    0.9
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "green",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "which seats: taken as the two rear ones by nearness to the cabinet's cables; the square cushions folded flat into the aisle are hard to reconcile with g095-c's view of the backs",
+  "the top left (table block, straps, recess) is taken as SP-2M's foot across the aisle"
+ ]
+}

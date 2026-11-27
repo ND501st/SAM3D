@@ -1,0 +1,159 @@
+{
+ "photo": "g091-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "drawing (front elevation), no camera",
+  "looks": "square-on at SL-1M; drawing left aft, right forward (matches g091-a block for block)",
+  "covers": [
+   "rack.sl1m"
+  ],
+  "lens": "drawing"
+ },
+ "components": [
+  {
+   "id": "rack.sl1m",
+   "class": "rack",
+   "seen_as": "riveted frame with feet holding two columns of blocks",
+   "bbox": [
+    0.0,
+    0.12,
+    0.99,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.sl1m_rack_plate",
+   "class": "plate",
+   "seen_as": "rack plate at the top centre (blank in the drawing)",
+   "bbox": [
+    0.51,
+    0.12,
+    0.57,
+    0.15
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.l_0004_12m",
+   "class": "block",
+   "seen_as": "aft top block, two hooded meters",
+   "bbox": [
+    0.03,
+    0.16,
+    0.48,
+    0.58
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [
+    [
+     "above",
+     "block.l_ok81_4m2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_ok81_4m2",
+   "class": "block",
+   "seen_as": "aft bottom block, vertical socket and cover box",
+   "bbox": [
+    0.03,
+    0.59,
+    0.48,
+    0.92
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_0005_8m",
+   "class": "block",
+   "seen_as": "forward top block, black sub-panel and dial",
+   "bbox": [
+    0.5,
+    0.16,
+    0.96,
+    0.39
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [
+    [
+     "above",
+     "block.l_os51_8m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_os51_8m",
+   "class": "block",
+   "seen_as": "forward middle block, meter and two sockets",
+   "bbox": [
+    0.5,
+    0.4,
+    0.96,
+    0.64
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [
+    [
+     "above",
+     "block.l_0009_5m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_0009_5m",
+   "class": "block",
+   "seen_as": "forward bottom block, oval windows and jack rows",
+   "bbox": [
+    0.5,
+    0.66,
+    0.96,
+    0.9
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "The book's caption text crosses the top of the crop; not a component."
+ ]
+}

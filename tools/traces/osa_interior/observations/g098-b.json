@@ -1,0 +1,327 @@
+{
+ "photo": "g098-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle at the rear, eye height",
+  "looks": "right and slightly aft at the aft right-wall rack, a little oblique from forward",
+  "covers": [
+   "rack.sp3m",
+   "frame.post_sp2m_sp3m",
+   "lamp.blue"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.sp3m",
+   "class": "rack",
+   "seen_as": "pressed-sheet rack frame bolted to the wall by brackets, white top panel, drawer, four instrument blocks, flap",
+   "bbox": [
+    0.12,
+    0.0,
+    0.81,
+    0.77
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [
+    [
+     "aft_of",
+     "frame.post_sp2m_sp3m"
+    ]
+   ],
+   "size_cue": "blocks about 0.2 m wide",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp3_0094_11m",
+   "class": "block",
+   "seen_as": "white top-left panel with jacks, red lamp, key latches and fuse cover",
+   "bbox": [
+    0.2,
+    0.03,
+    0.6,
+    0.31
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.block.sp3m_top_right",
+   "class": "block",
+   "seen_as": "drawer box with two handles and a clear front, top right",
+   "bbox": [
+    0.59,
+    0.25,
+    0.81,
+    0.52
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.sp3m_front_flap",
+   "class": "cover",
+   "seen_as": "front flap of the rack, closed as a long grey panel",
+   "bbox": [
+    0.18,
+    0.57,
+    0.78,
+    0.78
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.under_sp3m",
+   "class": "loom",
+   "seen_as": "cable looms under the flap with louvred slots below",
+   "bbox": [
+    0.2,
+    0.77,
+    0.8,
+    0.88
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "frame.post_sp2m_sp3m",
+   "class": "frame",
+   "seen_as": "lined post at the left edge",
+   "bbox": [
+    0.0,
+    0.0,
+    0.17,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.lamp.blue_post_right",
+   "class": "lamp",
+   "seen_as": "blue domed lamp in a cage at top left",
+   "bbox": [
+    0.0,
+    0.0,
+    0.17,
+    0.13
+   ],
+   "zone": "compartment.right_wall",
+   "on": "frame.post_sp2m_sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.post_right_white",
+   "class": "cable",
+   "seen_as": "white cable down the post",
+   "bbox": [
+    0.0,
+    0.1,
+    0.07,
+    0.9
+   ],
+   "zone": "compartment.right_wall",
+   "on": "frame.post_sp2m_sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "lamp.blue",
+   "class": "lamp",
+   "seen_as": "blue domed lamp at the bulkhead corner, right",
+   "bbox": [
+    0.83,
+    0.33,
+    0.91,
+    0.43
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.door_rear",
+   "class": "door",
+   "seen_as": "edge of the door frame at the right edge",
+   "bbox": [
+    0.94,
+    0.4,
+    1.0,
+    1.0
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.bulkhead_rear",
+   "class": "bulkhead",
+   "seen_as": "glossy grey bulkhead at the right",
+   "bbox": [
+    0.82,
+    0.3,
+    1.0,
+    1.0
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "quilted roof padding",
+   "bbox": [
+    0.3,
+    0.0,
+    1.0,
+    0.3
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.roof_right_rear",
+   "class": "cable",
+   "seen_as": "cable on studs along the roof edge",
+   "bbox": [
+    0.35,
+    0.0,
+    0.95,
+    0.33
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.head_strap",
+   "class": "kit",
+   "seen_as": "round strap with a brown band on the bulkhead",
+   "bbox": [
+    0.78,
+    0.78,
+    0.96,
+    0.88
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.black_cloth",
+   "class": "kit",
+   "seen_as": "dark cloth hanging from under the rack",
+   "bbox": [
+    0.35,
+    0.78,
+    0.65,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.stowage_5937",
+   "class": "box",
+   "seen_as": "grey box lid with a stencil at the bottom right",
+   "bbox": [
+    0.64,
+    0.86,
+    0.9,
+    1.0
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.wall_right",
+   "class": "hull_wall",
+   "seen_as": "lined wall round the rack",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": "bbox is the whole view: the wall is behind everything"
+  }
+ ],
+ "not_in_register": [
+  "the rack's fold-down front flap"
+ ],
+ "doubts": [
+  "the four instrument blocks cannot be named from the photo; register has six candidates (2-12RZM)"
+ ]
+}

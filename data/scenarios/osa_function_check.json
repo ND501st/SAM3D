@@ -1,0 +1,39 @@
+{
+  "scenario_id": "osa_function_check",
+  "name": "Osa-AK: the function check finds two faults",
+  "description": "A drill on faults (docs/FAULTS.md). The vehicle stands at a halt, cold, its last check far behind it. The NPC commander brings it to readiness and has the deputy run the function check (ФК), the operator checking the receivers' noise meanwhile. The check finds two faults: КЗ stays dark when pressed (the K3 channel, the missile's fuse-arming command), which the deputy mends from the vehicle's own spares (ЗИП-1А) before the check is run again; and the missile channel's error meters stay at nought, which only the maintenance vehicle's spares mend, so the crew fights with it. A drone comes half an hour in. Take the deputy's seat to run the check yourself, the operator's for the noise check, or the commander's to give the orders.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain. The faults are the scenario's (own_unit.inputs), not the dice's: random faults are off so the drill is the same every time. The drone's numbers are PLACEHOLDERS.",
+  "seed": 3,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "crew_commander": "npc",
+  "faults": { "random": false, "notes": "The two faults below are the drill's; nothing else fails." },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true, "k3_fault": true, "missile_error_fault": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "skill": "class1" },
+    { "name": "Deputy commander", "role": "deputy_commander", "skill": "class2" },
+    { "name": "Senior operator", "role": "senior_operator", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class2" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    {
+      "id": "t1", "name": "Practice drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone",
+      "start": { "east_m": 2000, "north_m": 40000, "up_m": 1000 },
+      "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ],
+      "speed_mps": 150, "rcs_m2": 0.5, "appear_at_s": 1800,
+      "notes": "Placeholder numbers. It appears once the K3 channel is mended and checked again."
+    }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 2400, "when_targets_gone": true }
+}

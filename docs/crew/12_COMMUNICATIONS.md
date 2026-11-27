@@ -80,6 +80,11 @@ and R-407 stay as `radio_sets.hpp` has them. A set hears a net when it is on, wa
 frequency and within reach, and the net is not jammed out at it. It transmits when it also is on СИМПЛЕКС (R-111: tuned,
 power on) and the 3 min have passed.
 
+ГРОМКОСТЬ is a potentiometer (14 Nov 2026): a wheel between stops in the console data, 0 to 1, starting at 0.8. Turned
+right down (under 0.05, `kVolumeDownBelow` in `crew_comms.hpp`) the set is not heard; above that the headset hears the set's
+voices and hiss scaled by the level (`VolumeLevel`, `HeadsetSound::volume`). The drill no longer turns it "to the stop":
+it stays where the crew left it.
+
 ### 2.4 Nets and radio data
 
 The scenario's `radio_data` block is the battery's radio data: for each net its set, its main station, the call signs,

@@ -412,6 +412,15 @@ Co-operative crews share one node.
   lobing) breaks the lock after ten missed looks (one second): "track lost: radar lost the echo".
 * **Range indicator** (`EchoVisible`): the tracking radar's echoes are the targets its beam really picks up
   (pattern, range, Pd), whatever the gate, so the elevation seat sees a target appear as the scan crosses it.
+  The beam is tested over the elevations the scan swept during the step, not only where it ended, so a high
+  target's echo flashes once per sweep (2 s, 6-30 degrees) instead of almost never. The range operator keeps the
+  gate where he last saw the echo, led on by the rate he saw it close at, for up to 6 s without a flash
+  (`EngagementModel::Aim`), so the gate is still on it when the scan comes back. While the tracking radar takes
+  a target, the NPC commander orders «Запрос!» if it is not yet identified and still within the interrogator's
+  reach, and gives «взять!» once per target unless 60 s pass without the lock (`ScenarioRunner`'s
+  `npc_take_for_`). Ashuluk's high drone was fought on 6 seeds of 10 before this and 8 after
+  (`test_ranges_history.cpp`); the two misses are a capture that never locks and a target above the search
+  radar's beam that never answers the interrogator, so the commander never permits the launch.
 * **What changes, what does not**: the clutter height and the angular-rate, minimum-altitude and beam-crossing
   rules are replaced by the radar equation, MTI/clutter and the antenna pattern. TV tracking, the IFF replies,
   the zone lamps, the НЛЦ lamp, the crew's aiming speeds and the hit/miss outcome are unchanged.

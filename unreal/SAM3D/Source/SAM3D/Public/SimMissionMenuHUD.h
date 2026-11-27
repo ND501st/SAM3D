@@ -91,6 +91,8 @@ private:
 	/** The helper's line (a click turns it). */
 	FBox2D HelperBox = FBox2D(ForceInit);
 	void CycleHelper();
+	FBox2D FaultsBox = FBox2D(ForceInit);
+	void ToggleFaults();
 	/** The time of day: the index into the mission's TimeOptions, the hour for "hour", and where its line was drawn. */
 	int32 TimeIndex = 0;
 	float TimeHour = 10.5f;

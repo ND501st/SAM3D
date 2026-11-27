@@ -38,6 +38,7 @@ struct VisualRangeValues {
     double day_m = 8000.0;
     double twilight_m = 3000.0;
     double night_m = 1500.0;
+    double night_blackout_m = 150.0;  // a vehicle under full blackout at night: only its masked lamps (optional in the file)
     double moonlit_m = 0.0;  // a night under a full moon high (roadmap S8); 0: the night's range whatever the moon
     double twilight_deg = 6.0;
     double margin = 0.1;
@@ -54,7 +55,15 @@ public:
         const std::pair<const char*, double*> each[] = {{"day_m", &out.day_m},         {"twilight_m", &out.twilight_m},
                                                         {"night_m", &out.night_m},     {"moonlit_m", &out.moonlit_m},
                                                         {"twilight_deg", &out.twilight_deg}, {"margin", &out.margin}};
-        if (!Keys(*values, "values", {"day_m", "twilight_m", "night_m", "moonlit_m", "twilight_deg", "margin"})) return false;
+        if (!Keys(*values, "values", {"day_m", "twilight_m", "night_m", "moonlit_m", "night_blackout_m", "twilight_deg", "margin"})) return false;
+        if (values->Find("night_blackout_m") != nullptr) {
+            const std::string p = Join("values", "night_blackout_m");
+            const json::Value* v = values->Find("night_blackout_m");
+            if (!Keys(*v, p, {"value", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
+            const json::Value* n = v->Find("value");
+            if (n == nullptr || !n->Is(json::Type::Number) || !(n->number > 0.0)) return Fail(Join(p, "value"), "a number > 0");
+            out.night_blackout_m = n->number;
+        }
         for (const auto& e : each) {
             const std::string p = Join("values", e.first);
             const json::Value* v = values->Find(e.first);
@@ -100,6 +109,12 @@ inline double VisualRangeM(double visibility_m, double sun_elevation_deg, const 
     if (v.moonlit_m > 0.0 && moon_share > 0.0) night += (v.moonlit_m - v.night_m) * (moon_share > 1.0 ? 1.0 : moon_share);
     const double light = sun_elevation_deg >= 0.0 ? v.day_m : sun_elevation_deg >= -v.twilight_deg ? v.twilight_m : night;
     return std::max(0.0, std::min(light, visibility_m));
+}
+// The same for a vehicle with no lights on (blackout, roadmap C2): by night only its masked lamps, seen from the next in
+// the column; by day and at dusk as any other.
+inline double VisualRangeUnlitM(double visibility_m, double sun_elevation_deg, const VisualRangeValues& v, double moon_share = 0.0) {
+    const double lit = VisualRangeM(visibility_m, sun_elevation_deg, v, moon_share);
+    return sun_elevation_deg >= -v.twilight_deg ? lit : std::min(lit, v.night_blackout_m);
 }
 
 // ---------------------------------------------------------------------------------------------- the supply lines (G2.6)
@@ -350,9 +365,10 @@ public:
 
     // To time t: the levels by the viewers and the range, then every mover on (the M2 ones by the session, at their route's
     // times stretch by stretch as the M1 ones go, so a hand-over keeps the place).
-    void Step(double t, double dt, const std::vector<MapPoint>& viewers, double range_m) {
+    // `unlit_range_m` (>= 0): how far a mover with its lights off is seen now (VisualRangeUnlitM; < 0: as the rest).
+    void Step(double t, double dt, const std::vector<MapPoint>& viewers, double range_m, double unlit_range_m = -1.0) {
         range_now_m_ = range_m;
-        movers_.UpdateLevels(viewers, range_m);
+        movers_.UpdateLevels(viewers, range_m, {}, unlit_range_m);
         movers_.Step(t, dt);
         for (const Mover& m : movers_.All()) {
             if (m.level != MoverLevel::M2) continue;

@@ -65,6 +65,7 @@
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/checks.hpp"
 #include "simcore/group_designation.hpp"
 #include "simcore/kill_assessment.hpp"
 #include "simcore/orientation.hpp"
@@ -195,6 +196,14 @@ struct EngagementTuning {
     std::map<std::string, double> method_factor;
     // A missile launched with no range known and ПОМЕХА off: the fuse is armed by range, and there is none (1 = no effect).
     double no_range_fuse_factor = 1.0;
+    // The small-target mode (МЦ; the console's track.small_target_control): a target slower than small_target_below_mps
+    // met with the mode off gets small_target_off_factor; a faster one met with it on, small_target_fast_on_factor.
+    double small_target_below_mps = 100.0;
+    double small_target_off_factor = 1.0;
+    double small_target_fast_on_factor = 1.0;
+    // Faults in the guidance (the console's inputs a scenario or the instructor sets): each one set at the meeting
+    // multiplies the chance by its factor (outcome.fault_factors: K3 the fuse never armed, K1 and K2 no commands, ...).
+    std::vector<std::pair<std::string, double>> fault_factors;
     // The manoeuvre counts over the last manoeuvre_window_s before the missile's arrival only (roadmap B4,
     // docs/air_battle/04_REACTIONS.md 6.3: a pull in the last seconds gains most, a break flown at launch little).
     // 0: over the whole flight (as before).
@@ -505,7 +514,7 @@ public:
         if (!Group(root, "outcome",
                    {"hit_chance", "low_altitude", "tv_factor", "outside_zone_factor", "manoeuvre_penalty_per_deg_s",
                     "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min", "method_factor", "no_range_fuse_factor",
-                    "manoeuvre_window_s"},
+                    "small_target_below_mps", "small_target_off_factor", "small_target_fast_on_factor", "fault_factors", "manoeuvre_window_s"},
                    g) ||
             !Factor(*g, "tv_factor", t.tv_factor) || !Factor(*g, "outside_zone_factor", t.outside_zone_factor) ||
             !Num(*g, "outcome", "manoeuvre_penalty_per_deg_s", t.manoeuvre_penalty_per_deg_s, 0.0) ||
@@ -541,6 +550,25 @@ public:
             }
         }
         if (g->Find("no_range_fuse_factor") != nullptr && !Factor(*g, "no_range_fuse_factor", t.no_range_fuse_factor)) return false;
+        if (g->Find("small_target_below_mps") != nullptr &&
+            !Num(*g, "outcome", "small_target_below_mps", t.small_target_below_mps, 0.0)) {
+            return false;
+        }
+        if (g->Find("small_target_off_factor") != nullptr && !Factor(*g, "small_target_off_factor", t.small_target_off_factor)) return false;
+        if (g->Find("small_target_fast_on_factor") != nullptr &&
+            !Factor(*g, "small_target_fast_on_factor", t.small_target_fast_on_factor)) {
+            return false;
+        }
+        if (const json::Value* ff = g->Find("fault_factors")) {
+            if (!ff->Is(json::Type::Object)) return Fail("outcome.fault_factors", "expected an object of input: factor");
+            for (std::size_t i = 0; i < ff->keys.size(); ++i) {
+                const json::Value& v = ff->items[i];
+                if (!v.Is(json::Type::Number) || v.number < 0.0 || v.number > 1.0) {
+                    return Fail(Join("outcome.fault_factors", ff->keys[i]), "expected a number from 0 to 1");
+                }
+                t.fault_factors.emplace_back(ff->keys[i], v.number);
+            }
+        }
         if (g->Find("manoeuvre_window_s") != nullptr && !Num(*g, "outcome", "manoeuvre_window_s", t.manoeuvre_window_s, 0.0)) return false;
         if (!LoadLowAltitude(*g, t)) return false;
         if (root.Find("kill_assessment") != nullptr && !LoadKillAssessment(root, t.kill)) return false;
@@ -892,13 +920,17 @@ public:
         if (!console.has_sensors) return;
         time_ = t;
         UpdateOrientation(t, dt, console, log, aim_crew.elevation, aim_crew.advise);
+        AidTracking(dt, console);
         UpdateBeams(dt, console);
         Measure(dt, world, targets);
         ResolveShots(t, world, console, targets, log, rng);
         if (em_ != nullptr) StepEm(dt, world, console, targets);
         UpdateSearch(t, console, log);
         UpdateIff(t, console, log);
-        if (method_ == TrackMethod::None) Aim(dt, console, aim_crew);
+        if (method_ == TrackMethod::None) {
+            Aim(dt, console, aim_crew);
+            Slew(dt, console);
+        }
         UpdateTvRange();
         UpdateTrack(t, dt, console, log, aim_crew);
         UpdateTrackReturns(console);
@@ -1039,12 +1071,12 @@ public:
         return TvLookAt(console, it->second);
     }
     double UnitHeadingDeg() const { return unit_heading_deg_; }
-    // The heading the gyro holds (its idea of the hull's heading), and the frame conversion: an azimuth in the
-    // crew's frame (wheels, scope) to true azimuth from north.
-    double GyroHeadingDeg() const { return gyro_heading_deg_; }
+    // The heading the crew's frame works in (the gyro's idea of the hull's heading, through the Qc follow-up), and the
+    // frame conversion: an azimuth in the crew's frame (wheels, scope) to true azimuth from north.
+    double GyroHeadingDeg() const { return frame_heading_deg_; }
     // The vehicle was oriented before the session began: the gyro holds the hull's true heading.
     void SetOriented() {
-        gyro_heading_deg_ = Wrap360(unit_heading_deg_);
+        gyro_heading_deg_ = frame_heading_deg_ = Wrap360(unit_heading_deg_);
         last_unit_heading_deg_ = unit_heading_deg_;
         oriented_ = true;
     }
@@ -1068,8 +1100,10 @@ public:
     void SetSiteLatitude(double latitude_deg) { site_latitude_deg_ = latitude_deg; }
     double SiteLatitudeDeg() const { return site_latitude_deg_; }
     void SetGyroOwnDrift(double deg_h) { gyro_own_drift_deg_h_ = deg_h; }
+    // The magnetrons' drift off tune (Hz, vehicle_systems.hpp): felt by a receiver whose frequency control is on manual.
+    void SetMagnetronDriftHz(double hz) { magnetron_drift_hz_ = hz; }
     double IndicatedToTrueDeg(double indicated_deg) const {
-        return Wrap180(indicated_deg + unit_heading_deg_ - gyro_heading_deg_);
+        return Wrap180(indicated_deg + unit_heading_deg_ - frame_heading_deg_);
     }
     // The TV picture (roadmap 6.6): the tracked target's span in thousandths while the TV holds it (0 otherwise), and the
     // range the crew make of it by the formula of the thousandth (0 when they can't: no span known, too small to judge).
@@ -1102,6 +1136,8 @@ public:
     // degrees; kNoAntenna when not known: the gameplay rules have no antenna).
     const std::vector<ScopeStrobe>& SearchStrobes() const { return strobes_; }
     static constexpr double kNoAntenna = -1000.0;
+    // The id the IFF's check marks carry among the replies (no target has it).
+    static constexpr const char* kIffCheckMark = "iff_check";
     double SearchAntennaAzimuthDeg() const { return search_antenna_az_deg_; }
     // The search antenna's elevation beam this turn (0 = I, 1 = II, 2 = III), -1 if the console has no beam selector.
     int SearchBeam() const { return search_beam_; }
@@ -1122,6 +1158,16 @@ public:
     int Hits() const { return hits_; }
     int Misses() const { return misses_; }
     // A shot by its launch number: resolved (hit, miss or lost), and how long it was given to fly (0 if unknown).
+    // A shot the crew's own act ends in flight (ВОЗВРАТ resetting its range finder): a miss, logged with `why`.
+    void LoseShot(double t, int number, SessionLog& log, const std::string& why) {
+        for (Shot& s : shots_) {
+            if (s.number != number || s.done) continue;
+            Finish(s, false);
+            log.Record({t, DebriefEntry::Kind::Miss, "Missile " + std::to_string(number), s.target_id, why});
+            events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, why, number});
+        }
+    }
+
     bool ShotDone(int number) const {
         for (const Shot& s : shots_) {
             if (s.number == number) return s.done;
@@ -1293,7 +1339,7 @@ private:
             const double alt = frame.AltitudeOf(a->position);
             g.range_m = los.Length();
             g.true_az_deg = Wrap180(RadToDeg(AzimuthOf(los)));
-            g.az_deg = Wrap180(g.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
+            g.az_deg = Wrap180(g.true_az_deg - unit_heading_deg_ + frame_heading_deg_);
             g.el_deg = RadToDeg(ElevationOf(los));
             g.agl_m = alt - terrain.HeightAt(a->position.x, a->position.y);
             g.terrain = &terrain;
@@ -1372,6 +1418,11 @@ private:
         const TrackSensorDef& tr = console.track;
         em_->SetTrack(eq.IsReady(tr.transmitter), !tr.mti_control.empty() && console.panel.Get(tr.mti_control) == 1,
                       !tr.rgpo_control.empty() && console.panel.Get(tr.rgpo_control) == 1);
+        const ReceiverReading srx = ReadReceiver(s.receiver, console.panel);
+        em_->SetSearchReceiver(srx.external, srx.comp_mps, srx.mistune_hz + (srx.manual_afc ? magnetron_drift_hz_ : 0.0), srx.sa);
+        const ReceiverReading trx = ReadReceiver(tr.receiver, console.panel);
+        em_->SetTrackReceiver(trx.comp_mps, trx.mistune_hz + (trx.manual_afc ? magnetron_drift_hz_ : 0.0));
+        em_->SetReceiverLossDb(ReceiverLossDb(console, true), ReceiverLossDb(console, false));
         em_->Advance(dt);
     }
 
@@ -1478,7 +1529,23 @@ private:
             double chaff = 1.0;
             const auto ch = chaff_.find(s.target_id);
             if (ch != chaff_.end() && ch->second.t_s <= t + 1e-9 && t - ch->second.t_s <= ch->second.window_s) chaff = ch->second.factor;
-            const double p = base * method * zone * manoeuvre * crew * altitude * aim * guidance * fuse * chaff;
+            // The small-target mode (МЦ): the fuze and the loop set for a small slow target, or not.
+            double mc_factor = 1.0;
+            const std::string& mc = console.track.small_target_control;
+            if (!mc.empty()) {
+                const bool on = console.panel.Get(mc) == console.track.small_target_on_position;
+                const bool slow = g.speed_mps < tuning_.small_target_below_mps;
+                if (slow && !on) mc_factor = tuning_.small_target_off_factor;
+                if (!slow && on) mc_factor = tuning_.small_target_fast_on_factor;
+            }
+            double fault = 1.0;  // the guidance's faults (outcome.fault_factors), the first set one named in the debrief
+            const char* fault_id = nullptr;
+            for (const auto& ff : tuning_.fault_factors) {
+                if (!console.equipment.HasInput(ff.first) || !console.equipment.GetInput(ff.first)) continue;
+                fault *= ff.second;
+                if (fault_id == nullptr) fault_id = ff.first.c_str();
+            }
+            const double p = base * method * zone * manoeuvre * crew * altitude * aim * guidance * fuse * mc_factor * fault * chaff;
             char aim_text[160] = "";  // only a TV shot is aimed by hand
             if (s.method == TrackMethod::Tv && tuning_.has_tv_manual) {
                 std::snprintf(aim_text, sizeof(aim_text), " x TV aim %.2f (%.2f deg off the crosshair)", aim, aim_error_deg);
@@ -1490,6 +1557,14 @@ private:
             if (unfused) {
                 const std::size_t n = std::strlen(aim_text);
                 std::snprintf(aim_text + n, sizeof(aim_text) - n, " x fuse %.2f (no range, ПОМЕХА off)", fuse);
+            }
+            if (mc_factor != 1.0) {
+                const std::size_t n = std::strlen(aim_text);
+                std::snprintf(aim_text + n, sizeof(aim_text) - n, " x МЦ %.2f", mc_factor);
+            }
+            if (fault_id != nullptr) {
+                const std::size_t n = std::strlen(aim_text);
+                std::snprintf(aim_text + n, sizeof(aim_text) - n, " x fault %s %.2f", fault_id, fault);
             }
             if (chaff != 1.0) {
                 const std::size_t n = std::strlen(aim_text);
@@ -1532,7 +1607,7 @@ private:
     void UpdateSearch(double t, const ConsoleData& console, SessionLog& log) {
         picture_.clear();
         strobes_.clear();
-        search_antenna_az_deg_ = em_ != nullptr ? Wrap180(em_->SearchAntennaAzimuthDeg() - unit_heading_deg_ + gyro_heading_deg_) : kNoAntenna;
+        search_antenna_az_deg_ = em_ != nullptr ? Wrap180(em_->SearchAntennaAzimuthDeg() - unit_heading_deg_ + frame_heading_deg_) : kNoAntenna;
         const SearchSensorDef& d = console.search;
         if (!console.equipment.IsReady(d.antenna) || !console.equipment.IsReady(d.transmitter)) return;
         const int scale = console.panel.Get(d.range_control);
@@ -1542,7 +1617,7 @@ private:
         if (em_ != nullptr) {  // the search radar's own tracks, in the crew's heading frame
             for (const EmSensorLink::Contact& c : em_->SearchPicture()) {
                 if (c.range_m < window.first || c.range_m > window.second) continue;
-                const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
+                const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + frame_heading_deg_);
                 Contact blip{c.target_id, c.range_m, az, c.el_deg};
                 blip.beam = c.beam;
                 blip.snr_db = c.snr_db;
@@ -1555,13 +1630,17 @@ private:
                 }
             }
             for (const EmSensorLink::Strobe& st : em_->SearchStrobes()) {
-                strobes_.push_back({Wrap180(st.true_az_deg - unit_heading_deg_ + gyro_heading_deg_), st.jn_db});
+                strobes_.push_back({Wrap180(st.true_az_deg - unit_heading_deg_ + frame_heading_deg_), st.jn_db});
             }
             return;
         }
+        // A degraded receiver (checks.hpp) sees only so far into the longest scale (the radar equation's fourth root).
+        double reach_m = 0.0;
+        for (const auto& sc : d.range_scales_m) reach_m = std::fmax(reach_m, sc.second);
+        reach_m *= ReceiverRangeFactor(ReceiverLossDb(console, true));
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || g.range_m < window.first || g.range_m > window.second || !g.Los()) continue;
+            if (!g.alive || g.range_m < window.first || g.range_m > window.second || g.range_m > reach_m || !g.Los()) continue;
             if (mti ? g.range_m > d.mti_max_range_m : g.agl_m < tuning_.clutter_altitude_m) continue;
             picture_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
             if (seen_by_search_.insert(kv.first).second) {
@@ -1699,6 +1778,25 @@ private:
                 for (const Contact& c : track_returns_) {
                     if (c.target_id == best_id) want_r = c.range_m;
                 }
+                // The echo shows on his indicator only as the elevation search's beam crosses the target (once a sweep);
+                // between, he keeps the gate where he saw it, led on as he saw it close (sam3d: back on the range he was
+                // told, up to a report old, the gate swung off the echo between sweeps and a high target was never
+                // captured).
+                IndicatorEcho& seen = indicator_echo_[best_id];
+                if (want_r >= 0.0) {
+                    const double gap_s = time_ - seen.t;
+                    if (seen.t >= 0.0 && gap_s > 0.05 && gap_s <= kIndicatorMemoryS) {
+                        const double rate = (want_r - seen.range_m) / gap_s;
+                        seen.rate_mps = seen.has_rate ? 0.5 * (seen.rate_mps + rate) : rate;
+                        seen.has_rate = true;
+                    } else if (gap_s > kIndicatorMemoryS) {
+                        seen.has_rate = false;
+                    }
+                    seen.range_m = want_r;
+                    seen.t = time_;
+                } else if (seen.t >= 0.0 && time_ - seen.t <= kIndicatorMemoryS) {
+                    want_r = std::fmax(0.0, seen.range_m + (seen.has_rate ? seen.rate_mps * (time_ - seen.t) : 0.0));
+                }
                 const auto led = board_range.find(best_id);
                 if (want_r < 0.0 && led != board_range.end()) want_r = led->second;
                 if (want_r < 0.0) {
@@ -1733,6 +1831,15 @@ private:
         double t = 0.0;
     };
     std::map<std::string, WheelWant> wanted_;
+    // Where the range operator last saw each target's echo on his range indicator, and how fast it moved there.
+    struct IndicatorEcho {
+        double range_m = 0.0;
+        double t = -1.0;
+        double rate_mps = 0.0;
+        bool has_rate = false;
+    };
+    std::map<std::string, IndicatorEcho> indicator_echo_;
+    static constexpr double kIndicatorMemoryS = 6.0;  // sam3d: three sweeps of the elevation search
     // A want not renewed this long is gone (the NPC would leave the wheel). One on the target the commander ordered taken
     // isn't replaced by another target's for kOrderedHoldS: the ordered target out of the picture for a few scans (a low
     // flier in the clutter) leaves the wheel where it was last seen, it doesn't send it to the next echo (sam3d: an NPC's
@@ -1787,7 +1894,7 @@ private:
             for (const auto& kv : geo_) {
                 const Geometry& g = kv.second;
                 if (!g.alive || g.range_m > d.max_range_m) continue;
-                if ((is_locked && kv.first == locked) || em_->EchoVisible(kv.first)) {
+                if ((is_locked && kv.first == locked) || em_->EchoVisible(kv.first, swept_low_deg_, swept_high_deg_)) {
                     track_returns_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
                     if (kv.first == tracked_) {
                         range_echo_for_ = tracked_;
@@ -1798,15 +1905,21 @@ private:
             return;
         }
         const double wheel_az = console.panel.GetValue(d.az_wheel);
+        const double reach_m = TrackReachM(console);
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || g.range_m > d.max_range_m || !g.Los()) continue;
+            if (!g.alive || g.range_m > reach_m || !g.Los()) continue;
             const bool in_beam =
                 std::fabs(WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg) - wheel_az) <= tuning_.az_tolerance_deg;
             if (in_beam || (kv.first == tracked_ && method_ == TrackMethod::Radar)) {
                 track_returns_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
             }
         }
+    }
+
+    // The tracking radar's reach without the EM layer: its range, less what a degraded receiver costs (checks.hpp).
+    static double TrackReachM(const ConsoleData& console) {
+        return console.track.max_range_m * ReceiverRangeFactor(ReceiverLossDb(console, false));
     }
 
     // Why a lock on target g by `method` can't be held right now; nullptr if it can.
@@ -1823,7 +1936,7 @@ private:
         if (g.angular_rate_deg_s > tuning_.max_angular_rate_deg_s) return "target crossing too fast";
         if (method == TrackMethod::Radar) {
             if (!eq.IsReady(d.transmitter)) return "transmitter off";
-            if (g.range_m > d.max_range_m) return "beyond tracking range";
+            if (g.range_m > TrackReachM(console)) return "beyond tracking range";
             if (g.agl_m < tuning_.track_min_altitude_m) return "target too low for the radar";
             if (g.agl_m < tuning_.track_clutter_altitude_m && !d.mti_control.empty() && console.panel.Get(d.mti_control) != 1) {
                 return "target lost in ground clutter (СДЦ off)";
@@ -1842,7 +1955,13 @@ private:
                                      ? optical_.contrast_threshold
                                      : em::AnchorThreshold(optical_.inherent_contrast, tuning_.tv_max_range_m, em::kReferenceVisibilityM);
         const double fov_h = DegToRad(TvFieldOfViewDeg(console) * console.track.fov_height_ratio);
-        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.Los(), g.CloudTransmission());
+        em::OpticalConditions seen = optics_;  // through the light filter in the beam (СВЕТОФИЛЬТР)
+        const TrackSensorDef& d = console.track;
+        if (!d.filter_control.empty()) {
+            const int f = console.panel.Get(d.filter_control);
+            if (f >= 0 && f < static_cast<int>(d.filter_visibility.size())) seen.visibility_m *= d.filter_visibility[static_cast<std::size_t>(f)];
+        }
+        return em::Look(optical_, threshold, seen, g.range_m, g.size_m, fov_h, g.Los(), g.CloudTransmission());
     }
 
     // Where the system's range comes from now: the tracking radar's lock, its range-only mode (ПОЛУАВТОМАТ, angles by
@@ -1960,6 +2079,72 @@ private:
     // follows the target a little behind it and no faster than the wheel turns; a wheel in the player's hands stays
     // where the player puts it. A target masked by terrain is carried on at the last rates until the memory runs out.
     // Returns false (and logs why) when the lock is lost.
+    // БАЛАНС АВТОМАТА: the range automaton's discriminator off balance holds the gate off the echo's centre, by up to
+    // range_balance_m at either end of the knob (by analogy with OK81-4M's БАЛАНС, voenizdat_osa_1991 p119).
+    static double RangeBalanceM(const ConsoleData& console) {
+        const TrackSensorDef& d = console.track;
+        if (d.range_balance_control.empty()) return 0.0;
+        const ControlDef* c = console.panel.Find(d.range_balance_control);
+        const double mid = 0.5 * (c->min_value + c->max_value);
+        const double half = 0.5 * (c->max_value - c->min_value);
+        return (console.panel.GetValue(d.range_balance_control) - mid) / half * d.range_balance_m;
+    }
+
+    // ПА, aided tracking (voenizdat_osa_1991 p87-88, p73, p85): the wheels' turns feed an integrator per channel that
+    // turns the antenna on at the rate it holds, so it carries on when the hand stops (and through a masked TV picture:
+    // the memory). Entered from a radar track it takes over at the target's rate (the follow-ups track by rate in ТСЦ).
+    // БАЛАНС ПА clears a channel's rate (SAM3D's reading of the button). Every turn counts, the hand's or an NPC's.
+    void AidTracking(double dt, ConsoleData& console) {
+        const TrackSensorDef& d = console.track;
+        const Equipment& eq = console.equipment;
+        const double az = console.panel.GetValue(d.az_wheel);
+        const double el = console.panel.GetValue(d.el_wheel);
+        const bool on = d.pa_gain_per_s > 0.0 && eq.IsReady(d.tv_mode) && eq.IsReady(d.slew);
+        if (!on) {
+            if (dt > 0.0) {  // the wheels' rate as the follow-ups see it (to take over from a radar track)
+                const double k = 0.3;
+                wheel_rate_az_deg_s_ += k * ((az - aid_last_az_) / dt - wheel_rate_az_deg_s_);
+                wheel_rate_el_deg_s_ += k * ((el - aid_last_el_) / dt - wheel_rate_el_deg_s_);
+            }
+            aiding_ = false;
+            aid_rate_az_deg_s_ = aid_rate_el_deg_s_ = 0.0;
+            aid_last_az_ = az;
+            aid_last_el_ = el;
+            return;
+        }
+        if (!aiding_) {
+            aiding_ = true;
+            const bool radar = method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam;
+            aid_rate_az_deg_s_ = radar ? wheel_rate_az_deg_s_ : 0.0;
+            aid_rate_el_deg_s_ = radar ? wheel_rate_el_deg_s_ : 0.0;
+        } else {
+            aid_rate_az_deg_s_ += d.pa_gain_per_s * (az - aid_last_az_);
+            aid_rate_el_deg_s_ += d.pa_gain_per_s * (el - aid_last_el_);
+        }
+        if (!d.pa_balance_az.empty() && console.panel.Get(d.pa_balance_az) == 1) aid_rate_az_deg_s_ = 0.0;
+        if (!d.pa_balance_el.empty() && console.panel.Get(d.pa_balance_el) == 1) aid_rate_el_deg_s_ = 0.0;
+        aid_rate_az_deg_s_ = std::clamp(aid_rate_az_deg_s_, -d.pa_max_az_deg_s, d.pa_max_az_deg_s);
+        aid_rate_el_deg_s_ = std::clamp(aid_rate_el_deg_s_, -d.pa_max_el_deg_s, d.pa_max_el_deg_s);
+        console.panel.SetValue(d.az_wheel, az + aid_rate_az_deg_s_ * dt);
+        console.panel.SetValue(d.el_wheel, el + aid_rate_el_deg_s_ * dt);
+        aid_last_az_ = console.panel.GetValue(d.az_wheel);
+        aid_last_el_ = console.panel.GetValue(d.el_wheel);
+    }
+
+    // The fast slew lever (ВЛЕВО — 0 — ВПРАВО): off its middle, the drive turns the antenna at its rate, left
+    // anticlockwise. In РУ or ЦУ only (voenizdat_osa_1991 p87-88): no target held (a track drives the antenna itself)
+    // and not in ПА, the TV's angle tracking; the antenna free to turn and the azimuth wheel unlocked (SetValue keeps
+    // to the wheel's lock and its ±330° stops).
+    void Slew(double dt, ConsoleData& console) {
+        const TrackSensorDef& d = console.track;
+        if (d.slew_control.empty() || !console.equipment.IsReady(d.slew)) return;
+        if (!d.tv_mode.empty() && console.equipment.IsReady(d.tv_mode)) return;
+        const int lever = console.panel.Get(d.slew_control);
+        if (lever == 1) return;
+        const double sign = lever == 0 ? -1.0 : 1.0;
+        console.panel.Nudge(d.az_wheel, sign * d.slew_rate_deg_s * dt);
+    }
+
     bool TrackTvByHand(double t, double dt, ConsoleData& console, SessionLog& log, const AimCrew& crew) {
         const TrackSensorDef& d = console.track;
         const Equipment& eq = console.equipment;
@@ -1982,10 +2167,7 @@ private:
                 tv_masked_s_ += dt;
                 if (tv_masked_s_ > tuning_.tv_memory_s) {
                     problem = "masked: the memory ran out";
-                } else {  // memory: on at the last angular rates
-                    console.panel.SetValue(d.az_wheel, wheel_az + tv_rate_az_deg_s_ * dt);
-                    console.panel.SetValue(d.el_wheel, wheel_el + tv_rate_el_deg_s_ * dt);
-                }
+                }  // memory: ПА's integrator carries the antenna on at its rates (AidTracking)
             } else {
                 tv_masked_s_ = 0.0;
                 const double az_err = WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg) - wheel_az;
@@ -2036,12 +2218,6 @@ private:
             if (crew.elevation) {
                 console.panel.SetValue(d.el_wheel, Toward(wheel_el, el, tuning_.aim_el_rate_deg_s * crew.el_rate_factor * dt));
             }
-            // What the memory would carry on with: the wheels' recent angular rates.
-            if (dt > 0.0) {
-                const double k = 0.3;
-                tv_rate_az_deg_s_ += k * ((console.panel.GetValue(d.az_wheel) - wheel_az) / dt - tv_rate_az_deg_s_);
-                tv_rate_el_deg_s_ += k * ((console.panel.GetValue(d.el_wheel) - wheel_el) / dt - tv_rate_el_deg_s_);
-            }
             for (Shot& s : shots_) {
                 if (!s.done && s.method == TrackMethod::Tv && s.target_id == tracked_) {
                     s.tv_error_sum_deg_s += error_deg * dt;
@@ -2049,7 +2225,7 @@ private:
                 }
             }
         }
-        if (RangeFrom(console) == RangeSource::RangeOnly) console.panel.SetValue(d.range_wheel, g.range_m);
+        if (RangeFrom(console) == RangeSource::RangeOnly) console.panel.SetValue(d.range_wheel, g.range_m + RangeBalanceM(console));
         NoteRangeOnlyEcho(t, console, log);
         FollowRangeByHand(dt, console, crew);
         antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = console.panel.GetValue(d.el_wheel);
@@ -2095,7 +2271,7 @@ private:
                 const double held_s = t - jam_meas_s_;
                 const double true_az = Wrap180(jam_az_deg_ + jam_rate_az_deg_s_ * held_s);
                 const double el = jam_el_deg_ + jam_rate_el_deg_s_ * held_s;
-                const double az_deg = Wrap180(true_az - unit_heading_deg_ + gyro_heading_deg_);
+                const double az_deg = Wrap180(true_az - unit_heading_deg_ + frame_heading_deg_);
                 console.panel.SetValue(d.az_wheel, WheelAzimuth(az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
                 console.panel.SetValue(d.el_wheel, el);
                 RangeGateOntoEcho(dt, console, crew, g.range_m);
@@ -2134,7 +2310,7 @@ private:
         }
         jam_quiet_ = false;
         jam_meas_s_ = t;
-        const double az_deg = Wrap180(est.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
+        const double az_deg = Wrap180(est.true_az_deg - unit_heading_deg_ + frame_heading_deg_);
         console.panel.SetValue(d.az_wheel, WheelAzimuth(az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
         console.panel.SetValue(d.el_wheel, est.el_deg);
         FollowRangeByHand(dt, console, crew);
@@ -2173,12 +2349,12 @@ private:
             if (method_ == TrackMethod::None) {
                 // handed over to the jammer and lost at once: look again below
             } else if (problem == nullptr) {  // the tracking servo follows the target
-                const double az_deg = radar_em ? Wrap180(estimate.true_az_deg - unit_heading_deg_ + gyro_heading_deg_) : g.az_deg;
+                const double az_deg = radar_em ? Wrap180(estimate.true_az_deg - unit_heading_deg_ + frame_heading_deg_) : g.az_deg;
                 const double el_deg = radar_em ? estimate.el_deg : g.el_deg;
                 const double range_m = radar_em ? estimate.range_m : g.range_m;
                 console.panel.SetValue(d.az_wheel, WheelAzimuth(az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
                 console.panel.SetValue(d.el_wheel, el_deg);
-                if (RangeKnown(console)) console.panel.SetValue(d.range_wheel, range_m);
+                if (RangeKnown(console)) console.panel.SetValue(d.range_wheel, range_m + RangeBalanceM(console));
                 antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = el_deg;
                 if (method_ == TrackMethod::Tv) {
                     NoteRangeOnlyEcho(t, console, log);
@@ -2277,17 +2453,20 @@ private:
         const double turned = Wrap180(unit_heading_deg_ - last_unit_heading_deg_);
         last_unit_heading_deg_ = unit_heading_deg_;
         if (!console.has_orientation) {
-            gyro_heading_deg_ = unit_heading_deg_;  // no heading reference modelled: the frame is true north
+            gyro_heading_deg_ = frame_heading_deg_ = unit_heading_deg_;  // no heading reference modelled: the frame is true north
             return;
         }
         const OrientationDef& o = console.orientation;
         if (!o.qc_known_input.empty()) console.equipment.SetInput(o.qc_known_input, qc_known_);
-        if (!console.equipment.IsReady(o.gyro)) {
+        // Without power, or with МК — ГПК — АК off ГПК (o.compass_control), the gyro half-compass holds no heading.
+        if (!console.equipment.IsReady(o.gyro) ||
+            (!o.compass_control.empty() && console.panel.Get(o.compass_control) != o.compass_position)) {
             gyro_heading_deg_ = 0.0;
             fast_sync_ = false;
             oriented_ = false;
             if (!o.synced_input.empty()) console.equipment.SetInput(o.synced_input, false);
             if (!o.oriented_input.empty()) console.equipment.SetInput(o.oriented_input, false);
+            FollowUp(console);
             return;
         }
         gyro_heading_deg_ = Wrap360(gyro_heading_deg_ + turned);
@@ -2314,7 +2493,9 @@ private:
             if (qc_known_) turn_to(o.setter, qc_commanded_deg_, true);
             if (!o.latitude_control.empty()) turn_to(o.latitude_control, site_latitude_deg_, false);
         }
-        const bool slaved = setting && console.panel.Get(o.relay_control) == o.relay_position;
+        // The setter reaches the gyro only through ПОТРЕБИТЕЛИ at ОСН. (o.consumers_control).
+        const bool connected = o.consumers_control.empty() || console.panel.Get(o.consumers_control) == o.consumers_position;
+        const bool slaved = setting && connected && console.panel.Get(o.relay_control) == o.relay_position;
         bool synced = false;
         if (slaved) {
             if (console.panel.Get(o.sync_button) == 1) fast_sync_ = true;
@@ -2327,13 +2508,28 @@ private:
             if (synced && qc_known_) oriented_ = true;
         } else {
             fast_sync_ = false;
-            const bool corrected = console.panel.Get(o.relay_control) != o.relay_position;
+            // The latitude correction reaches the gyro only through φ at РУЧН. (o.latitude_switch, voenizdat_osa_1991
+            // p48, p50-51); at АВТ. it would come from ПУ-11, which SAM3D does not model: none then.
+            const bool latitude_in = o.latitude_switch.empty() || console.panel.Get(o.latitude_switch) == o.latitude_switch_position;
+            const bool corrected = console.panel.Get(o.relay_control) != o.relay_position && latitude_in;
             const double set_lat = o.latitude_control.empty() ? site_latitude_deg_ : console.panel.GetValue(o.latitude_control);
             gyro_heading_deg_ = Wrap360(gyro_heading_deg_ + dt * GyroDriftDegPerS(o.earth_rate_deg_h, site_latitude_deg_, set_lat,
                                                                                     corrected, gyro_own_drift_deg_h_));
         }
         if (!o.synced_input.empty()) console.equipment.SetInput(o.synced_input, synced);
         if (!o.oriented_input.empty()) console.equipment.SetInput(o.oriented_input, oriented_);
+        FollowUp(console);
+    }
+
+    // The Qc follow-up (СС on OR-31M, voenizdat_osa_1991 p51, p41): it carries the gyro's heading to the scales and the
+    // scope's sweep; switched off, the crew's frame keeps the Qc it had and turns with the hull.
+    void FollowUp(const ConsoleData& console) {
+        const OrientationDef& o = console.orientation;
+        // ОТКАЗ Qc (voenizdat_osa_1991 p51): a phase of the gyro unit's supply lost, the follow-up stops as with СС off.
+        if (!o.qc_fault_input.empty() && console.equipment.GetInput(o.qc_fault_input)) return;
+        if (o.follow_up_control.empty() || console.panel.Get(o.follow_up_control) == o.follow_up_position) {
+            frame_heading_deg_ = gyro_heading_deg_;
+        }
     }
 
     static double Wrap360(double deg) {
@@ -2348,6 +2544,12 @@ private:
         const SearchSensorDef& d = console.search;
         if (d.iff_query.empty()) return;
         const bool ready = console.equipment.IsReady(d.iff_ready);
+        // КОНТР. ИНД. held: the check signal's marks at their ranges on the sweep where the antenna points
+        // (voenizdat_osa_1991 p66), drawn round the scope as the sweep turns. Not a reply: no target owns them.
+        if (ready && !d.iff_check_control.empty() && console.panel.Get(d.iff_check_control) == 1) {
+            const double az = search_antenna_az_deg_ != kNoAntenna ? search_antenna_az_deg_ : 0.0;
+            for (double r : d.iff_check_ranges_m) iff_replies_.push_back({std::string(kIffCheckMark), r, az, 0.0, false});
+        }
         if (ready && console.panel.Get(d.iff_query) == 1) {
             iff_until_s_ = t + d.iff_query_time_s;
             iff_control_ = false;
@@ -2384,7 +2586,7 @@ private:
         if (em_ != nullptr) {  // replies ride on the search radar's own tracks, from the transponder that answered
             for (const EmSensorLink::Contact& c : em_->SearchPicture()) {
                 if (!c.iff || c.range_m > d.iff_max_range_m) continue;
-                const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
+                const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + frame_heading_deg_);
                 iff_replies_.push_back({c.target_id, c.range_m, az, c.el_deg, iff_control_});
                 if (replied_.insert(c.target_id).second) {
                     events_.push_back({EngagementEvent::Kind::IffFriend, t, c.target_id, az, c.range_m, TrackMethod::None, std::string()});
@@ -2395,7 +2597,7 @@ private:
             }
             return;
         }
-        const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 1;
+        const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 0;  // КЛАПАН, down
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
             if (!g.alive || !(g.friendly || g.transponder) || g.iff_code != iff_code_ || g.range_m > d.iff_max_range_m || !g.Los()) continue;
@@ -2511,6 +2713,11 @@ private:
             eq.SetInput(d.captured_input, method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam);
         }
         if (!d.tv_track_input.empty()) eq.SetInput(d.tv_track_input, method_ == TrackMethod::Tv);
+        // Vц ≤ 100: the radar holds a slow target (one of method φ's conditions, voenizdat_osa_1991 p130).
+        if (!d.slow_input.empty()) {
+            eq.SetInput(d.slow_input, (method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam) && !tracked_.empty() &&
+                                          geo_.at(tracked_).speed_mps <= d.slow_mps);
+        }
         if (!d.range_pulled_input.empty()) eq.SetInput(d.range_pulled_input, em_ != nullptr && em_->RangePulled());
         if (!d.in_zone_input.empty()) eq.SetInput(d.in_zone_input, in_zone);
         // The deputy commander judges the range of a target on the TV by its size in the crosshair (samsim_osa p33-35):
@@ -2577,6 +2784,7 @@ private:
     em::OpticalConditions optics_;    // the light and the air (scenario "environment")
     double last_unit_heading_deg_ = 0.0;
     double gyro_heading_deg_ = 0.0;
+    double frame_heading_deg_ = 0.0;  // the gyro's heading as the follow-up carries it to the crew's frame
     bool fast_sync_ = false;
     bool was_setting_ = false;
     bool oriented_ = false;
@@ -2584,6 +2792,7 @@ private:
     double qc_commanded_deg_ = 0.0;
     double site_latitude_deg_ = 0.0;
     double gyro_own_drift_deg_h_ = 0.0;
+    double magnetron_drift_hz_ = 0.0;
     TrackMethod method_ = TrackMethod::None;
     std::string tracked_;
     std::string candidate_;
@@ -2598,8 +2807,14 @@ private:
     int search_beam_ = -1;
     double time_ = 0.0;
     double tv_masked_s_ = 0.0;
-    double tv_rate_az_deg_s_ = 0.0;
-    double tv_rate_el_deg_s_ = 0.0;
+    // ПА's integrator (AidTracking): its rates, the wheels where it left them, and the wheels' rate before it.
+    bool aiding_ = false;
+    double aid_rate_az_deg_s_ = 0.0;
+    double aid_rate_el_deg_s_ = 0.0;
+    double aid_last_az_ = 0.0;
+    double aid_last_el_ = 0.0;
+    double wheel_rate_az_deg_s_ = 0.0;
+    double wheel_rate_el_deg_s_ = 0.0;
     // The jammer track's memory: the strobe's last angles (true azimuth), when measured, their rates; when the strobe went.
     std::string jam_angles_for_;
     std::string jam_quiet_said_for_;

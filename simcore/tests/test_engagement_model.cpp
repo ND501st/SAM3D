@@ -21,13 +21,15 @@ const std::string kData = SIMCORE_DATA_DIR;
 
 // An Osa scenario with the gameplay engagement model: the unit starts halted; the commander
 // powers up and deploys, the driver puts the generator on line, the senior operator searches.
-// `target` is one target object; `triggers` are extra triggers (with a leading comma).
+// `target` is one target object; `triggers` are extra triggers (with a leading comma). The dice's faults are off: these
+// tests count hits against the chance (faults by themselves: test_faults.cpp).
 std::string Engage(const std::string& target, const std::string& triggers = "", unsigned seed = 1) {
     return R"({
       "scenario_id": "e", "name": "E", "source": "sam3d", "confidence": "estimate", "seed": )" +
            std::to_string(seed) + R"(,
       "origin": { "lat_deg": 45, "lon_deg": 25, "alt_m": 0 },
       "terrain": { "type": "flat", "height_m": 0 },
+      "faults": { "random": false },
       "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json",
                     "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
       "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Deputy", "role": "deputy_commander" },
@@ -135,6 +137,23 @@ SC_TEST("engagement: search contact, aimed radar lock, zone lamps, launch and a 
     SC_EXPECT(r.summary.early_actions == 0 && r.summary.equipment_faults == 0);
 }
 
+// Roadmap C4: a guidance fault set at the meeting costs the shot its factor (outcome.fault_factors), named in the debrief.
+SC_TEST("engagement: a guidance fault the function check would find costs the shot: K3 not passing, the fuse never arms") {
+    const Run r = Play(Engage(Target(24000, 1000), std::string(kAcquireAndFire) +
+                                                       R"(, { "id": "k3", "when": {}, "do": [ { "set_input": "k3_fault", "value": true } ] })"));
+    SC_EXPECT(r.loaded);
+    SC_EXPECT(r.summary.launches == 1 && r.summary.hits == 0 && r.summary.misses == 1);
+    SC_EXPECT(Has(r, "x fault k3_fault 0.00"));
+    SC_EXPECT(Has(r, "MISS: chance 0.00"));
+    EngagementTuning t;
+    std::ifstream f(kData + "/gameplay/osa_ak.json");
+    std::stringstream ss;
+    ss << f.rdbuf();
+    std::string error;
+    SC_EXPECT(LoadEngagementTuning(ss.str(), t, &error));
+    SC_EXPECT(t.fault_factors.size() == 4);
+}
+
 SC_TEST("engagement: the same seed gives the same outcome; over many seeds hits follow the chance") {
     SC_EXPECT(Play(Engage(Target(24000, 1000), kAcquireAndFire, 3)).debrief ==
               Play(Engage(Target(24000, 1000), kAcquireAndFire, 3)).debrief);
@@ -174,6 +193,33 @@ SC_TEST("engagement: a target too low for the radar lights НЛЦ and is never r
     }
     SC_EXPECT(too_low && !radar_tracked);
     SC_EXPECT(runner.Launches() == 0);  // never in the zone: the crew waits for ЦЕЛЬ В ЗОНЕ
+}
+
+SC_TEST("engagement: Vц ≤ 100 lights only while the radar holds a target no faster than 100 m/s") {
+    // voenizdat_osa_1991 p130: the lamp is one of method φ's conditions. Generic placeholder targets, 80 and 150 m/s.
+    for (const double speed : {80.0, 150.0}) {
+        const std::string t = R"({ "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": 20000, "up_m": 1000 },
+            "waypoints": [ { "east_m": 1500, "north_m": -20000, "up_m": 1000 } ], "speed_mps": )" + std::to_string(speed) +
+                              R"(, "appear_at_s": 230 })";
+        ScenarioDef def;
+        ConsoleData console;
+        SC_EXPECT(LoadScenario(Engage(t, kAcquireAndFire), kData, def, console));
+        ScenarioRunner runner(std::move(def), std::move(console));
+        bool slow = false;
+        bool slow_untracked = false;
+        bool radar_tracked = false;
+        for (int i = 0; i < 5000 && !runner.Finished(); ++i) {
+            runner.Step(0.1);
+            const bool lit = runner.Console().equipment.GetInput("target_slow");
+            const bool radar = runner.Engagement().Method() == TrackMethod::Radar;
+            slow = slow || lit;
+            slow_untracked = slow_untracked || (lit && !radar && runner.Engagement().Method() != TrackMethod::RadarOnJam);
+            radar_tracked = radar_tracked || radar;
+        }
+        SC_EXPECT(radar_tracked);
+        SC_EXPECT(slow == (speed <= 100.0));
+        SC_EXPECT(!slow_untracked);
+    }
 }
 
 SC_TEST("engagement: TV-only engagement tracks with the camera and uses the TV factor") {
@@ -352,6 +398,26 @@ SC_TEST("engagement: in ЦУ the tracking antenna scans the search beam and capt
     SC_EXPECT_NEAR(e.AntennaElevationDeg(), c.panel.GetValue(c.track.el_wheel), 1e-9);
 }
 
+SC_TEST("engagement: БАЛАНС АВТОМАТА off its middle holds the radar's range gate off the echo") {
+    std::unique_ptr<ScenarioRunner> runner = Acquisition(24000, 1000);
+    SC_EXPECT(runner != nullptr && RunToDesignation(*runner));
+    if (runner == nullptr) return;
+    ConsoleData& c = runner->Console();
+    const EngagementModel& e = runner->Engagement();
+    for (int i = 0; i < 600 && e.Method() != TrackMethod::Radar && !runner->Finished(); ++i) runner->Step(0.1);
+    SC_EXPECT(e.Method() == TrackMethod::Radar);
+    SC_EXPECT(c.track.range_balance_control == "ro.balance" && c.track.range_balance_m > 0.0);
+    // The range's rate from two balanced steps, then the knob at its end: the gate stands range_balance_m beyond.
+    for (int i = 0; i < 20; ++i) runner->Step(0.1);
+    const double r1 = c.panel.GetValue("ssc.range_wheel");
+    runner->Step(0.1);
+    const double r2 = c.panel.GetValue("ssc.range_wheel");
+    c.panel.SetValue("ro.balance", 1.0);
+    runner->Step(0.1);
+    const double r3 = c.panel.GetValue("ssc.range_wheel");
+    SC_EXPECT_NEAR(r3 - (2.0 * r2 - r1), c.track.range_balance_m, 15.0);
+}
+
 SC_TEST("engagement: searching the wrong beam in ЦУ never captures; the right beam does") {
     std::unique_ptr<ScenarioRunner> runner = Acquisition(24000, 1000);
     SC_EXPECT(runner != nullptr && RunToDesignation(*runner));
@@ -484,10 +550,10 @@ SC_TEST("engagement: in the gated IFF mode only aircraft on the search scope rep
         runner->Step(0.1);
         return e.IffReplies().size();
     };
-    SC_EXPECT(Query(0, 0) == 1);  // open reception: replies though off the 0-15 km scale
+    SC_EXPECT(Query(1, 0) == 1);  // open reception (up): replies though off the 0-15 km scale
     SC_EXPECT(c.equipment.GetInput("iff_interrogating"));
-    SC_EXPECT(Query(1, 0) == 0);  // КЛАПАН: no echo on the scale, no reply
-    SC_EXPECT(Query(1, 1) == 1);  // on the 0-35 km scale it shows, so it replies
+    SC_EXPECT(Query(0, 0) == 0);  // КЛАПАН (down): no echo on the scale, no reply
+    SC_EXPECT(Query(0, 1) == 1);  // on the 0-35 km scale it shows, so it replies
     for (int i = 0; i < 15; ++i) runner->Step(0.1);  // the interrogation lasts about 1 s
     SC_EXPECT(e.IffReplies().empty() && !c.equipment.GetInput("iff_interrogating"));
 }
@@ -802,9 +868,21 @@ SC_TEST("tv: a distant target is tracked by the NPC operators, and the shot is c
     SC_EXPECT(Has(r, "deg off the crosshair"));
 }
 
-SC_TEST("tv: a target crossing close in leaves the lens field faster than the operators can follow") {
-    const Run r = Play(Engage(Target(6000, 800), kTvOnly));
-    SC_EXPECT(Has(r, "track lost: target left the TV field"));
+SC_TEST("tv: in ПА the operators follow a crossing 1.5 km off; one 100 m off leaves the lens field faster than they can") {
+    // ПА's integrator carries the antenna on at the rate the wheels gave (voenizdat_osa_1991 p87-88): 6°/s at the
+    // nearest is within it.
+    SC_EXPECT(Play(Engage(Target(6000, 800), kTvOnly)).debrief.find("target left the TV field") == std::string::npos);
+    // 100 m off: 86°/s in azimuth at the nearest, far past ПА's 30°/s (p85). The containers empty, so it is not shot
+    // down first.
+    std::string close = Target(6000, 800);
+    for (std::size_t at = close.find("\"east_m\": 1500"); at != std::string::npos; at = close.find("\"east_m\": 1500"))
+        close.replace(at, 14, "\"east_m\": 100");
+    std::string text = Engage(close, kTvOnly);
+    const std::string stopped = "\"inputs\": { \"vehicle_stopped\": true }";
+    text.replace(text.find(stopped), stopped.size(),
+                 stopped + ", \"empty_containers\": [\"1-I\", \"2-I\", \"3-I\", \"1-II\", \"2-II\", \"3-II\"]");
+    const Run near_pass = Play(text);
+    SC_EXPECT(Has(near_pass, "track lost: target left the TV field"));
 }
 
 SC_TEST("tv: terrain hiding the target is carried on in memory for a few seconds, then the track is lost") {
@@ -893,6 +971,31 @@ SC_TEST("tuning: the tracking radar's clutter height is optional and the sensors
     text.replace(at, std::string("\"mti_control\": \"ssc.mti\"").size(), "\"mti_control\": \"ssc.nothing\"");
     ConsoleData c;
     SC_EXPECT(!LoadConsole(text, c, &error) && error.find("sensors.track.mti_control") != std::string::npos);
+}
+
+// Roadmap C5: the TV looks through the light filter on its wheel (voenizdat_osa_1991 p101, p104); in haze the orange one
+// sees further than the blue, so the TV takes the target sooner through it.
+SC_TEST("tv: in haze the TV takes the target sooner through the orange filter than through the blue") {
+    auto first_tv_track_s = [](int filter) {
+        std::string text = Engage(Target(12000, 800), kTvOnly);
+        const std::string own = "\"inputs\": { \"vehicle_stopped\": true }";
+        text.replace(text.find(own), own.size(), own + ", \"controls\": { \"tov.filter\": " + std::to_string(filter) + " }");
+        const std::string terrain = "\"terrain\":";
+        text.replace(text.find(terrain), terrain.size(), "\"environment\": { \"visibility_km\": 16 }, " + terrain);
+        const Run r = Play(text);
+        const std::size_t at = r.debrief.find("TV track");
+        if (at == std::string::npos) {
+            std::printf("%s\n", r.debrief.c_str());
+            return 1e9;
+        }
+        const std::size_t line = r.debrief.rfind('\n', at);
+        return std::strtod(r.debrief.c_str() + (line == std::string::npos ? 0 : line + 1), nullptr);
+    };
+    const double blue = first_tv_track_s(0);
+    const double orange = first_tv_track_s(2);
+    std::printf("    first TV track: blue %.1f s, orange %.1f s\n", blue, orange);
+    SC_EXPECT(orange < 1e8);
+    SC_EXPECT(orange + 2.0 < blue);
 }
 
 // Roadmap R6's review: the search radar's line of sight starts at its antenna, 5 m over the ground under the vehicle

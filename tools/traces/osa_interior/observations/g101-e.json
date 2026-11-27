@@ -1,0 +1,167 @@
+{
+ "photo": "g101-e",
+ "vehicle": "9A33BM2/BM3 late Czech Army vehicle (Bouchal, 2000s; not the 1980s fit)",
+ "camera": {
+  "stands": "close, below-left of the panel",
+  "looks": "obliquely at the GTA/power supply panel",
+  "covers": [
+   "new.console.gta_power_panel_cz"
+  ],
+  "lens": "normal, close"
+ },
+ "components": [
+  {
+   "id": "new.console.gta_power_panel_cz",
+   "class": "console",
+   "seen_as": "black panel with white Czech lettering: GTA rpm and temperature gauges, lamps, push-buttons, toggles, two hour meters",
+   "bbox": [
+    0.13,
+    0.02,
+    1.0,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "about two hands wide",
+   "material": "black panel",
+   "confidence": "high",
+   "notes": "face details are the trace's job; the Russian original would be labelled for GTA, GOM and IVP"
+  },
+  {
+   "id": "new.handle.gta_panel_left",
+   "class": "handle",
+   "seen_as": "chrome tubular grab handle on the panel's left",
+   "bbox": [
+    0.09,
+    0.36,
+    0.29,
+    0.65
+   ],
+   "zone": "cab",
+   "on": "new.console.gta_power_panel_cz",
+   "relations": [
+    [
+     "on",
+     "new.console.gta_power_panel_cz"
+    ]
+   ],
+   "size_cue": "a hand's grip long",
+   "material": "chrome tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.gta_panel_right",
+   "class": "handle",
+   "seen_as": "chrome tubular grab handle on the panel's right",
+   "bbox": [
+    0.73,
+    0.61,
+    0.87,
+    0.98
+   ],
+   "zone": "cab",
+   "on": "new.console.gta_power_panel_cz",
+   "relations": [
+    [
+     "on",
+     "new.console.gta_power_panel_cz"
+    ]
+   ],
+   "size_cue": "a hand's grip long",
+   "material": "chrome tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.instrument.round_dial_beside_gta_panel",
+   "class": "instrument",
+   "seen_as": "a round dial in a white bezel beside the panel",
+   "bbox": [
+    0.0,
+    0.0,
+    0.11,
+    0.33
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "beside",
+     "new.console.gta_power_panel_cz"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.blue_beside_gta_panel",
+   "class": "cable",
+   "seen_as": "blue cables beside the panel's left",
+   "bbox": [
+    0.0,
+    0.38,
+    0.1,
+    0.55
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "beside",
+     "new.console.gta_power_panel_cz"
+    ]
+   ],
+   "size_cue": "",
+   "material": "blue sheath",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.gta_panel_tube_above",
+   "class": "frame",
+   "seen_as": "light grey tube/bracket above the panel",
+   "bbox": [
+    0.57,
+    0.0,
+    0.83,
+    0.13
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "above",
+     "new.console.gta_power_panel_cz"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.rag",
+   "class": "kit",
+   "seen_as": "cloth rag at the lower left",
+   "bbox": [
+    0.05,
+    0.71,
+    0.17,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "cloth",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the GTA/power supply panel of the late Czech vehicle"
+ ],
+ "doubts": [
+  "where the panel sits is not shown (zone 'cab' is a guess); it may be the register's console.pu303 in a later form",
+  "late Czech panel with Czech lettering, not the 1980s fit"
+ ]
+}

@@ -1,0 +1,1153 @@
+{
+ "photo": "g082-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the compartment aisle just aft of the front seats, eye height",
+  "looks": "forward along the axis into the cab",
+  "covers": [
+   "cab",
+   "cab.dash",
+   "rack.sl1m",
+   "radio.r123m_left",
+   "radio.r123m_right",
+   "box.zczz1a_1"
+  ],
+  "lens": "normal-wide"
+ },
+ "components": [
+  {
+   "id": "rack.sl1m",
+   "class": "rack",
+   "seen_as": "front end of the left-wall rack, two block faces visible under a yellow cloth",
+   "bbox": [
+    0.0,
+    0.06,
+    0.15,
+    0.45
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "aft_of",
+     "new.loom.pillar_left"
+    ],
+    [
+     "above",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "blocks about as wide as the seat back",
+   "material": "grey enamel",
+   "confidence": "high",
+   "notes": "Image left = vehicle left (camera faces forward)."
+  },
+  {
+   "id": "block.l_os51_8m",
+   "class": "block",
+   "seen_as": "upper block face with a small meter and selector",
+   "bbox": [
+    0.0,
+    0.12,
+    0.15,
+    0.27
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [
+    [
+     "in",
+     "rack.sl1m"
+    ],
+    [
+     "above",
+     "block.l_0009_5m"
+    ]
+   ],
+   "size_cue": "block about 0.6 m wide, only its front half seen",
+   "material": "grey enamel",
+   "confidence": "low",
+   "notes": "Identity from the book notes; face not legible here."
+  },
+  {
+   "id": "block.l_0009_5m",
+   "class": "block",
+   "seen_as": "lower block face with toggles and a row of orange fuses along the bottom",
+   "bbox": [
+    0.0,
+    0.27,
+    0.15,
+    0.4
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [
+    [
+     "in",
+     "rack.sl1m"
+    ],
+    [
+     "below",
+     "block.l_os51_8m"
+    ]
+   ],
+   "size_cue": "as above",
+   "material": "grey enamel",
+   "confidence": "low",
+   "notes": "Identity from the book notes."
+  },
+  {
+   "id": "curtain.cab",
+   "class": "curtain",
+   "seen_as": "yellow-tan cloth halves pushed aside: one draped over the top of SL-1M (top left), one bunched at the right edge",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.95
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "hangs from roof height nearly to the floor",
+   "material": "yellow-tan cotton",
+   "confidence": "medium",
+   "notes": "Two pieces at left (0.0-0.16, 0.0-0.18) and right (0.88-1.0, 0.0-0.95); bbox spans both. That these are the curtain of g083-c pulled open is inferred from colour."
+  },
+  {
+   "id": "new.instrument.gauge_below_sl1m",
+   "class": "instrument",
+   "seen_as": "small round gauge with a pale face below the rack front",
+   "bbox": [
+    0.15,
+    0.38,
+    0.17,
+    0.46
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "below",
+     "rack.sl1m"
+    ]
+   ],
+   "size_cue": "about a fist across",
+   "material": "metal bezel, white face",
+   "confidence": "low",
+   "notes": "Notes read a hydraulic gauge; unconfirmed."
+  },
+  {
+   "id": "hull.wall_left",
+   "class": "hull_wall",
+   "seen_as": "left side wall below the rack, sloping, scuffed",
+   "bbox": [
+    0.0,
+    0.42,
+    0.2,
+    0.8
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.pillar_left",
+   "class": "frame",
+   "seen_as": "left windscreen pillar / wall corner carrying looms and terminal blocks",
+   "bbox": [
+    0.17,
+    0.05,
+    0.25,
+    0.56
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sl1m"
+    ]
+   ],
+   "size_cue": "pillar about a hand wide",
+   "material": "grey painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.pillar_left",
+   "class": "loom",
+   "seen_as": "white and blue cable looms running down the left pillar, clipped",
+   "bbox": [
+    0.16,
+    0.05,
+    0.24,
+    0.55
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [
+    [
+     "on",
+     "new.frame.pillar_left"
+    ]
+   ],
+   "size_cue": "bundle a few cm thick",
+   "material": "PVC-insulated wire",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.pillar_left_junction",
+   "class": "box",
+   "seen_as": "small grey junction/switch box with blue wires high on the left pillar",
+   "bbox": [
+    0.21,
+    0.08,
+    0.25,
+    0.14
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [
+    [
+     "on",
+     "new.frame.pillar_left"
+    ]
+   ],
+   "size_cue": "fist-sized",
+   "material": "grey cast metal",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_header",
+   "class": "loom",
+   "seen_as": "blue and white cable looms across the roof header above the windscreens",
+   "bbox": [
+    0.2,
+    0.0,
+    0.8,
+    0.1
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "above",
+     "kit.sun_visors"
+    ]
+   ],
+   "size_cue": "spans the cab width",
+   "material": "PVC-insulated wire",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.type_plate_roof",
+   "class": "plate",
+   "seen_as": "small black plate on the header reading the vehicle type (9A33BM3-1)",
+   "bbox": [
+    0.46,
+    0.0,
+    0.54,
+    0.02
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "above",
+     "new.frame.windscreen_centre_post"
+    ]
+   ],
+   "size_cue": "a few hand-widths long",
+   "material": "black metal",
+   "confidence": "high",
+   "notes": "The plate that identifies the vehicle as a 9A33BM3-1."
+  },
+  {
+   "id": "kit.sun_visors",
+   "class": "kit",
+   "seen_as": "two sun visors hinged at the header, left with an HB sticker, right with a Rothmans sticker",
+   "bbox": [
+    0.32,
+    0.09,
+    0.66,
+    0.19
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_left"
+    ],
+    [
+     "above",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "each about as wide as a seat back",
+   "material": "grey painted sheet, stickers",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_left",
+   "class": "window",
+   "seen_as": "left windscreen, rounded upper corners, rubber seal",
+   "bbox": [
+    0.24,
+    0.12,
+    0.48,
+    0.33
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "wider than the steering wheel",
+   "material": "glass, black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "right windscreen",
+   "bbox": [
+    0.5,
+    0.12,
+    0.76,
+    0.33
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "right_of",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "as the left",
+   "material": "glass, black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.windscreen_centre_post",
+   "class": "frame",
+   "seen_as": "narrow centre post between the windscreens",
+   "bbox": [
+    0.48,
+    0.07,
+    0.5,
+    0.34
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "right_of",
+     "hull.windscreen_left"
+    ],
+    [
+     "left_of",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "a few cm wide",
+   "material": "grey painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "black three-spoke steering wheel in front of the left seat",
+   "bbox": [
+    0.3,
+    0.24,
+    0.47,
+    0.42
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "about 0.5 m across",
+   "material": "black plastic",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "dash under the windscreens with its panels",
+   "bbox": [
+    0.25,
+    0.35,
+    0.75,
+    0.53
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "below",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.console.centre_dash",
+   "class": "console",
+   "seen_as": "centre dash panel with gauges, mostly visible between the seat backs",
+   "bbox": [
+    0.45,
+    0.37,
+    0.56,
+    0.52
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "console.driver_dash"
+    ],
+    [
+     "left_of",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "gauge bezels about a fist across",
+   "material": "light grey hammer finish",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "console.driver_dash",
+   "class": "console",
+   "seen_as": "driver panel, almost all hidden behind the wheel and seat back",
+   "bbox": [
+    0.3,
+    0.37,
+    0.45,
+    0.48
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "console.commander_dash",
+   "class": "console",
+   "seen_as": "commander panel with the row of nine toggles",
+   "bbox": [
+    0.56,
+    0.36,
+    0.67,
+    0.44
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey, black toggle strip",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "instrument.dp3b",
+   "class": "instrument",
+   "seen_as": "small grey box with a meter window at the right of the dash",
+   "bbox": [
+    0.67,
+    0.38,
+    0.72,
+    0.43
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "right_of",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "about the size of a gauge pair",
+   "material": "grey cast metal",
+   "confidence": "medium",
+   "notes": "Identity from closer views (g085-b)."
+  },
+  {
+   "id": "seat.driver",
+   "class": "seat",
+   "seen_as": "left front seat seen from behind: grey pressed-steel backrest pan with tubular hoop",
+   "bbox": [
+    0.25,
+    0.39,
+    0.44,
+    0.82
+   ],
+   "zone": "cab",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "left_of",
+     "seat.commander"
+    ],
+    [
+     "aft_of",
+     "control.steering_wheel"
+    ]
+   ],
+   "size_cue": "back about 0.45 m wide",
+   "material": "grey pressed steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "seat.commander",
+   "class": "seat",
+   "seen_as": "right front seat seen from behind, backrest up, HB sticker and canvas bag",
+   "bbox": [
+    0.51,
+    0.39,
+    0.72,
+    0.8
+   ],
+   "zone": "cab",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "right_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "as the driver seat",
+   "material": "grey pressed steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.gas_mask_bag_commander",
+   "class": "kit",
+   "seen_as": "khaki canvas gas-mask bag with leather strap hung on the commander backrest hoop",
+   "bbox": [
+    0.55,
+    0.53,
+    0.71,
+    0.78
+   ],
+   "zone": "cab",
+   "on": "seat.commander",
+   "relations": [
+    [
+     "on",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "about half the seat back",
+   "material": "khaki canvas",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.gas_mask_bag_driver",
+   "class": "kit",
+   "seen_as": "khaki canvas hanging on the driver backrest hoop, partly behind the left radio",
+   "bbox": [
+    0.36,
+    0.52,
+    0.42,
+    0.72
+   ],
+   "zone": "cab",
+   "on": "seat.driver",
+   "relations": [
+    [
+     "on",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "",
+   "material": "khaki canvas",
+   "confidence": "low",
+   "notes": "May instead be the left radio dust cloth."
+  },
+  {
+   "id": "control.gear_lever",
+   "class": "control",
+   "seen_as": "lever with black ball knob between the seats",
+   "bbox": [
+    0.49,
+    0.58,
+    0.51,
+    0.73
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "right_of",
+     "seat.driver"
+    ],
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "knob fist-sized",
+   "material": "black knob, steel lever",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.seat_hinges",
+   "class": "frame",
+   "seen_as": "the front seats' floor brackets and hinge frames below the backrests",
+   "bbox": [
+    0.42,
+    0.72,
+    0.58,
+    0.83
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "below",
+     "seat.driver"
+    ],
+    [
+     "below",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "cushion.floor_mat",
+   "class": "cushion",
+   "seen_as": "black ribbed rubber mat in the aisle aft of the seats, riveted edge, square inset at its forward end",
+   "bbox": [
+    0.35,
+    0.81,
+    0.75,
+    0.98
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "aft_of",
+     "seat.driver"
+    ],
+    [
+     "right_of",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "about as wide as both seats together",
+   "material": "ribbed black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.floor_plug",
+   "class": "cover",
+   "seen_as": "small square inset at the mat forward edge with a red-capped round plug",
+   "bbox": [
+    0.47,
+    0.82,
+    0.51,
+    0.85
+   ],
+   "zone": "compartment.floor",
+   "on": "cushion.floor_mat",
+   "relations": [
+    [
+     "in",
+     "cushion.floor_mat"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "steel plate, red cap",
+   "confidence": "medium",
+   "notes": "Seen close in g083-b."
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "grey floor plates around the mat",
+   "bbox": [
+    0.3,
+    0.78,
+    0.88,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "radio.r123m_left",
+   "class": "radio",
+   "seen_as": "radio set behind the driver seat, knobs facing the aisle, under a steel tread cover and canvas",
+   "bbox": [
+    0.08,
+    0.52,
+    0.39,
+    0.92
+   ],
+   "zone": "cab.left_wall",
+   "on": "mount.r123m_left",
+   "relations": [
+    [
+     "aft_of",
+     "seat.driver"
+    ],
+    [
+     "left_of",
+     "cushion.floor_mat"
+    ],
+    [
+     "below",
+     "rack.sl1m"
+    ]
+   ],
+   "size_cue": "front face about 0.4 m (an R-123M is 406 mm)",
+   "material": "grey enamel",
+   "confidence": "high",
+   "notes": "Cover plate reads like \"R-123M-1\"(?)."
+  },
+  {
+   "id": "cover.radio_steel",
+   "class": "cover",
+   "seen_as": "steel tread cover over the left radio, with a front flap bearing a type plate",
+   "bbox": [
+    0.09,
+    0.52,
+    0.39,
+    0.93
+   ],
+   "zone": "cab.left_wall",
+   "on": "radio.r123m_left",
+   "relations": [
+    [
+     "above",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "as long as the radio",
+   "material": "pressed steel, painted light grey",
+   "confidence": "high",
+   "notes": "Book: the crew climbs on it to use the hatch."
+  },
+  {
+   "id": "new.cover.radio_left_dust_cloth",
+   "class": "cover",
+   "seen_as": "yellow-tan canvas dust cloth draped over the left radio under the steel cover",
+   "bbox": [
+    0.07,
+    0.61,
+    0.38,
+    0.9
+   ],
+   "zone": "cab.left_wall",
+   "on": "radio.r123m_left",
+   "relations": [
+    [
+     "on",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "canvas",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "mount.r123m_left",
+   "class": "mount",
+   "seen_as": "sprung tray/frame under the left radio",
+   "bbox": [
+    0.07,
+    0.82,
+    0.38,
+    0.96
+   ],
+   "zone": "cab.left_wall",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "below",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "radio length",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.yellow_canister",
+   "class": "kit",
+   "seen_as": "yellow canister with \"H..\" label standing beside the left radio",
+   "bbox": [
+    0.13,
+    0.55,
+    0.16,
+    0.63
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "small, hand-sized",
+   "material": "yellow plastic/metal",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.box_behind_left_radio",
+   "class": "unknown",
+   "seen_as": "grey box with a black knob between the radio and the left pillar",
+   "bbox": [
+    0.15,
+    0.47,
+    0.22,
+    0.56
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "fist-to-shoebox sized",
+   "material": "grey metal",
+   "confidence": "low",
+   "notes": "Could be the BP-26 or another fitting."
+  },
+  {
+   "id": "new.cable.red_white_left",
+   "class": "cable",
+   "seen_as": "red-and-white cable on the left wall low",
+   "bbox": [
+    0.04,
+    0.66,
+    0.08,
+    0.75
+   ],
+   "zone": "cab.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "left_of",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "finger-thick",
+   "material": "PVC",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.left_wall_low",
+   "class": "loom",
+   "seen_as": "bundle of white cables low on the left wall",
+   "bbox": [
+    0.0,
+    0.72,
+    0.08,
+    0.84
+   ],
+   "zone": "cab.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "left_of",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "PVC",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.braided_radio_left",
+   "class": "cable",
+   "seen_as": "braided (screened) cable hanging down from the left radio to the floor",
+   "bbox": [
+    0.29,
+    0.78,
+    0.32,
+    1.0
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "below",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "thumb-thick",
+   "material": "metal braid",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "box.zczz1a_1",
+   "class": "box",
+   "seen_as": "large aluminium box with diagonal stiffeners, data plate and latch, on a raised step behind the commander seat",
+   "bbox": [
+    0.72,
+    0.44,
+    0.92,
+    0.85
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.step.raised_right",
+   "relations": [
+    [
+     "aft_of",
+     "seat.commander"
+    ],
+    [
+     "below",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "about as high as the seat back, longer than it",
+   "material": "bare aluminium",
+   "confidence": "medium",
+   "notes": "Book notes: the right R-123M stands on the ZIP No.1A box; register zone says compartment.right_wall."
+  },
+  {
+   "id": "radio.r123m_right",
+   "class": "radio",
+   "seen_as": "R-123M set (frequency dials, red knob) on top of the big box, partly under canvas",
+   "bbox": [
+    0.77,
+    0.1,
+    0.9,
+    0.4
+   ],
+   "zone": "cab.right_wall",
+   "on": "box.zczz1a_1",
+   "relations": [
+    [
+     "above",
+     "box.zczz1a_1"
+    ],
+    [
+     "aft_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "front face about 0.4 m",
+   "material": "grey enamel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.radio_right_dust_cloth",
+   "class": "cover",
+   "seen_as": "olive canvas cover over the top of the right radio",
+   "bbox": [
+    0.76,
+    0.06,
+    0.9,
+    0.17
+   ],
+   "zone": "cab.right_wall",
+   "on": "radio.r123m_right",
+   "relations": [
+    [
+     "on",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "canvas",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "mount.r123m_right",
+   "class": "mount",
+   "seen_as": "frame/tray under the right radio with cables",
+   "bbox": [
+    0.77,
+    0.36,
+    0.9,
+    0.44
+   ],
+   "zone": "cab.right_wall",
+   "on": "box.zczz1a_1",
+   "relations": [
+    [
+     "below",
+     "radio.r123m_right"
+    ],
+    [
+     "above",
+     "box.zczz1a_1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.box.grey_stencil_right",
+   "class": "box",
+   "seen_as": "light grey box with a stencil hanging on the right side of the big box",
+   "bbox": [
+    0.85,
+    0.62,
+    0.95,
+    0.8
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "right_of",
+     "box.zczz1a_1"
+    ]
+   ],
+   "size_cue": "shoebox-sized",
+   "material": "grey painted metal",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.olive_round_right",
+   "class": "unknown",
+   "seen_as": "olive-green round object at the right edge beside the hanging box",
+   "bbox": [
+    0.91,
+    0.6,
+    0.95,
+    0.7
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.step.raised_right",
+   "class": "step",
+   "seen_as": "raised step/plinth along the right side the big box stands on",
+   "bbox": [
+    0.71,
+    0.8,
+    0.9,
+    1.0
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "below",
+     "box.zczz1a_1"
+    ]
+   ],
+   "size_cue": "knee-high",
+   "material": "grey painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.pillar_right",
+   "class": "frame",
+   "seen_as": "right wall/pillar behind the right radio",
+   "bbox": [
+    0.73,
+    0.05,
+    0.78,
+    0.45
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "forward_of",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.header_right",
+   "class": "connector",
+   "seen_as": "small round fitting/gland at the roof edge, top right of the windscreens",
+   "bbox": [
+    0.74,
+    0.06,
+    0.77,
+    0.11
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "coin-sized",
+   "material": "metal",
+   "confidence": "low",
+   "notes": "Notes call it a cable gland plate."
+  }
+ ],
+ "not_in_register": [
+  "curtain halves pulled aside",
+  "yellow canister",
+  "two gas-mask bags on the seat hoops",
+  "the type plate on the roof header",
+  "raised step under the right box",
+  "braided radio cable"
+ ],
+ "doubts": [
+  "Big aluminium box: register id box.zczz1a_1 by the book notes; the plate is not legible here.",
+  "Left radio cover type plate read as \"R-123M-1\"(?) at low resolution.",
+  "Yellow cloth top left and right edge taken to be the cab curtain pulled open; could be separate dust sheets."
+ ]
+}

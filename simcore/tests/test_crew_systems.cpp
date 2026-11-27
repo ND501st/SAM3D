@@ -198,14 +198,15 @@ SC_TEST("npc systems: the commander has the radios switched on when his set is o
     if (!r) return;
     r->Step(0.1);
     r->PlayerSet("radio.right.power", 0);  // someone switched the commander's set off
-    // He has gone out with the aiming circle from the halt (no Qc yet): his seat's work waits for his return.
+    // He has gone out with the aiming circle from the halt (no Qc yet): his seat's work waits for his return. The set
+    // is beside his seat (on ZCzZ1A nr 2, data/cabins/osa_ak.json since the holistic review H3): he may switch it on
+    // himself rather than order the crew. Either way it is on again.
     double back_s = -1.0;
     while (!r->Finished() && r->Time() < 290.0 && r->Console().panel.Get("radio.right.power") != 1) {
         r->Step(0.1);
         if (back_s < 0.0 && r->Engagement().QcKnown()) back_s = r->Time();
     }
     std::printf("    back with the Qc at %.0f s, the set on at %.0f s\n", back_s, r->Time());
-    SC_EXPECT(Said(*r, "order_radio_on", "commander"));
     SC_EXPECT(r->Console().panel.Get("radio.right.power") == 1);
 }
 

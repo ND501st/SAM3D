@@ -1,0 +1,35 @@
+{
+ "photo": "g084-d",
+ "vehicle": "drawing (PU-303 of the 9A33BM3-1 ex-NVA)",
+ "camera": {
+  "stands": "n/a (line drawing)",
+  "looks": "square-on at the PU-303 face",
+  "covers": [
+   "console.pu303"
+  ],
+  "lens": "drawing"
+ },
+ "components": [
+  {
+   "id": "console.pu303",
+   "class": "console",
+   "seen_as": "line drawing of the PU-303 face with every label and its nameplate",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "no scale printed",
+   "material": "drawing: light blue face",
+   "confidence": "high",
+   "notes": "Face reference for the trace pipeline; position from g084-a."
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "Not a photograph: a drawing of the panel; no surroundings shown."
+ ]
+}

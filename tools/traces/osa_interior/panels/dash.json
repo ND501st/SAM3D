@@ -1,0 +1,1151 @@
+{
+ "about": "The cab's dashboard as photographed (wwp_gecko g085-a, laid flat as 'dash'; g084-c, g083-a and g084-a registered on it as dash_g084c, dash_g083a, dash_g084a for the plate behind the steering wheel, which the wheel hides in each view): every part picked by its number on a flat (flat:n) and written into data/cabins/osa_ak.json by tools/recon/osa/panel_apply.py. Millimetres on the dashboard's plane, u right and v up from the instrument plate's centre.",
+ "plane": {
+  "x_of_u0_m": 0.027, "measured_fit": {"x_of_u0_m": -0.0406, "scale": 1.1988, "v_rise_m": 0.02, "why": "g082-b's measured camera (docs/OSA_INTERIOR_HOLISTIC.md section 44): the tachometer, coolant and oil gauges, the switch plate's two top screws and its nine switches cast onto the dash's plane fit body x = -0.0406 + 1.1988 u, v up the plane 0.02 + 1.1988 v (misses under 1 cm; the flat's 445 mm was a guess from the instruments' classes, the plate is about 534 mm); a bar not in the fit lands on the first handle's feet (u 211), and Fig. 3's antenna-lowering board (x 0.457) at 0.475. Applied to the cabin file after panel_apply; panel_apply refuses this file until it carries the fit itself"},
+  "x_basis": "mon_2112_80 Fig. 3 puts the antenna-lowering board (ПРОХОД ПОД МОСТОМ, u 430 mm here) at x 0.457 m: the instrument plate's centre is then at x 0.027 m, and the steering wheel's hub, seen at u -385 to -440 in the views, lands at x -0.36 m as the cabin data has it (good to about 30 mm)"
+ },
+ "offsets": {
+  "dash_g083a": [
+   -10,
+   5
+  ],
+  "why": "g083-a is taken from behind and right of the seats: the plate behind the wheel and what is on it stand off the instrument plate's plane, so they come out shifted in its registration. Its plaques at the plate's right edge sit 10 mm right and 5 mm low of where g084-c (taken from the driver's seat, square on) puts them; the parts only g083-a shows are moved by that much"
+ },
+ "panels": [
+  {
+   "id": "driver_panel",
+   "u_mm": [
+    -648,
+    227
+   ],
+   "v_mm": [
+    -147,
+    147
+   ],
+   "notes": "The driver's half of the dashboard as photographed (wwp_gecko g085-a, g084-c, g083-a, g084-a; tools/traces/osa_interior/panels/dash.json): the plate behind the steering wheel (gauges, a square instrument with a knob, lamps, the hand lever, the waterjet flaps' switches and plaques) and the instrument plate between the seats (speedometer, coolant and oil temperature, oil pressure, tachometer, ammeter, hour counter, four lighting switches, the lamps and the central light switch). Measured on the photos laid flat, the instrument plate 445 mm wide by its instruments' classes (good to about 3 %); placed across the cab by mon_2112_80 Fig. 3's antenna-lowering board. The plane's depth, height and tilt are still SAM3D's estimate (no certified camera sees the cab)."
+  },
+  {
+   "id": "commander_panel",
+   "u_mm": [
+    227,
+    765
+   ],
+   "v_mm": [
+    -147,
+    147
+   ],
+   "notes": "The commander's half of the dashboard as photographed (wwp_gecko g085-a; tools/traces/osa_interior/panels/dash.json): the switch plate with nine switches (lights, heater, converter, protection, communications), БЛОКИРОВКА, ЛЮКИ ЗАКРЫТЫ and the bilge pump's switch, and the antenna-lowering board ПРОХОД ПОД МОСТОМ (voenizdat_osa_1991 p50, p99-100; mon_2112_80 Fig. 3) with its two buttons and five legend lamps; further right the DP-3B and the TA-57 as before (SAM3D estimates). Measured on the photo laid flat (the instrument plate 445 mm wide by its instruments' classes, good to about 3 %). The plane's depth, height and tilt are still SAM3D's estimate."
+  }
+ ],
+ "keep": [
+  {
+   "panel": "commander_panel",
+   "what": "fixtures",
+   "body_x_min_m": 0.6,
+   "why": "the DP-3B as before (rwd_mb3 9a33_32)"
+  }
+ ],
+ "remove": [
+  {
+   "panel": "driver_panel",
+   "what": "fixtures"
+  },
+  {
+   "panel": "commander_panel",
+   "what": "fixtures"
+  },
+  {
+   "panel": "driver_panel",
+   "what": "blocks"
+  },
+  {
+   "panel": "commander_panel",
+   "what": "blocks"
+  }
+ ],
+ "items": [
+  {
+   "is": "block",
+   "id": "d_left",
+   "label": "plate behind the wheel",
+   "color": "lightgrey",
+   "box_from_screws": [
+    "dash_g084c:5",
+    "dash_g084c:6",
+    "dash_g084c:87",
+    "dash_g084c:85"
+   ],
+   "inset_mm": [
+    7.1,
+    11.0
+   ],
+   "what": "the plate behind the steering wheel"
+  },
+  {
+   "is": "block",
+   "id": "d_instr",
+   "label": "instrument plate",
+   "color": "lightgrey",
+   "box_mm": [
+    -222.5,
+    -125.45,
+    222.5,
+    125.45
+   ],
+   "what": "the instrument plate (the flat's own rectangle)"
+  },
+  {
+   "is": "block",
+   "id": "c_switch",
+   "label": "switch plate",
+   "color": "lightgrey",
+   "box_from_screws": [
+    "dash:4",
+    "dash:5",
+    "dash:170",
+    "dash:164"
+   ],
+   "inset_mm": [
+    7.1,
+    11.0
+   ],
+   "what": "the switch plate, its corner bolts set in as the instrument plate's"
+  },
+  {
+   "is": "block",
+   "id": "c_lowering",
+   "label": "ПРОХОД ПОД МОСТОМ",
+   "color": "bluegrey",
+   "part": "dash:113",
+   "size": "box",
+   "what": "the antenna-lowering board"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash_g084c:28",
+   "size": "box",
+   "color": "black",
+   "label": "ВОДИТЕЛЬ",
+   "what": "the driver's instruction plaque"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "dash_g084c:23",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "a gauge 0-6 with coloured sectors (not identified)"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "dash_g083a:50",
+   "size": "dia",
+   "color": "black",
+   "label": "кгс/см²",
+   "what": "a pressure gauge 0-10 kgf/cm² (hidden from the driver's seat by the hub)"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash_g083a:40",
+   "size": "box",
+   "color": "black",
+   "label": "ВКЛ  ВКЛ",
+   "what": "a small black plate with two switches (not identified)"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash_g083a:81",
+   "size": "box",
+   "color": "black",
+   "label": "СТАРТЕР",
+   "what": "the starter's plaque (its button, below it, is hidden by the hub in every view)"
+  },
+  {
+   "is": "fixture",
+   "kind": "lever",
+   "part": "dash_g084c:45",
+   "size": "box",
+   "color": "black",
+   "label": "",
+   "what": "a flat lever under the left gauge (the hand throttle?)"
+  },
+  {
+   "is": "fixture",
+   "kind": "window",
+   "part": "dash_g084c:60",
+   "size": "box",
+   "color": "grey",
+   "label": "",
+   "what": "the gate of a lever at the board's left"
+  },
+  {
+   "is": "fixture",
+   "kind": "lever",
+   "part": "dash_g084c:76",
+   "size": "box",
+   "color": "grey",
+   "label": "",
+   "what": "the lever in it"
+  },
+  {
+   "is": "fixture",
+   "kind": "window",
+   "part": "dash_g083a:116",
+   "size": "box",
+   "color": "black",
+   "label": "",
+   "what": "a vertical label strip"
+  },
+  {
+   "is": "fixture",
+   "kind": "bezel",
+   "part": "dash_g084a:55",
+   "size": "box",
+   "color": "grey",
+   "label": "",
+   "what": "a round instrument in a square flange (a clock?)"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "part": "dash_g084a:54",
+   "size": "dia_or_box",
+   "color": "chrome",
+   "label": "",
+   "what": "its knob"
+  },
+  {
+   "is": "fixture",
+   "kind": "window",
+   "part": "dash_g084a:72",
+   "size": "box",
+   "color": "black",
+   "label": "",
+   "what": "its plate"
+  },
+  {
+   "is": "display",
+   "id": "fuel_gauge",
+   "part": "dash_g084a:57",
+   "size": "dia",
+   "what": "the round gauge of the 60 mm class on the plate behind the wheel: read as the fuel gauge by elimination (the instrument plate's gauges are the engine's)"
+  },
+  {
+   "is": "fixture",
+   "kind": "window",
+   "part": "dash_g084a:43",
+   "size": "box",
+   "color": "black",
+   "label": "",
+   "what": "the label strip over it (three fields)"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "dash_g084a:34",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "a lamp"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "dash_g084a:35",
+   "size": "dia_or_box",
+   "color": "black",
+   "label": "",
+   "what": "a lamp"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash_g084c:3",
+   "size": "box",
+   "color": "black",
+   "label": "ПОЛОЖЕНИЯ РЫЧАГА ПЕРЕКЛЮЧЕНИЯ ПЕРЕДАЧ",
+   "what": "the gear lever's diagram"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash_g084c:21",
+   "size": "box",
+   "color": "black",
+   "label": "ЗАСЛОНКА ВОДОМЕТОВ",
+   "what": "the waterjet flaps' plaque (ЛЕВАЯ, ПРАВАЯ)"
+  },
+  {
+   "is": "control",
+   "id": "veh.waterjet_left",
+   "part": "dash_g083a:61",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.012,
+    "color": "chrome",
+    "label": "ЛЕВАЯ"
+   },
+   "new": {
+    "label": "ЗАСЛОНКА ВОДОМЕТОВ: ЛЕВАЯ",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "ЗАКР.",
+     "ОТКР."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g083-a (a small switch under the plaque ЗАСЛОНКА ВОДОМЕТОВ, left of the steering column; the plaque names the left and right flaps); positions: sam3d",
+    "confidence": "low",
+    "notes": "The left waterjet's flap, for swimming. Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.waterjet_right",
+   "part": "dash_g083a:63",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.012,
+    "color": "chrome",
+    "label": "ПРАВАЯ"
+   },
+   "new": {
+    "label": "ЗАСЛОНКА ВОДОМЕТОВ: ПРАВАЯ",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "ЗАКР.",
+     "ОТКР."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g083-a (the right one of the pair under the plaque ЗАСЛОНКА ВОДОМЕТОВ); positions: sam3d",
+    "confidence": "low",
+    "notes": "The right waterjet's flap, for swimming. Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "dash:55",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the speedometer (km/h, with the odometer)"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "dash:51",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the coolant temperature"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:8",
+   "size": "box",
+   "color": "black",
+   "label": "ОХЛ. ЖИДКОСТЬ"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "dash:52",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the tachometer (0-40, the pale blue rim)"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "dash:54",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the engine oil's temperature"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:10",
+   "size": "box",
+   "color": "black",
+   "label": "МАСЛО ДВИГАТЕЛЯ"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "dash:92",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the engine oil's pressure (kgf/cm²)"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:71",
+   "size": "box",
+   "color": "black",
+   "label": "МАСЛО ДВИГАТЕЛЯ"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "dash:95",
+   "size": "dia",
+   "color": "white",
+   "label": "",
+   "what": "the ammeter (pale face)"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:74",
+   "size": "box",
+   "color": "black",
+   "label": "ЗАРЯД"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:75",
+   "size": "box",
+   "color": "black",
+   "label": "РАЗРЯД"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "part": "dash:110",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "a small knob under the ammeter"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "part": "dash:93",
+   "size": "box_mean",
+   "color": "chrome",
+   "label": "",
+   "what": "a chrome knob under the tachometer (not identified)"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "dash:127",
+   "size": "dia",
+   "color": "white",
+   "label": "",
+   "what": "the engine's hour counter"
+  },
+  {
+   "is": "fixture",
+   "kind": "window",
+   "part": "dash:124",
+   "size": "box",
+   "color": "black",
+   "label": "",
+   "what": "the lighting switches' black plate (ВКЛ above, ОТКЛ below)"
+  },
+  {
+   "is": "control",
+   "id": "veh.instr_lights",
+   "part": "dash:131",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "ПРИБОРЫ"
+   },
+   "new": {
+    "label": "ПРИБОРЫ (instrument lighting)",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the first of four switches on a black plate of the instrument plate, ВКЛ up, ОТКЛ down, labelled ПРИБОРЫ)",
+    "confidence": "medium",
+    "notes": "Lights the dashboard's instruments. Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.outside_lights",
+   "part": "dash:123",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "НАРУЖНОЕ ОСВЕЩЕН."
+   },
+   "new": {
+    "label": "НАРУЖНОЕ ОСВЕЩЕН. (outside lighting)",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the second switch on the instrument plate's black plate, labelled НАРУЖНОЕ ОСВЕЩЕН.)",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.inside_lights",
+   "part": "dash:125",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "ВНУТРЕН. ОСВЕЩЕН."
+   },
+   "new": {
+    "label": "ВНУТРЕН. ОСВЕЩЕН. (inside lighting)",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the third switch on the instrument plate's black plate, labelled ВНУТРЕН. ОСВЕЩЕН.)",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it (the cabin's lights are the presentation's)."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.rear_signal",
+   "part": "dash:132",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "СИГНАЛ"
+   },
+   "new": {
+    "label": "СИГНАЛ (the fourth lighting switch)",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the fourth switch on the instrument plate's black plate; its label is read as a signal light's, uncertain)",
+    "confidence": "low",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "dash:133",
+   "size": "box_mean",
+   "color": "red",
+   "label": "",
+   "what": "the lamp БОРТ. СЕТЬ"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "dash:134",
+   "size": "box_mean",
+   "color": "blue",
+   "label": "",
+   "what": "the lamp ДИФФЕРЕНЦИАЛ (the differential's lock)"
+  },
+  {
+   "is": "control",
+   "id": "veh.light_switch",
+   "part": "dash:150",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.022,
+    "color": "chrome",
+    "label": ""
+   },
+   "new": {
+    "label": "ЦЕНТРАЛЬНЫЙ ПЕРЕКЛЮЧАТЕЛЬ СВЕТА (central light switch)",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "0",
+     "I",
+     "II"
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (a chrome knob on the instrument plate's bottom row, the plate under it ЦЕНТРАЛЬНЫЙ ПЕРЕКЛЮЧАТЕЛЬ СВЕТА); positions: sam3d (the usual off, side lights, headlights)",
+    "confidence": "low",
+    "notes": "The vehicle's lights. Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "dash:136",
+   "size": "dia",
+   "color": "green",
+   "label": "",
+   "what": "the lamp ПОВОРОТ (turn signal)"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:154",
+   "size": "box",
+   "color": "black",
+   "label": "БОРТ. СЕТЬ   ДИФФЕРЕНЦ. ПЕРЕДАЧА   ЦЕНТРАЛЬНЫЙ ПЕРЕКЛЮЧАТЕЛЬ СВЕТА"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:155",
+   "size": "box",
+   "color": "black",
+   "label": "ПОВОРОТ"
+  },
+  {
+   "is": "fixture",
+   "kind": "socket",
+   "part": "dash:139",
+   "size": "box_min",
+   "color": "grey",
+   "label": "",
+   "what": "a three-pin socket with its cap on a clip (a hand lamp's?)"
+  },
+  {
+   "is": "control",
+   "id": "intercom.pv",
+   "at_mm": [
+    172,
+    14
+   ],
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "Р-124 ПВ"
+   },
+   "why": "stand-in: the driver's box ПВ is in no photo; drawn on a clear part of the instrument plate, between the ammeter and the handle"
+  },
+  {
+   "is": "control",
+   "id": "radio.chest_driver",
+   "at_mm": [
+    172,
+    -12
+   ],
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "black",
+    "label": "ПРМ — ПРД"
+   },
+   "why": "stand-in beside the ПВ (the chest switch is on the headset's cord)"
+  },
+  {
+   "is": "control",
+   "id": "headset.driver",
+   "at_mm": [
+    172,
+    -58
+   ],
+   "look": {
+    "kind": "jack",
+    "size_m": 0.02,
+    "color": "chrome",
+    "label": "ШЛЕМОФОН"
+   },
+   "why": "stand-in: the headset's cord to the ПВ"
+  },
+  {
+   "is": "fixture",
+   "kind": "window",
+   "part": "dash:40",
+   "size": "box",
+   "color": "black",
+   "label": "",
+   "what": "the switch strip's black plate (ВКЛ over each switch, the names under)"
+  },
+  {
+   "is": "control",
+   "id": "veh.illuminator",
+   "part": "dash:35",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "ОСВЕТИТЕЛЬ"
+   },
+   "new": {
+    "label": "ОСВЕТИТЕЛЬ (the strip's first switch)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the first of nine switches on the switch plate's strip, ВКЛ up; its name read as ОСВЕТИТЕЛЬ, uncertain)",
+    "confidence": "low",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.protection",
+   "part": "dash:36",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "ЗАЩИТА"
+   },
+   "new": {
+    "label": "ЗАЩИТА (protection)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the switch strip's second switch, labelled ЗАЩИТА)",
+    "confidence": "medium",
+    "notes": "What it protects (the filter-ventilation unit's overpressure, or the electrics) is not known. Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.converter",
+   "part": "dash:37",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "ПРЕОБРАЗОВАТЕЛЬ"
+   },
+   "new": {
+    "label": "ПРЕОБРАЗОВАТЕЛЬ (converter)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the switch strip's third switch, labelled ПРЕОБРАЗОВАТЕЛЬ)",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.strip_4",
+   "part": "dash:38",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": ""
+   },
+   "new": {
+    "label": "the switch strip's fourth switch (its name is under a hanging tag)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the switch strip's fourth switch, a tag hung on it over its name)",
+    "confidence": "low",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.comms_power",
+   "part": "dash:39",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "СВЯЗЬ"
+   },
+   "new": {
+    "label": "СВЯЗЬ (communications)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 1,
+    "source": "wwp_gecko g085-a (the switch strip's fifth switch, labelled СВЯЗЬ)",
+    "confidence": "medium",
+    "notes": "Starts on. Not modelled: the radios and the intercom are powered by their own switches in the sim."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.sidelights",
+   "part": "dash:42",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "ПОДФАРНИКИ"
+   },
+   "new": {
+    "label": "ПОДФАРНИКИ (side lights)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the switch strip's sixth switch, labelled ПОДФАРНИКИ)",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.lamps_front",
+   "part": "dash:43",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "ЛАМПЫ ПЕРЕДНЯЯ"
+   },
+   "new": {
+    "label": "ЛАМПЫ: ПЕРЕДНЯЯ (front lamp)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the switch strip's seventh switch, under ЛАМПЫ: ПЕРЕДНЯЯ)",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.lamps_rear",
+   "part": "dash:44",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "ЗАДНЯЯ"
+   },
+   "new": {
+    "label": "ЛАМПЫ: ЗАДНЯЯ (rear lamp)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the switch strip's eighth switch, under ЛАМПЫ: ЗАДНЯЯ)",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.heater",
+   "part": "dash:45",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": "ОТОПИТЕЛЬ"
+   },
+   "new": {
+    "label": "ОТОПИТЕЛЬ (heater)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (the switch strip's ninth switch, labelled ОТОПИТЕЛЬ)",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "veh.interlock",
+   "part": "dash:111",
+   "look": {
+    "kind": "button",
+    "size_m": 0.024,
+    "color": "black",
+    "ring": "chrome",
+    "label": "БЛОКИРОВКА"
+   },
+   "new": {
+    "label": "БЛОКИРОВКА",
+    "station": "commander",
+    "kind": "button",
+    "source": "wwp_gecko g085-a (a black push-button in a chrome ring on the switch plate, labelled БЛОКИРОВКА, beside the lamp ЛЮКИ ЗАКРЫТЫ)",
+    "confidence": "medium",
+    "notes": "What it locks out is not known. Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:128",
+   "size": "box",
+   "color": "black",
+   "label": "БЛОКИРОВКА"
+  },
+  {
+   "is": "control",
+   "id": "veh.hatches",
+   "part": "dash:119",
+   "look": {
+    "kind": "lamp_button",
+    "size_m": 0.022,
+    "color": "green",
+    "ring": "chrome",
+    "label": "ЛЮКИ ЗАКРЫТЫ"
+   },
+   "why": "the lamp ЛЮКИ ЗАКРЫТЫ (voenizdat_osa_1991 p99: ЛЮКИ ЗАКР. on the commander's console) stands for the hatches: pressing it is the crew closing or opening them"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:129",
+   "size": "box",
+   "color": "black",
+   "label": "ЛЮКИ ЗАКРЫТЫ"
+  },
+  {
+   "is": "control",
+   "id": "veh.bilge_pump",
+   "part": "dash:141",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.014,
+    "color": "chrome",
+    "label": ""
+   },
+   "new": {
+    "label": "ВОДООТКАЧИВАЮЩИЙ НАСОС (bilge pump)",
+    "station": "commander",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g085-a (a switch under the lamp ЛЮКИ ЗАКРЫТЫ, its plate read as the bilge pump's, arrows either side)",
+    "confidence": "low",
+    "notes": "For swimming. Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "dash:157",
+   "size": "box",
+   "color": "black",
+   "label": "ВОДООТКАЧИВАЮЩИЙ НАСОС"
+  },
+  {
+   "is": "control",
+   "id": "apu.stow",
+   "part": "dash:78",
+   "look": {
+    "kind": "button",
+    "size_m": 0.013,
+    "color": "red",
+    "ring": "chrome",
+    "label": "ВКЛ."
+   },
+   "why": "the board's ВКЛ. button (the console's two buttons as one switch; ВЫКЛ. beside it drawn only)"
+  },
+  {
+   "is": "fixture",
+   "kind": "button",
+   "part": "dash:79",
+   "size": "dia",
+   "color": "red",
+   "ring": "chrome",
+   "label": "ВЫКЛ.",
+   "what": "the board's ВЫКЛ. button"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "dash:90",
+   "size": "dia",
+   "color": "chrome",
+   "label": "",
+   "what": "a small lamp under the buttons"
+  },
+  {
+   "is": "lamp",
+   "id": "apu_travel_lock",
+   "part": "dash:98",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.02
+   },
+   "color": "amber",
+   "new": {
+    "label": "СТОПОР ПОХОД.",
+    "lit_when": [
+     {
+      "control": "pwr.equipment",
+      "is": 1
+     },
+     {
+      "subsystem": "power",
+      "is": "ready"
+     },
+     {
+      "control": "apu.lock",
+      "is": 0
+     }
+    ],
+    "source": "wwp_gecko g085-a (the first legend lamp on the antenna-lowering board, СТОПОР ПОХОД.); when it lights: sam3d (the АПУ's travel lock in, apu.lock)",
+    "confidence": "low",
+    "notes": "Lit while the АПУ's travel lock is in."
+   }
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "dash:103",
+   "size": "dia",
+   "color": "black",
+   "label": "ГАБАРИТ 3800",
+   "what": "the legend lamp ГАБАРИТ 3800 (the vehicle within 3.8 m high)"
+  },
+  {
+   "is": "lamp",
+   "id": "stowed",
+   "part": "dash:112",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.02
+   },
+   "why": "the legend lamp УКЛАД. ПРОИЗВ."
+  },
+  {
+   "is": "lamp",
+   "id": "apu_locked",
+   "part": "dash:120",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.02
+   },
+   "why": "the legend lamp βн ЗАСТОП."
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "dash:130",
+   "size": "dia",
+   "color": "black",
+   "label": "ПРЕД. УГОЛ",
+   "what": "the legend lamp ПРЕД. УГОЛ"
+  },
+  {
+   "is": "lamp",
+   "id": "power_on",
+   "at_mm": [
+    262,
+    18
+   ],
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.014
+   },
+   "why": "SAM3D's lamp, not on the real board: on a clear part of the switch plate"
+  },
+  {
+   "is": "lamp",
+   "id": "fault",
+   "at_mm": [
+    284,
+    18
+   ],
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.014
+   },
+   "why": "SAM3D's lamp, not on the real board: on a clear part of the switch plate"
+  },
+  {
+   "is": "control",
+   "id": "ta57.handset",
+   "keep_body": true
+  },
+  {
+   "is": "lamp",
+   "id": "ta57_ringing",
+   "keep_body": true
+  },
+  {
+   "is": "control",
+   "id": "gyro.arrest",
+   "look": {
+    "kind": "button",
+    "size_m": 0.016,
+    "color": "black",
+    "ring": "chrome",
+    "label": "АРРЕТИР."
+   },
+   "why": "stand-in: voenizdat_osa_1991 p247 puts АРРЕТИР. on block 0005-8M (rack SŁ-1M, beside the driver), but a control is drawn on its own seat's panel: on a clear part of the board at the dashboard's left end, nearest SŁ-1M",
+   "at_mm": [
+    -625,
+    5
+   ]
+  },
+  {
+   "is": "lamp",
+   "id": "gyro_fail",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.012
+   },
+   "why": "stand-in under АРРЕТИР. (voenizdat_osa_1991 p51-52: the lamp is on block 0005-8M)",
+   "at_mm": [
+    -625,
+    -25
+   ]
+  }
+ ]
+}

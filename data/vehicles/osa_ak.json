@@ -22,9 +22,9 @@
   "seats": [
     { "station": "driver", "stand_m": [-0.1, 3.72, 0.62], "notes": "The gap between the cab seats (data/cabins/osa_ak.json walk)." },
     { "station": "commander", "stand_m": [0.1, 3.72, 0.62] },
-    { "station": "deputy_commander", "stand_m": [-0.08, 2.2, 0.62], "notes": "The aisle behind the bench." },
-    { "station": "senior_operator", "stand_m": [-0.08, 1.555, 0.62] },
-    { "station": "operator", "stand_m": [-0.08, 0.95, 0.62] }
+    { "station": "deputy_commander", "stand_m": [-0.45, 2.2, 0.62], "notes": "The aisle behind the bench." },
+    { "station": "senior_operator", "stand_m": [-0.45, 1.555, 0.62] },
+    { "station": "operator", "stand_m": [-0.45, 0.95, 0.62] }
   ],
   "exits": [
     { "id": "hatch_commander", "label": "The commander's roof hatch (the entry hatch)", "kind": "roof_hatch",

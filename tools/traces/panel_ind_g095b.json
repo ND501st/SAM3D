@@ -1,0 +1,54 @@
+{
+  "name": "panel_ind_g095b",
+  "notes": "The ПАНЕЛЬ ИНДИКАЦИИ's face (tools/blender/panel_ind_trace.py), flattened from wwp_gecko g095-b (oblique) on the box's own edges: the face is turned against SŁ-2M's (fo_panel's top edge lies 6 degrees off the box's vanishing point). height_mm: the face back-projected through g095-b's registered camera onto the plane measured on its depth map (holistic_diff.py measure: 536-548 mm), about 5 %. aspect: the stretch across that makes the lamp caps round (read 0.80 and 0.83 of round at aspect 1).",
+  "photo_size": [
+    1524,
+    1980
+  ],
+  "height_mm": 545.0,
+  "width_mm": 58.0,
+  "px_per_mm": 5.0,
+  "margin_mm": 40.0,
+  "edges": {
+    "h_top": [
+      1304,
+      1392,
+      352,
+      378
+    ],
+    "h_sel_top": [
+      1306,
+      1392,
+      757,
+      779
+    ],
+    "h_sep_top": [
+      1304,
+      1394,
+      1237,
+      1257
+    ],
+    "v_left": [
+      390,
+      1230,
+      1290,
+      1309
+    ],
+    "v_right": [
+      390,
+      1120,
+      1390,
+      1409
+    ]
+  },
+  "offset": [
+    500,
+    100
+  ],
+  "plate_edges": {
+    "top": 580,
+    "left": 1575,
+    "bottom": 1387
+  },
+  "aspect": 1.227
+}

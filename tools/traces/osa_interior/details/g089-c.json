@@ -1,0 +1,216 @@
+{
+ "photo": "g089-c",
+ "image": "raw",
+ "observer": "Claude (Opus 5.5), 9 Nov 2026: the raw scan (1269 x 1870) blurred 3x3, overview and two tiles with a 0.02 grid",
+ "covers": "the cab's blue lamp seen square-on from below on the header's lower face, with the loom above it, the right visor's corner and hinge rod below, and the surface round it",
+ "notes": "VEHICLE: the hangar session, the ex-NVA 9A33BM3-1 (g082-g096). The Rothmans-stickered visor at the bottom shows this is the right visor; the book says an emergency light is above the commander's sun shield, which is this lamp. It is g089-d d51 (x about 0.56, under the header right of centre behind the loom, its dome hidden in g089-d) and g087-d's blue arc at x 0.10-0.19, y 0.07-0.10 above the visor. It is mounted on the header's face below the loom, not on the roof.",
+ "details": [
+  {
+   "id": "d01",
+   "on": "lamp.dome_cab",
+   "kind": "part",
+   "what": "the lamp: a large round blue glass dome with a clear central bulb area, a grey cage of a ring and four spokes across it, a wide cast aluminium-coloured bezel flange round it",
+   "bbox": [
+    0.18,
+    0.25,
+    0.72,
+    0.6
+   ],
+   "relief": "raised",
+   "size_cue": "about five times as wide as the visor's ball pivot",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d02",
+   "on": "lamp.dome_cab",
+   "kind": "fastener",
+   "what": "screws round the lamp's flange, the two at the lower right and bottom with rust-red heads",
+   "points": [
+    [
+     0.28,
+     0.33
+    ],
+    [
+     0.56,
+     0.33
+    ],
+    [
+     0.66,
+     0.335
+    ],
+    [
+     0.635,
+     0.51
+    ],
+    [
+     0.455,
+     0.585
+    ]
+   ],
+   "pattern": {
+    "count": 5
+   },
+   "relief": "raised",
+   "size_cue": "smaller than the flange's lip",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d03",
+   "on": "lamp.dome_cab",
+   "kind": "clip",
+   "what": "a braided lead from the lamp's flange at its lower left down past the visor's pivot",
+   "line": [
+    [
+     0.365,
+     0.572
+    ],
+    [
+     0.28,
+     0.61
+    ],
+    [
+     0.14,
+     0.6
+    ],
+    [
+     0.05,
+     0.555
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d04",
+   "on": "loom.cab_header",
+   "kind": "clip",
+   "what": "the loom above the lamp: white cables, black braid and blue wires bundled across the frame, a white plastic band clip standing over the lamp's top, a stud clip on the blue wires",
+   "line": [
+    [
+     0.0,
+     0.205
+    ],
+    [
+     0.3,
+     0.19
+    ],
+    [
+     0.6,
+     0.18
+    ],
+    [
+     1.0,
+     0.2
+    ]
+   ],
+   "relief": "raised",
+   "size_cue": "white cable about the lamp's screw head, three times",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d05",
+   "on": "new.frame.cab_windscreen_header",
+   "kind": "seam",
+   "what": "a horizontal crease across the whole frame above the loom: the roof's front band meeting the header's face (the corner of the two)",
+   "line": [
+    [
+     0.0,
+     0.107
+    ],
+    [
+     0.25,
+     0.115
+    ],
+    [
+     0.5,
+     0.117
+    ],
+    [
+     0.75,
+     0.115
+    ],
+    [
+     1.0,
+     0.11
+    ]
+   ],
+   "relief": "recessed",
+   "build": "normal",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d15's crease"
+  },
+  {
+   "id": "d06",
+   "on": "new.frame.cab_windscreen_header",
+   "kind": "surface",
+   "what": "the header's paint round the lamp: pale, off-white grey, a fine leathery grain and shallow wrinkles most marked at the right, like paint over a soft or sprayed layer",
+   "bbox": [
+    0.6,
+    0.27,
+    0.93,
+    0.62
+   ],
+   "relief": "flush",
+   "build": "normal",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d07",
+   "on": "kit.sun_visor_right",
+   "kind": "hinge",
+   "what": "the visor's ball pivot and rod end, with the rod running right along the visor's top edge",
+   "bbox": [
+    0.195,
+    0.62,
+    1.0,
+    0.7
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d08",
+   "on": "kit.sun_visor_right",
+   "kind": "part",
+   "what": "the visor's left corner, rolled rim, rounded corner, a dark oval sticker",
+   "bbox": [
+    0.185,
+    0.645,
+    1.0,
+    0.91
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d09",
+   "on": "new.frame.cab_windscreen_header",
+   "kind": "profile",
+   "what": "a pale rounded corner of a pressed bracket on the header's face at the right edge of the frame",
+   "bbox": [
+    0.93,
+    0.47,
+    1.0,
+    0.62
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  }
+ ]
+}

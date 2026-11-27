@@ -1260,6 +1260,16 @@ public:
 	/** The menus' round of levels: off, hints, on, back to off. */
 	static FString NextHelperLevel(const FString& Level);
 
+	/** Faults that come about by themselves (simcore/faults.hpp, docs/FAULTS.md): on unless the menus turned them off,
+	 *  saved in GameUserSettings.ini (section SAM3D.Faults). ?SimFaults=0 or 1 overrides it for one start. A scenario's own
+	 *  "faults": {"random": false} (the lessons, the trainer) keeps them off; faults a scenario or the instructor sets
+	 *  come regardless. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Faults")
+	static bool GetFaultsPreference();
+
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Faults")
+	static void SetFaultsPreference(bool bOn);
+
 	/** A level in the menus' words: Off, Hints, On, Watch the crewman, Exam (off); and in one word for a button. */
 	static FString HelperLevelLabel(const FString& Level);
 	static FString HelperLevelShort(const FString& Level);
@@ -1904,6 +1914,8 @@ private:
 	void LoadCrewPresentation(const FString& DataDir);
 	/** The helper's level (?SimHelper, else the saved preference) on every runner of the scenario; an exam keeps its own. */
 	void ApplyHelperLevel();
+	/** The menus' Faults (?SimFaults, else the saved preference) on every runner of the scenario, before its first step. */
+	void ApplyFaultsPreference();
 	/** A level on one runner: the assist level, and the helper's NPC reckoning (shadow commander, wheels) on or off. */
 	static void SetRunnerHelper(simcore::ScenarioRunner& R, simcore::AssistLevel Level);
 	/** The drill master's advice for GetHelp, kept until the console changes (a ghost run is tens of milliseconds). */

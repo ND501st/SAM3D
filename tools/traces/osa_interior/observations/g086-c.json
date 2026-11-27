@@ -1,0 +1,283 @@
+{
+ "photo": "g086-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the driver's seat area, above",
+  "looks": "down and forward-left into the driver's left corner",
+  "covers": [
+   "console.pu303",
+   "new.box.fire_control",
+   "new.kit.fire_system_bottles"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "new.box.fire_control",
+   "class": "box",
+   "seen_as": "red fire-extinguishing control box with two hinged flaps and two red lamp lenses",
+   "bbox": [
+    0.13,
+    0.17,
+    0.49,
+    0.42
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.shelf.fire_box_perforated",
+   "relations": [
+    [
+     "below",
+     "new.shelf.fire_box_perforated"
+    ],
+    [
+     "left_of",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "about twice the width of the PU-303's gauge",
+   "material": "red paint",
+   "confidence": "high",
+   "notes": "flap texts: circuit check and, on fire, open and press"
+  },
+  {
+   "id": "new.shelf.fire_box_perforated",
+   "class": "shelf",
+   "seen_as": "perforated grey bracket plate the red box hangs from",
+   "bbox": [
+    0.0,
+    0.12,
+    0.5,
+    0.2
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "above",
+     "new.box.fire_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.instrument.fire_pressure_gauge",
+   "class": "instrument",
+   "seen_as": "round pressure gauge (scale to 250) on top of the bracket",
+   "bbox": [
+    0.02,
+    0.0,
+    0.14,
+    0.11
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.shelf.fire_box_perforated",
+   "relations": [
+    [
+     "above",
+     "new.shelf.fire_box_perforated"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.canister_driver_left",
+   "class": "unknown",
+   "seen_as": "pale grey cylindrical canister with a threaded top",
+   "bbox": [
+    0.0,
+    0.25,
+    0.19,
+    0.42
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "new.box.fire_control"
+    ]
+   ],
+   "size_cue": "about a bottle's width",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": "a filter or reservoir?"
+  },
+  {
+   "id": "new.kit.fire_system_bottles",
+   "class": "kit",
+   "seen_as": "three black bottles with domed ends, one with a red hand-wheel valve and brass fittings",
+   "bbox": [
+    0.05,
+    0.43,
+    0.48,
+    1.0
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "below",
+     "new.box.fire_control"
+    ]
+   ],
+   "size_cue": "each about a forearm long",
+   "material": "black paint, brass",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.earth_braids_driver_left",
+   "class": "cable",
+   "seen_as": "flat braided earthing straps across the bottles",
+   "bbox": [
+    0.07,
+    0.4,
+    0.62,
+    0.73
+   ],
+   "zone": "cab.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "tinned copper braid",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.cream_lead_driver_left",
+   "class": "cable",
+   "seen_as": "cream insulated cable across the bottles",
+   "bbox": [
+    0.0,
+    0.6,
+    0.47,
+    0.7
+   ],
+   "zone": "cab.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "cream insulation",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.fire_system_blue",
+   "class": "hose",
+   "seen_as": "two blue-sleeved hoses into the red box's right side",
+   "bbox": [
+    0.49,
+    0.22,
+    0.6,
+    0.36
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "connects",
+     "new.box.fire_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "blue sleeve, braid",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.instrument.gauge_by_pu303",
+   "class": "instrument",
+   "seen_as": "round 0-1 gauge in a light blue square bezel",
+   "bbox": [
+    0.61,
+    0.29,
+    0.79,
+    0.49
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "above",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "about the red box's height",
+   "material": "blue bezel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.pu303",
+   "class": "console",
+   "seen_as": "black panel seen obliquely: dials, lamp lenses, buttons, two tubular handles",
+   "bbox": [
+    0.57,
+    0.36,
+    1.0,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "right_of",
+     "new.box.fire_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black face",
+   "confidence": "high",
+   "notes": "face is the trace pipeline's job"
+  },
+  {
+   "id": "new.bracket.pu303_perforated",
+   "class": "bracket",
+   "seen_as": "perforated angle bracket under the panel's left edge",
+   "bbox": [
+    0.55,
+    0.78,
+    0.62,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "below",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.driver_left_diagonal",
+   "class": "frame",
+   "seen_as": "grey channel members running diagonally across the top",
+   "bbox": [
+    0.25,
+    0.0,
+    1.0,
+    0.4
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "above",
+     "new.box.fire_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "low",
+   "notes": "part of the dash or wall frame"
+  }
+ ],
+ "not_in_register": [
+  "fire suppression box, gauge, bottles and braids in the driver's left corner"
+ ],
+ "doubts": [
+  "the bottles may be what the register calls kit.fire_extinguishers_cab; kept as a new id because they are a fixed system",
+  "exact orientation of the view is uncertain (looking down and forward-left)"
+ ]
+}

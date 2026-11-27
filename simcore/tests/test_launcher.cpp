@@ -317,7 +317,7 @@ SC_TEST("launcher: an emergency launch of a selected missile leaves the channel 
     SC_EXPECT(l.Selected(1) == "2-I");                   // ВНИМАНИЕ still on: the next outer missile
 }
 
-SC_TEST("launcher: the letter and emergency blocks are refused with paths when they are wrong") {
+SC_TEST("launcher: the letter, emergency and refuse blocks are refused with paths when they are wrong") {
     const std::string text = ReadFile(kData + "/procedures/osa_ak.json");
     auto bad = [&](const std::string& from, const std::string& to, const std::string& expect) {
         std::string s = text;
@@ -332,7 +332,9 @@ SC_TEST("launcher: the letter and emergency blocks are refused with paths when t
     };
     SC_EXPECT(bad("\"change_position\": 2", "\"change_position\": 5", "launcher.letter.change_position"));
     SC_EXPECT(bad("\"lock_inputs\": [ \"ch1_apch_lock\", \"ch2_apch_lock\" ]", "\"lock_inputs\": [ \"ch1_apch_lock\" ]", "launcher.letter.lock_inputs"));
-    SC_EXPECT(bad("\"3-II\", \"2-II\", \"1-II\", \"\"", "\"3-II\", \"2-II\", \"9-II\", \"\"", "launcher.emergency.select_containers[2]"));
+    SC_EXPECT(bad("[ \"3-II\", \"2-II\", \"1-II\", \"\"", "[ \"3-II\", \"2-II\", \"9-II\", \"\"", "launcher.emergency.select_containers[2]"));
+    SC_EXPECT(bad("[\"3-II\", \"2-II\", \"1-II\", \"\"", "[\"3-II\", \"2-II\", \"9-II\", \"\"", "launcher.refuse.select_containers[2]"));
+    SC_EXPECT(bad("\"button\": \"ind.refuse\"", "\"button\": \"ind.nothing\"", "launcher.refuse.button"));
     SC_EXPECT(bad("\"fire_control\": \"msl.emergency\"", "\"fire_control\": \"msl.channels\"", "launcher.emergency.fire_control"));
     SC_EXPECT(bad("\"flight_s\": 25.5", "\"flight_s\": 0", "launcher.emergency.flight_s"));
 }
@@ -460,4 +462,40 @@ SC_TEST("launcher: the prep_hold block and the container hot inputs are checked"
     SC_EXPECT(bad("\"cycles\": 3", "\"cycles\": 0", "launcher.prep_hold.cycles"));
     SC_EXPECT(bad("\"long_rest_s\": 3600", "\"long_rest_s\": 60", "launcher.prep_hold.long_rest_s"));
     SC_EXPECT(bad("\"hot_input\": \"hot_3_i\"", "\"hot_input\": \"hot_nothing\"", "launcher.containers[0].hot_input"));
+}
+
+SC_TEST("launcher: ВОЗВРАТ under a missile in flight returns its range finder and the missile is lost (voenizdat_osa_1991 p120)") {
+    ConsoleData c = Osa();
+    SC_EXPECT(c.launcher.channels[1].return_control == "msl.return_2" && c.launcher.channels[0].return_control == "msl.return_1");
+    Launcher l(c.launcher);
+    c.panel.Set("msl.channels", 0);  // channel II only
+    c.equipment.SetInput("target_near_zone", true);
+    l.Step(0.0, c);
+    const Launcher::Shot s = l.Launch(1.0, c, 7, 10.0, 450.0);
+    SC_EXPECT(s.channel == 2);
+    l.Step(2.0, c);
+    SC_EXPECT(l.Returned(c).empty());  // not pressed
+    c.panel.Set("msl.return_2", 1);
+    const std::vector<int> back = l.Returned(c);
+    SC_EXPECT(back.size() == 1 && back[0] == 7);
+    l.ShotDone(7);
+    SC_EXPECT(l.ShotsFlying().empty() && l.Returned(c).empty());
+    c.panel.Set("msl.return_2", 0);
+}
+
+SC_TEST("launcher: channel I's ВОЗВРАТ on OK81-4M-I returns only channel I's missile (voenizdat_osa_1991 p119; drawing wwp_gecko g094-c)") {
+    ConsoleData c = Osa();
+    Launcher l(c.launcher);
+    c.equipment.SetInput("target_near_zone", true);
+    c.panel.Set("msl.channels", 1);  // channel I only
+    l.Step(0.0, c);
+    const Launcher::Shot one = l.Launch(1.0, c, 8, 10.0, 450.0);
+    SC_EXPECT(one.channel == 1);
+    l.Step(2.0, c);
+    c.panel.Set("msl.return_2", 1);  // the other channel's button: channel I's missile flies on
+    SC_EXPECT(l.Returned(c).empty());
+    c.panel.Set("msl.return_2", 0);
+    c.panel.Set("msl.return_1", 1);
+    const std::vector<int> back = l.Returned(c);
+    SC_EXPECT(back.size() == 1 && back[0] == 8);
 }

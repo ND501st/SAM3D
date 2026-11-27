@@ -162,6 +162,28 @@ SC_TEST("orientation: an oriented vehicle keeps north while the latitude is set;
     SC_EXPECT(std::fabs(Off(relay->Engagement().GyroHeadingDeg(), 40.0) - (-10.636)) <= 0.5 + 0.01);
 }
 
+SC_TEST("orientation: ПОТРЕБИТЕЛИ at КОНТР. takes the course setter off the gyro: it is not slaved (p51)") {
+    for (const int consumers : {1, 0}) {
+        auto r = Load(Osa("deployed", 45.0, "", false));
+        SC_EXPECT(r != nullptr);
+        if (!r) return;
+        SC_EXPECT(r->TakeSeat("deputy_commander", "player"));  // nobody else turns the setter
+        ConsoleData& c = r->Console();
+        SC_EXPECT(c.orientation.consumers_control == "gyro.consumers" && c.orientation.consumers_position == 1);
+        c.panel.Set("gyro.consumers", consumers);
+        c.panel.SetValue("orient.qc", 50.0);
+        c.panel.Set("orient.ak_zk", 1);
+        c.panel.Set("orient.relay", 1);
+        Run(*r, 5.0);
+        const double g = r->Engagement().GyroHeadingDeg();
+        if (consumers == 1) {
+            SC_EXPECT(std::fabs(Off(g, 45.0)) < 0.1);  // slaved: 1 deg/s towards the setter
+        } else {
+            SC_EXPECT(std::fabs(Off(g, 40.0)) < 0.1);  // off the gyro: it keeps its heading
+        }
+    }
+}
+
 SC_TEST("orientation: at a halt the NPC commander walks out to find Qc with the aiming circle, tells it once back, and the deputy orients the gyro") {
     // Cold at a halt: the commander's compass work runs while the equipment warms up.
     auto r = Load(Osa("", 50.0, "", true));
@@ -330,4 +352,59 @@ SC_TEST("orientation: a player commander starts his compass work from the crew m
     SC_EXPECT(k->GiveCrewOrder("order_k_boyu"));
     k->Step(0.1);
     SC_EXPECT(owed(*k, 1));  // the helper has him out to set it up
+}
+
+SC_TEST("orientation: МК — ГПК — АК off ГПК loses the gyro's heading; back at ГПК it must be oriented again (voenizdat_osa_1991 p50)") {
+    auto r = Load(Osa("deployed", 45.0, "", false));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    Run(*r, 2.0);
+    SC_EXPECT(r->Console().panel.Get("gyro.compass_mode") == 1);
+    SC_EXPECT(r->Engagement().Oriented());
+    SC_EXPECT(std::fabs(Off(r->Engagement().GyroHeadingDeg(), 40.0)) < 0.1);
+    r->Console().panel.Set("gyro.compass_mode", 2);  // АК: not used on the Osa
+    Run(*r, 2.0);
+    SC_EXPECT(!r->Engagement().Oriented());
+    SC_EXPECT(!r->Console().equipment.GetInput("vehicle_oriented"));
+    r->Console().panel.Set("gyro.compass_mode", 1);
+    Run(*r, 2.0);
+    SC_EXPECT(!r->Engagement().Oriented());  // the heading is gone until the crew orients the vehicle again
+}
+
+SC_TEST("orientation: СС off holds the crew's frame at its Qc while the gyro runs on; φ at АВТ. drops the latitude correction") {
+    // The latitude scale at 0 makes the gyro run off at the full Earth rate (10.64 deg in the hour at 45 deg).
+    auto r = Load(Osa("deployed", 45.0, "", false));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    ConsoleData& c = r->Console();
+    SC_EXPECT(c.orientation.follow_up_control == "gyro.follow_up" && c.orientation.latitude_switch == "gyro.phi_mode");
+    c.panel.SetValue("orient.latitude", 0.0);
+    c.panel.Set("gyro.follow_up", 0);  // ОТКЛ. (OR-31M, voenizdat_osa_1991 p51)
+    Run(*r, 3600.0);
+    SC_EXPECT(std::fabs(Off(r->Engagement().GyroHeadingDeg(), 40.0)) < 1e-6);  // the scales and the frame held
+    c.panel.Set("gyro.follow_up", 1);  // СС: the follow-up catches the gyro up
+    Run(*r, 1.0);
+    SC_EXPECT(std::fabs(Off(r->Engagement().GyroHeadingDeg(), 40.0) - (-10.636)) <= 0.5 + 0.01);
+    // φ at АВТ.: the scale set right is not used (ПУ-11's correction is not modelled), the full rate again.
+    auto phi = Load(Osa("deployed", 45.0, "", false));
+    SC_EXPECT(phi != nullptr);
+    if (!phi) return;
+    phi->Console().panel.Set("gyro.phi_mode", 1);
+    Run(*phi, 3600.0);
+    SC_EXPECT(std::fabs(Off(phi->Engagement().GyroHeadingDeg(), 40.0) - (-10.636)) <= 0.5 + 0.01);
+}
+
+SC_TEST("orientation: ОТКАЗ Qc, a phase of the gyro unit's supply lost, stops the follow-up as СС off does") {
+    auto r = Load(Osa("deployed", 45.0, "", false));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    ConsoleData& c = r->Console();
+    SC_EXPECT(c.orientation.qc_fault_input == "gyro_phase_lost");
+    c.panel.SetValue("orient.latitude", 0.0);  // the gyro runs off at the Earth's full rate
+    c.equipment.SetInput("gyro_phase_lost", true);
+    Run(*r, 3600.0);
+    SC_EXPECT(std::fabs(Off(r->Engagement().GyroHeadingDeg(), 40.0)) < 1e-6);
+    c.equipment.SetInput("gyro_phase_lost", false);
+    Run(*r, 1.0);
+    SC_EXPECT(std::fabs(Off(r->Engagement().GyroHeadingDeg(), 40.0) - (-10.636)) <= 0.5 + 0.01);
 }

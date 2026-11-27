@@ -106,6 +106,10 @@ struct ViewScope {
     Vec3 unit_position;
     std::vector<ViewStrobe> strobes;      // jamming strobes on the search scope (roadmap E3)
     double search_antenna_az_deg = -1000.0;  // where the search antenna points (crew frame; -1000 unknown)
+    // The driver's dash (simcore::VehicleDash): valid flag, then rpm, km/h, coolant C, oil C, oil kgf/cm2, A, network V,
+    // supply V.
+    bool dash_valid = false;
+    double dash[8] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 };
 
 // What else the player's crew has in front of it (roadmap 7.7): the PU-12 plotting board's recent marks, the latest
@@ -366,6 +370,7 @@ private:
 };
 
 constexpr double kPosStep = 1.0;     // m
+constexpr double kDashStep = 0.01;   // a dash gauge's reading in its own unit
 constexpr double kVelStep = 0.01;    // m/s
 constexpr double kAngStep = 1e-5;    // rad
 constexpr double kSigmaStep = 1.0;   // m
@@ -495,6 +500,8 @@ inline std::vector<std::uint8_t> ScopeBytes(const ViewScope& sc) {
         w.Q(st.jn_db, kDbStep);
     }
     w.Q(sc.search_antenna_az_deg, kDegStep);
+    w.U8(sc.dash_valid ? 1 : 0);
+    for (double d : sc.dash) w.Q(d, kDashStep);
     return w.bytes;
 }
 inline bool GetScope(Reader& r, ViewScope& sc) {
@@ -521,6 +528,8 @@ inline bool GetScope(Reader& r, ViewScope& sc) {
         sc.strobes.push_back(st);
     }
     sc.search_antenna_az_deg = r.Q(kDegStep);
+    sc.dash_valid = r.U8() != 0;
+    for (double& d : sc.dash) d = r.Q(kDashStep);
     return r.ok;
 }
 

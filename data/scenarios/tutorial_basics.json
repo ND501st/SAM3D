@@ -6,6 +6,7 @@
   "confidence": "estimate",
   "notes": "Fictional. The Kesmark range, the Osa cold at a halt, no orders. The MiG-21 pair is our own (they answer the IFF). PLACEHOLDER aircraft numbers.",
   "seed": 11,
+  "faults": { "random": false, "notes": "A lesson is the same every time: no faults by chance (docs/FAULTS.md)." },
   "origin": {
     "lat_deg": 46.817217,
     "lon_deg": 19.77862,

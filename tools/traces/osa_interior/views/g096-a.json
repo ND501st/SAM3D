@@ -1,0 +1,103 @@
+{
+ "photo": "g096-a",
+ "image": "clean",
+ "camera_from": "sfm",
+ "why": "Camera from the joint solve of the book's interior photos (tools/recon/holistic_sfm.py), which uses no model point: the check of the roof and floor against the photos themselves. Aligned on SP-2M2's face; the width across the aisle is the solve's own (docs/OSA_INTERIOR_HOLISTIC.md section 16).",
+ "anchors": [
+  {
+   "at": "panel:sl3m_panel@0.66,0.32",
+   "px": [
+    2938.7,
+    805.4
+   ],
+   "what": "SL-3M, the forward column's top forward corner"
+  },
+  {
+   "at": "panel:sl3m_panel@0.66,-0.32",
+   "px": [
+    2938.7,
+    1493.7
+   ],
+   "what": "SL-3M, the forward column's bottom forward corner"
+  },
+  {
+   "at": "panel:sl3m_panel@-0.66,0.32",
+   "px": [
+    2615.6,
+    918.3
+   ],
+   "what": "SL-3M, the aft column's top aft corner"
+  },
+  {
+   "at": "panel:sl3m_panel@-0.66,-0.32",
+   "px": [
+    2615.6,
+    1471.7
+   ],
+   "what": "SL-3M, the aft column's bottom aft corner"
+  },
+  {
+   "at": "panel:sp3m_panel@0.655,0.305",
+   "px": [
+    617.5,
+    889.4
+   ],
+   "what": "SP-3M, top aft corner"
+  },
+  {
+   "at": "panel:sp3m_panel@0.655,-0.305",
+   "px": [
+    617.5,
+    1419.5
+   ],
+   "what": "SP-3M, bottom aft corner"
+  },
+  {
+   "at": "shell:lamp_blue@000",
+   "px": [
+    750.4,
+    952.2
+   ],
+   "what": "the blue lamp on the bulkhead, its dome's centre"
+  },
+  {
+   "at": "panel:pwr_cabinet@tl",
+   "px": [
+    1234.3,
+    1175.3
+   ],
+   "what": "0096-9M, the face's top left",
+   "use": false,
+   "why": "the cabin turns the cabinet 38 degrees (Fig. 3's plan, a recorded conflict); the photo shows its face square to the bulkhead"
+  },
+  {
+   "at": "panel:pwr_cabinet@tr",
+   "px": [
+    2133.4,
+    1175.3
+   ],
+   "what": "0096-9M, the face's top right",
+   "use": false,
+   "why": "as the top left"
+  },
+  {
+   "at": "shell:ga3@000",
+   "px": [
+    2303.2,
+    1912.0
+   ],
+   "what": "GA-3, the round unit's middle",
+   "use": false,
+   "why": "GA-3 is a sized box in the cabin; its middle is a guess"
+  }
+ ],
+ "state": {
+  "hide": [
+   "seat_deputy",
+   "seat_senior",
+   "seat_operator"
+  ],
+  "why": "The BM3-1 photographed has the operators' seat backs folded down (g095-d, g096-a: folded seats with canvas bags on them); the cabin builds them up. The folded form is I5's."
+ },
+ "notes": "Looking aft along the axis at the rear bulkhead. Anchored on the two aft racks (SP-3M right, SL-3M left, both from Fig. 3's plan) and the blue lamp; the 0096-9M is a check, not an anchor."
+}

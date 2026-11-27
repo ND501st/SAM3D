@@ -208,7 +208,11 @@ def build(system):
         if s.get("prerequisites"):
             parts.append("while " + ", ".join(cond_text(c, g.owner) for c in s["prerequisites"]))
         if s.get("latching"):
-            parts.append("latching; released by " + ", ".join(cond_text(c, g.owner) for c in s.get("release", [])))
+            released = ", ".join(cond_text(c, g.owner) for c in s.get("release", []))
+            if s.get("release_any"):
+                released = (released + "; or by " if released else "") + "any of " + ", ".join(
+                    cond_text(c, g.owner) for c in s["release_any"])
+            parts.append("latching; released by " + released)
         t = s.get("start_time_s")
         t = t.get("value") if isinstance(t, dict) else t
         seats = sorted(g.seats_for({"subsystem": s["id"], "is": "ready"}))

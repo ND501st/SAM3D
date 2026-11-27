@@ -1,0 +1,158 @@
+{
+ "photo": "g097-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "just forward of the cabinet, above its top",
+  "looks": "aft and down at about 30-40 degrees onto the cabinet top and face",
+  "covers": [
+   "rack.0096_9m",
+   "pylon.turret"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.0096_9m",
+   "class": "rack",
+   "seen_as": "the cabinet face and its sloping top panel of repair toggles, nameplate 0096-9M2",
+   "bbox": [
+    0.06,
+    0.36,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "below",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "hour meter and voltmeter about a hand across",
+   "material": "grey enamel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.0096_9m_lid",
+   "class": "cover",
+   "seen_as": "hinged top lid raised upright on two hinges with a stay rod, black plate on its face",
+   "bbox": [
+    0.06,
+    0.05,
+    0.77,
+    0.4
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [
+    [
+     "above",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "as wide as the top panel",
+   "material": "grey sheet steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.lamp.0096_9m_lid_tube",
+   "class": "lamp",
+   "seen_as": "long glass tube lamp in two holders inside the lid",
+   "bbox": [
+    0.15,
+    0.17,
+    0.7,
+    0.3
+   ],
+   "zone": "compartment.rear",
+   "on": "new.cover.0096_9m_lid",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass tube, blue wire",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "pylon.turret",
+   "class": "pylon",
+   "seen_as": "grey fabric boot behind the cabinet",
+   "bbox": [
+    0.38,
+    0.0,
+    0.86,
+    0.55
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey rubberised fabric",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.turret_ring_olive_units",
+   "class": "unknown",
+   "seen_as": "olive-green housing at the top left",
+   "bbox": [
+    0.0,
+    0.0,
+    0.3,
+    0.12
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive paint",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.turret_base_casting",
+   "class": "unknown",
+   "seen_as": "blue-grey casting and a plug with braided cable at the top right",
+   "bbox": [
+    0.85,
+    0.05,
+    1.0,
+    0.35
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "blue-grey paint",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.pylon_white",
+   "class": "cable",
+   "seen_as": "white cable loop at the top right",
+   "bbox": [
+    0.83,
+    0.0,
+    0.88,
+    0.05
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the lid's tube lamp"
+ ],
+ "doubts": [
+  "the background units at the top corners are only glimpsed",
+  "the vehicle's sides cannot be told from this crop alone; taken from g096-a"
+ ]
+}

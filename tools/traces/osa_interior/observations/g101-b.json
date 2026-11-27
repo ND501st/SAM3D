@@ -1,0 +1,234 @@
+{
+ "photo": "g101-b",
+ "vehicle": "9A33BM2/BM3 late Czech Army vehicle (Bouchal, 2000s; not the 1980s fit)",
+ "camera": {
+  "stands": "outside on the vehicle's deck",
+  "looks": "at the inside face of a raised hatch lid",
+  "covers": [
+   "new.hatch.engine_deck_cz"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "new.hatch.engine_deck_cz",
+   "class": "hatch",
+   "seen_as": "pressed-steel hatch lid raised near vertical, rounded corners, flanged rim, two pressed ribs",
+   "bbox": [
+    0.02,
+    0.0,
+    0.99,
+    0.9
+   ],
+   "zone": "outside",
+   "relations": [],
+   "size_cue": "about as wide as the frame; grab bar across most of it",
+   "material": "pressed steel, light grey",
+   "confidence": "medium",
+   "notes": "probably the deck hatch over the engine/power compartment; not stated"
+  },
+  {
+   "id": "new.handle.engine_deck_hatch_bar",
+   "class": "handle",
+   "seen_as": "horizontal tubular grab bar across the lid",
+   "bbox": [
+    0.11,
+    0.31,
+    0.87,
+    0.36
+   ],
+   "zone": "outside",
+   "on": "new.hatch.engine_deck_cz",
+   "relations": [
+    [
+     "on",
+     "new.hatch.engine_deck_cz"
+    ]
+   ],
+   "size_cue": "a hand's grip thick",
+   "material": "steel tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.engine_deck_hatch_latch",
+   "class": "control",
+   "seen_as": "latch lever with a cam at the lid's top centre",
+   "bbox": [
+    0.26,
+    0.11,
+    0.49,
+    0.24
+   ],
+   "zone": "outside",
+   "on": "new.hatch.engine_deck_cz",
+   "relations": [
+    [
+     "on",
+     "new.hatch.engine_deck_cz"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.pto_warning_cz",
+   "class": "plate",
+   "seen_as": "black plate in Czech warning the driver about engaging the power take-off",
+   "bbox": [
+    0.29,
+    0.45,
+    0.6,
+    0.58
+   ],
+   "zone": "outside",
+   "on": "new.hatch.engine_deck_cz",
+   "relations": [
+    [
+     "on",
+     "new.hatch.engine_deck_cz"
+    ]
+   ],
+   "size_cue": "about a third of the lid's width",
+   "material": "black plate, white letters",
+   "confidence": "high",
+   "notes": "late Czech plate"
+  },
+  {
+   "id": "new.plate.pto_lever_diagram_cz",
+   "class": "plate",
+   "seen_as": "black plate with a lever diagram in two positions",
+   "bbox": [
+    0.66,
+    0.46,
+    0.76,
+    0.58
+   ],
+   "zone": "outside",
+   "on": "new.hatch.engine_deck_cz",
+   "relations": [
+    [
+     "on",
+     "new.hatch.engine_deck_cz"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.engine_deck_hatch_lock_tab",
+   "class": "clamp",
+   "seen_as": "small lock tab at the lid's lower centre",
+   "bbox": [
+    0.43,
+    0.82,
+    0.53,
+    0.89
+   ],
+   "zone": "outside",
+   "on": "new.hatch.engine_deck_cz",
+   "relations": [
+    [
+     "on",
+     "new.hatch.engine_deck_cz"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.engine_deck_hatch_hinges",
+   "class": "bracket",
+   "seen_as": "hinge lugs at the lid's lower corners",
+   "bbox": [
+    0.08,
+    0.65,
+    0.96,
+    0.8
+   ],
+   "zone": "outside",
+   "on": "new.hatch.engine_deck_cz",
+   "relations": [
+    [
+     "on",
+     "new.hatch.engine_deck_cz"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.rail.engine_deck_hatch_stay",
+   "class": "rail",
+   "seen_as": "round stay rod at the right holding the lid open",
+   "bbox": [
+    0.89,
+    0.72,
+    0.96,
+    1.0
+   ],
+   "zone": "outside",
+   "on": "new.hatch.engine_deck_cz",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel rod",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.lining.engine_deck_hatch_seal",
+   "class": "lining",
+   "seen_as": "coaming below with a black rubber seal and the dark opening",
+   "bbox": [
+    0.06,
+    0.89,
+    0.85,
+    1.0
+   ],
+   "zone": "outside",
+   "relations": [
+    [
+     "below",
+     "new.hatch.engine_deck_cz"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel, rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.olive_tubular_structure",
+   "class": "unknown",
+   "seen_as": "olive green tubular structure behind the lid",
+   "bbox": [
+    0.0,
+    0.0,
+    0.16,
+    0.12
+   ],
+   "zone": "outside",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive paint",
+   "confidence": "low",
+   "notes": "launcher or turret structure"
+  }
+ ],
+ "not_in_register": [
+  "an exterior deck hatch and its plates (outside the compartment)"
+ ],
+ "doubts": [
+  "exterior view, not the compartment",
+  "which hatch this is (engine deck assumed from g101-c and the PTO plate)",
+  "the plates are a late Czech addition; the 1980s vehicle had a Russian plate (cf. plate.gom on the inside door)"
+ ]
+}

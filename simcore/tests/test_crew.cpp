@@ -317,6 +317,20 @@ SC_TEST("drill master: from a state halfway through, it plans only what is left"
     SC_EXPECT(!HasAction(tl, "driver", "pwr.gta") && HasAction(tl, "senior_operator", "soc.hv"));
 }
 
+SC_TEST("drill master: a mode latched off is undone the cheaper way: after ОТКЛ. НАГР. the driver presses ГТА") {
+    Osa o;
+    ConsoleData& c = o.console;
+    c.equipment.SetInput("vehicle_stopped", true);
+    c.panel.Set("gta.loads_off", 1);
+    c.equipment.Update(0.1, c.panel);
+    c.panel.ReleaseMomentaries();
+    SC_EXPECT(c.equipment.IsReady("loads_off"));
+    const DrillMaster dm(c, &o.crew);
+    const IdealTimeline tl = dm.Ideal(TaskOf(o, "ready_halted"), c);
+    SC_EXPECT(tl.reached);
+    SC_EXPECT(HasAction(tl, "driver", "gta.load_gta") && !HasAction(tl, "driver", "gta.load_ivp"));
+}
+
 SC_TEST("drill master: a crew's part of a capture is planned; the run then waits for the world (the target)") {
     Osa o;
     o.console.equipment.SetInput("vehicle_stopped", true);
@@ -476,8 +490,7 @@ SC_TEST("npc commander: with no triggers the crew comes to readiness from cold, 
         if (d.find(std::string("started    ") + drill) == std::string::npos) std::printf("    no %s\n", drill);
         SC_EXPECT(d.find(std::string("started    ") + drill) != std::string::npos);
     }
-    SC_EXPECT(d.find("Пуск разрешаю!") != std::string::npos);
-}
+    SC_EXPECT(d.find("Пуск разрешаю!") != std::string::npos);}
 
 SC_TEST("npc commander: the player in the operator's seat gets his orders; the crew waits for him, reminds him, and fires only with him") {
     std::unique_ptr<ScenarioRunner> r = CrewPractice();

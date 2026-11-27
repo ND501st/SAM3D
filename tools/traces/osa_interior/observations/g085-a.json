@@ -1,0 +1,280 @@
+{
+ "photo": "g085-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "at the cab centre, eye height",
+  "looks": "square-on at the centre and commander dash panels",
+  "covers": [
+   "new.console.centre_dash",
+   "console.commander_dash"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "new.console.centre_dash",
+   "class": "console",
+   "seen_as": "centre panel: speedometer, temperatures, tachometer 0-40, oil pressure, ammeter, four ОТКЛ toggles, counter, lamps, socket",
+   "bbox": [
+    0.04,
+    0.3,
+    0.53,
+    0.94
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "about 0.45 m wide",
+   "material": "light grey hammer finish",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.commander_dash",
+   "class": "console",
+   "seen_as": "commander panel: nine-toggle strip, button, lamp, trim-vane toggle and the inset board",
+   "bbox": [
+    0.54,
+    0.3,
+    0.89,
+    0.95
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "about 0.45 m wide",
+   "material": "light grey hammer finish",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "plate.lowering_board",
+   "class": "plate",
+   "seen_as": "blue-grey inset ПРОХОД ПОД МОСТОМ with two lamps and five buttons",
+   "bbox": [
+    0.75,
+    0.53,
+    0.85,
+    0.92
+   ],
+   "zone": "cab.dash",
+   "on": "console.commander_dash",
+   "relations": [
+    [
+     "in",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "about a quarter of the panel",
+   "material": "blue-grey painted",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "dash housing and shelf with the screens' lower frame",
+   "bbox": [
+    0.0,
+    0.19,
+    1.0,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.dash",
+   "class": "handle",
+   "seen_as": "tubular handles at the panels' edges",
+   "bbox": [
+    0.49,
+    0.43,
+    0.88,
+    0.73
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [],
+   "size_cue": "palm-length",
+   "material": "grey tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.dash_right",
+   "class": "handle",
+   "seen_as": "large tubular grab handle at the far right",
+   "bbox": [
+    0.92,
+    0.45,
+    0.97,
+    0.93
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "hand-length",
+   "material": "grey tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.windscreen_centre",
+   "class": "clamp",
+   "seen_as": "hinged clamp at the centre post foot",
+   "bbox": [
+    0.27,
+    0.0,
+    0.4,
+    0.22
+   ],
+   "zone": "cab.dash",
+   "on": "new.frame.windscreen_centre_post",
+   "relations": [
+    [
+     "above",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.windscreen_right_lower",
+   "class": "clamp",
+   "seen_as": "wing-nut clamp on the right screen lower frame",
+   "bbox": [
+    0.87,
+    0.06,
+    0.96,
+    0.13
+   ],
+   "zone": "cab.dash",
+   "on": "hull.windscreen_right",
+   "relations": [
+    [
+     "above",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_left",
+   "class": "window",
+   "seen_as": "lower edge of the left screen",
+   "bbox": [
+    0.03,
+    0.0,
+    0.25,
+    0.05
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "lower edge of the right screen with seal",
+   "bbox": [
+    0.37,
+    0.0,
+    1.0,
+    0.1
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass, rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.white_centre_post",
+   "class": "cable",
+   "seen_as": "thin white cable down from the centre post",
+   "bbox": [
+    0.27,
+    0.0,
+    0.29,
+    0.18
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "pencil-thick",
+   "material": "PVC",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "wheel rim at the left edge",
+   "bbox": [
+    0.0,
+    0.08,
+    0.05,
+    0.7
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "black",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_right_wall",
+   "class": "loom",
+   "seen_as": "cables beyond the right edge",
+   "bbox": [
+    0.96,
+    0.3,
+    1.0,
+    0.9
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "PVC",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the grab handle at the commander dash end",
+  "the right screen clamp"
+ ],
+ "doubts": [
+  "Key on a lanyard hangs on the toggle strip (crew item, not listed)."
+ ]
+}

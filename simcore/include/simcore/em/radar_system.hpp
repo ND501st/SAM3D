@@ -201,21 +201,38 @@ inline LookResult EvaluateLook(const EmScene& s, const RadarState& r, const Rada
     phys.pattern_db = 2.0 * (AntennaGainDb(ant, WrapPi(az - look_az), el - look_el) - ant.gain_db + peak_db);
     phys.one_way_loss_db = loss.diffraction_db + loss.gas_db + loss.clutter_db;
     phys.multipath_factor = loss.multipath_factor;
-    double snr = RadarSnr(d, phys);
+    // A magnetron off its tune (РПЧМ set off the middle: voenizdat_osa_1991 p33-36) puts the echo off the IF passband's
+    // centre: every echo loses alike, 3 dB at the band's edge (SAM3D's reading of the passband). A receiver with a worse
+    // noise figure (rx_loss_db) loses alike against its noise.
+    const double half_band = 0.5 * d.RxBandwidthHz();
+    const double off_tune = half_band > 0.0 ? std::fabs(r.mistune_hz) / half_band : 0.0;
+    const double tune_gain = DbToLinear(-MinOf(3.0 * off_tune * off_tune, 30.0) - MaxOf(0.0, r.rx_loss_db));
+    // The СА blanker takes a little of the echo with the asynchronous pulses (SAM3D's estimate).
+    const double sa_gain = r.sa_on ? DbToLinear(-d.sa_loss_db) : 1.0;
+    double snr = RadarSnr(d, phys) * tune_gain * sa_gain;
 
     // MTI and ground clutter.
     double cn = 0.0;
     const double ground_horizon = 4120.0 * std::sqrt(p.height_agl_m > 0.5 ? p.height_agl_m : 0.5);
     const bool in_clutter = el < d.clutter_max_elevation_rad && range < 1.3 * ground_horizon;
-    if (in_clutter) cn = DbToLinear(d.clutter_cnr_db_at_10km - 30.0 * std::log10(range / 10000.0));
+    if (in_clutter) cn = DbToLinear(d.clutter_cnr_db_at_10km - 30.0 * std::log10(range / 10000.0)) * tune_gain;
     // Beyond the MTI's working range the receiver gates the normal channel in: nothing is cancelled there (the Osa's
     // search radar: 35 km, voenizdat_osa_1991 p30).
     const bool mti_on = d.has_mti && r.mti != MtiMode::Off && (d.mti_max_range_m <= 0.0 || range <= d.mti_max_range_m);
+    // The canceller's phasing takes the magnetron's mistune up to the AFC's tolerance (АПЧМ's ±0.5 MHz, p33-36); beyond
+    // it the cancellation fades, gone at twice it (SAM3D's reading).
+    double improvement_db = d.mti_improvement_db;
+    if (d.afc_tolerance_hz > 0.0 && std::fabs(r.mistune_hz) > d.afc_tolerance_hz)
+        improvement_db *= MaxOf(0.0, 2.0 - std::fabs(r.mistune_hz) / d.afc_tolerance_hz);
+    // In internal coherence the wind compensation moves the canceller's notch to its Doppler offset (p36-37): what
+    // moves at that speed cancels, and the ground (at none) stops cancelling once the offset is beyond the notch.
+    // External coherence references the clutter itself and needs none (p27).
+    const double comp_mps = r.mti == MtiMode::Internal ? r.mti_comp_mps : 0.0;
     if (mti_on) {
-        cn *= DbToLinear(-d.mti_improvement_db);
-        if (std::fabs(radial_mps) < d.mti_notch_mps) snr *= DbToLinear(-d.mti_notch_attenuation_db);
+        if (r.mti == MtiMode::External || std::fabs(comp_mps) < d.mti_notch_mps) cn *= DbToLinear(-improvement_db);
+        if (std::fabs(radial_mps - comp_mps) < d.mti_notch_mps) snr *= DbToLinear(-d.mti_notch_attenuation_db);
         // External coherence references the chaff's own phase: drifting chaff cancels like clutter.
-        if (is_chaff && r.mti == MtiMode::External) snr *= DbToLinear(-d.mti_improvement_db);
+        if (is_chaff && r.mti == MtiMode::External) snr *= DbToLinear(-improvement_db);
     }
     // Chaff sharing the resolution cell.
     for (const ChaffCloud& c : s.chaff) {
@@ -228,14 +245,14 @@ inline LookResult EvaluateLook(const EmScene& s, const RadarState& r, const Rada
         if (std::fabs(WrapPi(AzimuthOf(cl) - az)) > d.emitter.antenna.beamwidth_az_rad) continue;
         RadarLookPhysics cp = phys;
         cp.rcs_m2 = sc;
-        double chaff_snr = RadarSnr(d, cp);
+        double chaff_snr = RadarSnr(d, cp) * tune_gain * sa_gain;
         if (mti_on) {
             const double vr_chaff = Dot(c.velocity, cl) / (cr > 1.0 ? cr : 1.0);
-            // Internal coherence cancels only echoes that barely move; external coherence takes its
-            // phase reference from the chaff itself, so wind-blown chaff cancels too, and the
+            // Internal coherence cancels only echoes near the notch (at the wind compensation's offset); external
+            // coherence takes its phase reference from the chaff itself, so wind-blown chaff cancels too, and the
             // target survives if it moves relative to the chaff (mon_2112_80 p15).
-            const bool cancelled = r.mti == MtiMode::External || std::fabs(vr_chaff) < d.mti_notch_mps;
-            if (cancelled) chaff_snr *= DbToLinear(-d.mti_improvement_db);
+            const bool cancelled = r.mti == MtiMode::External || std::fabs(vr_chaff - comp_mps) < d.mti_notch_mps;
+            if (cancelled) chaff_snr *= DbToLinear(-improvement_db);
             if (r.mti == MtiMode::External && std::fabs(radial_mps - vr_chaff) < d.mti_notch_mps)
                 snr *= DbToLinear(-d.mti_notch_attenuation_db);
         }
@@ -334,6 +351,9 @@ inline void AddFalseTargetPlots(const EmScene& s, RadarState& r, const RadarDef&
         const JammerDef& jd = s.lib.jammers[static_cast<std::size_t>(j.def_index)];
         if (jd.technique != JamTechnique::FalseTargets) continue;
         if (j.victim_radar != 0 && j.victim_radar != r.id) continue;
+        // A repeater out of step with the radar's repetition: the СА blanker takes its pulses out (voenizdat_osa_1991
+        // p30, p36, p266).
+        if (!jd.synchronous && r.sa_on) continue;
         const Platform* jp = s.FindPlatform(j.platform_id);
         const EmitterState* je = s.FindEmitter(j.emitter_id);
         if (jp == nullptr || je == nullptr || !jp->alive) continue;
@@ -352,9 +372,18 @@ inline void AddFalseTargetPlots(const EmScene& s, RadarState& r, const RadarDef&
         const double range_j = (jp->position - p.position).Length();
         const double el_j = s.ElevationAngle(p, *jp);
         for (int k = 1; k <= jd.false_targets; ++k) {
-            const double range = range_j + jd.false_spacing_m * static_cast<double>(k);
-            if (range > d.max_range_m) break;
             const std::uint64_t key = LookKey(r.id, -3000 - 64 * j.id - k, e.revolutions);
+            // A synchronous repeater's echoes stand behind it at its spacing; an asynchronous one's fall anywhere out to
+            // the end of the sweep, anew each sweep: scattered dots on its bearing, not a steady string.
+            const double behind = jd.synchronous
+                                      ? jd.false_spacing_m * static_cast<double>(k)
+                                      : MaxOf(0.0, d.max_range_m - range_j) *
+                                            s.rng.Uniform01Of(Stream::Detection, LookKey(r.id, -5000 - 64 * j.id - k, e.revolutions));
+            const double range = range_j + behind;
+            if (range > d.max_range_m) {
+                if (jd.synchronous) break;
+                continue;
+            }
             RadarPlot pl;
             pl.time_s = s.time_s;
             pl.sensor_position = p.position;

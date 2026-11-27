@@ -1,0 +1,503 @@
+{
+ "about": "PU-303, the gas-turbine unit's control panel (ПУЛЬТ УПРАВЛЕНИЯ ТИП ПУ303), from the book's drawing of it with every control labelled (wwp_gecko g084-d, laid flat as 'pu303') and checked against the photograph g084-b: every part picked by its number on the flat and written into data/cabins/osa_ak.json by tools/recon/osa/panel_apply.py. Millimetres from the plate's centre, u right, v up.",
+ "plane": {
+  "flat": "pu303"
+ },
+ "panels": [
+  {
+   "id": "pu303_panel",
+   "u_mm": [
+    -150,
+    150
+   ],
+   "v_mm": [
+    -182.15,
+    182.15
+   ],
+   "notes": "PU-303 (ПУЛЬТ УПРАВЛЕНИЯ ТИП ПУ303), the gas-turbine power unit's control panel at the driver's left (voenizdat_osa_1991 p163; mon_2112_80 Fig. 3), as the book draws it with every control labelled (wwp_gecko g084-d) and photographs it (g084-b): the ГТА's rpm and gas temperature (ТВГ) gauges, the turbine's intake and exhaust hatches ЛЮКИ ОТКР./ЗАКР., СТОП, ХОЛ. ПРОКР. and ПУСК, the loads ГТА, ГОМ and ИВП switched on and ОТКЛ. НАГР., their lamps, the lamp test, the two generators' voltage adjusters and hour counters. 300 mm wide (mon_2112_80 Fig. 3's plan, good to 10 mm), 364 mm tall as drawn; a black plate. Its place and tilt: SAM3D's estimate."
+  }
+ ],
+ "remove": [
+  {
+   "panel": "pu303_panel",
+   "what": "fixtures"
+  },
+  {
+   "panel": "pu303_panel",
+   "what": "blocks"
+  }
+ ],
+ "items": [
+  {
+   "is": "block",
+   "id": "d_pu303",
+   "label": "ПУЛЬТ УПРАВЛЕНИЯ ТИП ПУ303",
+   "color": "black",
+   "box_mm": [
+    -150,
+    -182.15,
+    150,
+    182.15
+   ],
+   "what": "the plate"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:15",
+   "size": "dia",
+   "color": "chrome",
+   "label": "",
+   "what": "the plate's left dome light (ПОДСВЕТКА)"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:25",
+   "size": "dia",
+   "color": "chrome",
+   "label": "",
+   "what": "the plate's right dome light"
+  },
+  {
+   "is": "control",
+   "id": "gta.control_power",
+   "part": "pu303:18",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.016,
+    "color": "chrome",
+    "label": "ПИТАНИЕ УПРАВЛЕНИЯ"
+   },
+   "new": {
+    "label": "ПИТАНИЕ УПРАВЛЕНИЯ (control power)",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g084-d (PU-303 drawn with its labels: the switch ПИТАНИЕ УПРАВЛЕНИЯ, ОТКЛ. — ВКЛ.), g084-b",
+    "confidence": "medium",
+    "notes": "Powers PU-303's controls. Not modelled: the ГТА starts on ПУСК alone in the sim."
+   }
+  },
+  {
+   "is": "lamp",
+   "id": "gta_control_power",
+   "part": "pu303:21",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.016
+   },
+   "color": "green",
+   "new": {
+    "label": "ПИТАНИЕ УПРАВЛЕНИЯ",
+    "lit_when": [
+     {
+      "control": "gta.control_power",
+      "is": 1
+     }
+    ],
+    "source": "wwp_gecko g084-d, g084-b (a lamp beside the switch ПИТАНИЕ УПРАВЛЕНИЯ, green in the photo); when it lights: sam3d",
+    "confidence": "low",
+    "notes": "Lit while PU-303's controls are powered."
+   }
+  },
+  {
+   "is": "control",
+   "id": "gta.backlight",
+   "part": "pu303:24",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.016,
+    "color": "chrome",
+    "label": "ПОДСВЕТКА"
+   },
+   "new": {
+    "label": "ПОДСВЕТКА (the panel's lights)",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g084-d (PU-303: the switch ПОДСВЕТКА, ОТКЛ. — ВКЛ., between the two dome lights), g084-b",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "pu303:49",
+   "size": "dia",
+   "color": "black",
+   "label": "ГТА",
+   "what": "the turbine's rpm (0-10)"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "pu303:56",
+   "size": "dia",
+   "color": "black",
+   "label": "ТВГ",
+   "what": "the gas temperature (0-9 x100 °C)"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:30",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the lamp over ЛЮКИ ОТКР."
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:32",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the lamp over ЛЮКИ ЗАКР."
+  },
+  {
+   "is": "control",
+   "id": "gta.hatches_open",
+   "part": "pu303:53",
+   "look": {
+    "kind": "button",
+    "size_m": 0.03,
+    "color": "grey",
+    "ring": "chrome",
+    "label": "ОТКР"
+   },
+   "new": {
+    "label": "ЛЮКИ ОТКР. (the turbine's hatches open)",
+    "station": "driver",
+    "kind": "button",
+    "source": "wwp_gecko g084-d (PU-303: the push-buttons ЛЮКИ ОТКР. and ЗАКР., a lamp over each), g084-b",
+    "confidence": "medium",
+    "notes": "The gas turbine's intake and exhaust hatches, as read from the panel (SAM3D's reading). Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "gta.hatches_close",
+   "part": "pu303:55",
+   "look": {
+    "kind": "button",
+    "size_m": 0.03,
+    "color": "grey",
+    "ring": "chrome",
+    "label": "ЗАКР"
+   },
+   "new": {
+    "label": "ЛЮКИ ЗАКР. (the turbine's hatches closed)",
+    "station": "driver",
+    "kind": "button",
+    "source": "wwp_gecko g084-d (PU-303: the push-button ЛЮКИ ЗАКР.), g084-b",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:88",
+   "size": "dia",
+   "color": "red",
+   "label": "ДАВЛ. МАСЛА",
+   "what": "the oil pressure lamp"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:105",
+   "size": "dia",
+   "color": "red",
+   "label": "ПР ВС",
+   "what": "a lamp ПР ВС"
+  },
+  {
+   "is": "control",
+   "id": "gta.lamp_test",
+   "part": "pu303:127",
+   "look": {
+    "kind": "bar_knob",
+    "size_m": 0.026,
+    "color": "black",
+    "label": "КОНТР. ЛАМП"
+   },
+   "new": {
+    "label": "КОНТР. ЛАМП (lamp test)",
+    "station": "driver",
+    "kind": "switch",
+    "position_labels": [
+     "ОТКЛ.",
+     "ВКЛ."
+    ],
+    "initial": 0,
+    "source": "wwp_gecko g084-d (PU-303: a pointer switch КОНТР. ЛАМП, ОТКЛ. — ВКЛ.), g084-b",
+    "confidence": "medium",
+    "notes": "Not modelled: it lights no lamp in the sim."
+   }
+  },
+  {
+   "is": "control",
+   "id": "gta.stop",
+   "part": "pu303:79",
+   "look": {
+    "kind": "button",
+    "size_m": 0.03,
+    "color": "red",
+    "ring": "chrome",
+    "label": "СТОП"
+   },
+   "new": {
+    "label": "СТОП (the turbine stopped)",
+    "station": "driver",
+    "kind": "button",
+    "source": "wwp_gecko g084-d (PU-303: the red push-button СТОП), g084-b",
+    "confidence": "medium",
+    "notes": "Not modelled: ПУСК (pwr.gta) starts and stops the ГТА in the sim."
+   }
+  },
+  {
+   "is": "control",
+   "id": "gta.cold_crank",
+   "part": "pu303:81",
+   "look": {
+    "kind": "button",
+    "size_m": 0.03,
+    "color": "grey",
+    "ring": "chrome",
+    "label": "ХОЛ. ПРОКР."
+   },
+   "new": {
+    "label": "ХОЛ. ПРОКР. (cold cranking)",
+    "station": "driver",
+    "kind": "button",
+    "source": "wwp_gecko g084-d (PU-303: the push-button ХОЛ. ПРОКР. between СТОП and ПУСК), g084-b",
+    "confidence": "medium",
+    "notes": "Turns the turbine over without lighting it. Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "pwr.gta",
+   "part": "pu303:83",
+   "look": {
+    "kind": "button",
+    "size_m": 0.03,
+    "color": "grey",
+    "ring": "chrome",
+    "label": "ПУСК"
+   },
+   "why": "the console's on/off for the ГТА drawn as PU-303's ПУСК (wwp_gecko g084-d): pressed in while the unit runs"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:93",
+   "size": "dia",
+   "color": "red",
+   "label": "ОБРЫВ ФАЗ",
+   "what": "the phase failure lamp"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:109",
+   "size": "dia",
+   "color": "red",
+   "label": "ОБРАТ. ЧЕРЕД.",
+   "what": "the reversed phase order lamp"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:113",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the lamp over ВКЛЮЧЕНИЕ НАГРУЗОК ГТА"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:115",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the lamp over ВКЛЮЧЕНИЕ НАГРУЗОК ГОМ"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:117",
+   "size": "dia",
+   "color": "black",
+   "label": "",
+   "what": "the lamp over ВКЛЮЧЕНИЕ НАГРУЗОК ИВП"
+  },
+  {
+   "is": "control",
+   "id": "gta.load_gta",
+   "part": "pu303:130",
+   "look": {
+    "kind": "button",
+    "size_m": 0.03,
+    "color": "grey",
+    "ring": "chrome",
+    "label": "ГТА"
+   },
+   "new": {
+    "label": "ВКЛЮЧЕНИЕ НАГРУЗОК: ГТА (the loads on the turbine's generator)",
+    "station": "driver",
+    "kind": "button",
+    "source": "wwp_gecko g084-d (PU-303: under ВКЛЮЧЕНИЕ НАГРУЗОК the push-buttons ГТА, ГОМ and ИВП), g084-b",
+    "confidence": "medium",
+    "notes": "Not modelled: ПУСК (pwr.gta) puts the ГТА on line in the sim."
+   }
+  },
+  {
+   "is": "control",
+   "id": "pwr.pto",
+   "part": "pu303:132",
+   "look": {
+    "kind": "button",
+    "size_m": 0.03,
+    "color": "grey",
+    "ring": "chrome",
+    "label": "ГОМ"
+   },
+   "why": "the console's power take-off generator drawn as PU-303's ВКЛЮЧЕНИЕ НАГРУЗОК ГОМ (wwp_gecko g084-d; ГОМ, генератор отбора мощности): pressed in while on"
+  },
+  {
+   "is": "control",
+   "id": "gta.load_ivp",
+   "part": "pu303:134",
+   "look": {
+    "kind": "button",
+    "size_m": 0.03,
+    "color": "grey",
+    "ring": "chrome",
+    "label": "ИВП"
+   },
+   "new": {
+    "label": "ВКЛЮЧЕНИЕ НАГРУЗОК: ИВП",
+    "station": "driver",
+    "kind": "button",
+    "source": "wwp_gecko g084-d (PU-303: the third of the load push-buttons, ИВП), g084-b",
+    "confidence": "medium",
+    "notes": "ИВП's meaning is not known (a secondary power source?). Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "control",
+   "id": "gta.loads_off",
+   "part": "pu303:136",
+   "look": {
+    "kind": "button",
+    "size_m": 0.03,
+    "color": "red",
+    "ring": "chrome",
+    "label": "ОТКЛ. НАГР."
+   },
+   "new": {
+    "label": "ОТКЛ. НАГР. (loads off)",
+    "station": "driver",
+    "kind": "button",
+    "source": "wwp_gecko g084-d (PU-303: the red push-button ОТКЛ. НАГР.), g084-b",
+    "confidence": "medium",
+    "notes": "Not modelled: nothing reads it."
+   }
+  },
+  {
+   "is": "lamp",
+   "id": "gta_on",
+   "part": "pu303:159",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.016
+   },
+   "why": "РАБОТАЕТ ГТА (wwp_gecko g084-d)"
+  },
+  {
+   "is": "lamp",
+   "id": "pto_on",
+   "part": "pu303:161",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.016
+   },
+   "why": "РАБОТАЕТ ГОМ (wwp_gecko g084-d)"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "part": "pu303:164",
+   "size": "dia",
+   "color": "black",
+   "label": "ИВП",
+   "what": "the lamp РАБОТАЕТ ИВП"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "pu303:155",
+   "size": "box",
+   "color": "black",
+   "label": "РАБОТАЕТ"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "part": "pu303:175",
+   "size": "dia",
+   "color": "chrome",
+   "label": "НАПР. ГТА",
+   "what": "the turbine generator's voltage adjuster (a knob in the drawing, a lever in the photo)"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "part": "pu303:177",
+   "size": "dia",
+   "color": "chrome",
+   "label": "НАПР. ГОМ",
+   "what": "the power take-off generator's voltage adjuster"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "pu303:170",
+   "size": "dia",
+   "color": "grey",
+   "label": "МОТОЧАСЫ ГТА",
+   "what": "the turbine's hour counter"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "part": "pu303:174",
+   "size": "dia",
+   "color": "grey",
+   "label": "МОТОЧАСЫ ГОМ",
+   "what": "the power take-off generator's hour counter"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "part": "pu303:194",
+   "size": "box",
+   "color": "black",
+   "label": "ПУЛЬТ УПРАВЛЕНИЯ ТИП ПУ303"
+  }
+ ]
+}

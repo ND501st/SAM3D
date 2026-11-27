@@ -1,0 +1,206 @@
+{
+  "name": "osa_9a33bm2",
+  "notes": "The 9A33BM2 (Osa-AK) launcher vehicle's exterior from the WWP book's photographs and a reference mesh (docs/OSA_EXTERIOR_RECONSTRUCTION.md). Run outputs go to out/recon/osa_9a33bm2/ (git-ignored).",
+  "out_dir": "out/recon/osa_9a33bm2",
+  "max_item_failure": 0.6,
+  "sources": {
+    "book": {
+      "id": "wwp_gecko",
+      "pdfs": [
+        "reference/sources/wwp_gecko/001.pdf",
+        "reference/sources/wwp_gecko/002.pdf",
+        "reference/sources/wwp_gecko/003.pdf",
+        "reference/sources/wwp_gecko/004.pdf",
+        "reference/sources/wwp_gecko/005.pdf"
+      ],
+      "turn": {
+        "rule": "even",
+        "except": [
+          124
+        ]
+      },
+      "notes": "reference/sources/wwp_gecko/notes",
+      "keypoints": "reference/sources/wwp_gecko/keypoints.json"
+    },
+    "reference_mesh": {
+      "obj": "reference/models/osa_akm/Osa-AKM.obj",
+      "licence": "unknown: a game-extracted 9A33BM3 from a Sketchfab-style download (osa-akm-sam-system.zip, Nov 2026). Reference and stand-in only; never exported, never committed (data/scenery/assets.json rules)",
+      "axes": [
+        "-x",
+        "z",
+        "y"
+      ],
+      "front_sign": 1.0,
+      "parts": {
+        "wheel": [
+          "wheel",
+          "suspension"
+        ],
+        "turret": [
+          "bone_turret",
+          "ex_armor_turret"
+        ],
+        "antenna": [
+          "antenna"
+        ],
+        "launcher": [
+          "rocket",
+          "container"
+        ],
+        "glass": [
+          "glass"
+        ]
+      },
+      "turret_pivot_m": [
+        0.0,
+        -0.9,
+        2.2
+      ]
+    },
+    "hull_trace": "tools/traces/osa_9a33bm2_hull.json"
+  },
+  "dimensions": {
+    "hull_length_m": {
+      "value": 9.27,
+      "sigma_m": 0.05,
+      "source": "flak11 (tier 1), wwp_gecko p.102 data table; valka 9.14 and Kochnev 9.165 (bare chassis) recorded as conflicts",
+      "confidence": "medium"
+    },
+    "hull_width_m": {
+      "value": 2.78,
+      "sigma_m": 0.02,
+      "source": "flak11, kochnev_baz (2 782 mm); wwp_gecko 2.75",
+      "confidence": "medium"
+    },
+    "height_combat_m": {
+      "value": 4.85,
+      "sigma_m": 0.03,
+      "source": "flak11, valka (4 855 mm)",
+      "confidence": "medium"
+    },
+    "height_march_m": {
+      "value": 4.1,
+      "sigma_m": 0.15,
+      "source": "conflict: flak11/rwd_mb3 3.99, valka 4.20, wwp_gecko 4.25; decided by the side-view fit",
+      "confidence": "low"
+    },
+    "tyre_outer_diameter_m": {
+      "value": 1.2,
+      "sigma_m": 0.01,
+      "source": "wwp_gecko p.036 and kochnev_baz: tyre 1200x500-508",
+      "confidence": "high"
+    },
+    "tyre_width_m": {
+      "value": 0.5,
+      "sigma_m": 0.01,
+      "source": "wwp_gecko p.036; designation 1200x500-508",
+      "confidence": "high"
+    },
+    "rim_radius_m": {
+      "value": 0.254,
+      "sigma_m": 0.002,
+      "source": "508 mm (20 in) rim from the tyre designation",
+      "confidence": "high"
+    },
+    "axle_stations_m": {
+      "value": [
+        3.075,
+        0.0,
+        -2.788
+      ],
+      "sigma_m": 0.08,
+      "source": "valka 3 075 + 2 788 mm, supported by a photo check on Commons side views; flak11/Kochnev 2.8 + 2.6 m recorded as a conflict; stations measured from the middle axle, front positive",
+      "confidence": "low"
+    },
+    "track_m": {
+      "value": 2.275,
+      "sigma_m": 0.03,
+      "source": "kochnev_baz (2 275 mm); tyres flush to the 2.78 m hull is consistent",
+      "confidence": "low"
+    },
+    "container_size_m": {
+      "value": [
+        3.235,
+        0.34,
+        0.397
+      ],
+      "sigma_m": 0.005,
+      "source": "wwp_gecko p.081 (printed on the container: 3235 x 340 x 397 mm); length also rwd_mb3",
+      "confidence": "high"
+    },
+    "container_carrier_elevation_deg": {
+      "value": 22.3,
+      "sigma_deg": 0.5,
+      "source": "flak11 9A33-2 (carriers fixed)",
+      "confidence": "medium"
+    }
+  },
+  "keypoints_3d": {},
+  "tools": {
+    "blender": "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe",
+    "colmap": "C:/tools/colmap/COLMAP.bat",
+    "sam2_python": "C:/venvs/recon/Scripts/python.exe",
+    "depth_python": "C:/venvs/recon/Scripts/python.exe",
+    "gs2d_python": "C:/venvs/2dgs/Scripts/python.exe",
+    "gs2d_repo": "C:/tools/2d-gaussian-splatting",
+    "freecadcmd": "C:/Program Files/FreeCAD 1.0/bin/freecadcmd.exe"
+  },
+  "stages": {
+    "pages": {
+      "view_px": 1600
+    },
+    "frames": {
+      "inset": 0.004
+    },
+    "descreen": {
+      "period_px": 3.0
+    },
+    "masks": {
+      "use_sam2": true,
+      "timeout_s": 3600
+    },
+    "depth": {
+      "encoder": "vitl",
+      "max_px": 1024,
+      "timeout_s": 3600
+    },
+    "prior": {
+      "samples": 150000
+    },
+    "cameras": {
+      "use_colmap": true,
+      "colmap_min_views": 12,
+      "fit_px": 400,
+      "iters": 250,
+      "start_distances_m": [
+        10,
+        16,
+        25
+      ],
+      "start_fov_deg": 40,
+      "min_iou": 0.75,
+      "free_articulation": [
+        "turret_yaw_deg"
+      ]
+    },
+    "dense": {
+      "min_views": 40,
+      "downscale": 2,
+      "timeout_s": 14400
+    },
+    "fit": {
+      "min_cameras": 3,
+      "fit_px": 400,
+      "iters": 120
+    },
+    "build": {
+      "timeout_s": 1800
+    },
+    "verify": {
+      "pass_iou": 0.85
+    },
+    "cad": {
+      "timeout_s": 900
+    }
+  }
+}

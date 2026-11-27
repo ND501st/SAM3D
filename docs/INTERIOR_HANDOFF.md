@@ -3,6 +3,10 @@
 *Written 5 Oct 2026 (Australia/Sydney) at the end of the session that modelled, textured and furnished the 9A33BM2
 fighting compartment. Read this with `CLAUDE.md`, `docs/HANDOFF.md`, `data/cabins/README.md` and `unreal/README.md`.*
 
+> **8 Nov 2026:** the next interior work is planned in `docs/OSA_MODEL_ROADMAP.md` (I0-I9), from the photographs and
+> drawings of *SA-8 Gecko in Detail* (`docs/research/OSA_BOOK_WWP_2026-11.md`). The book's square-on photos of every
+> rack replace the rule-placed rack fill of §9.
+
 ## 1. Where things stand
 
 **Branch `feature/osa-interior-3d`**, stacked on PR #19 (`feature/osa-interior`); local commits only, nothing pushed.

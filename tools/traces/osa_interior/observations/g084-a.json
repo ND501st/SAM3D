@@ -1,0 +1,637 @@
+{
+ "photo": "g084-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "at the cab centre, about the commander seat, eye height",
+  "looks": "forward-left at the driver station",
+  "covers": [
+   "cab.dash",
+   "cab.left_wall",
+   "console.pu303",
+   "control.steering_wheel"
+  ],
+  "lens": "normal-wide"
+ },
+ "components": [
+  {
+   "id": "rack.sl1m",
+   "class": "rack",
+   "seen_as": "front end of the left rack with labelled block faces at the far left",
+   "bbox": [
+    0.0,
+    0.1,
+    0.07,
+    0.45
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "aft_of",
+     "new.frame.pillar_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey enamel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.pillar_left",
+   "class": "frame",
+   "seen_as": "left windscreen pillar and wall corner",
+   "bbox": [
+    0.07,
+    0.0,
+    0.2,
+    0.95
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.pillar_left",
+   "class": "loom",
+   "seen_as": "white cable loom clipped down the left pillar",
+   "bbox": [
+    0.04,
+    0.05,
+    0.11,
+    0.95
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [
+    [
+     "on",
+     "new.frame.pillar_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "PVC",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.black_pillar_left",
+   "class": "cable",
+   "seen_as": "thick black cable down the pillar from the junction box",
+   "bbox": [
+    0.07,
+    0.2,
+    0.17,
+    0.95
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [
+    [
+     "below",
+     "new.box.pillar_left_junction"
+    ]
+   ],
+   "size_cue": "thumb-thick",
+   "material": "black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.pillar_left_junction",
+   "class": "box",
+   "seen_as": "grey cast junction/connector box with blue wires at the top of the pillar",
+   "bbox": [
+    0.16,
+    0.15,
+    0.26,
+    0.28
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [
+    [
+     "left_of",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "fist-sized",
+   "material": "grey cast metal",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.white_fitting_header_left",
+   "class": "unknown",
+   "seen_as": "white fitting at the roof top left",
+   "bbox": [
+    0.11,
+    0.0,
+    0.19,
+    0.08
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "fist-sized",
+   "material": "white plastic",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_header",
+   "class": "loom",
+   "seen_as": "white and blue looms across the roof header",
+   "bbox": [
+    0.1,
+    0.0,
+    0.8,
+    0.15
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "above",
+     "kit.sun_visors"
+    ]
+   ],
+   "size_cue": "",
+   "material": "PVC",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "motor.wiper",
+   "class": "motor",
+   "seen_as": "black housing at the header above the left windscreen",
+   "bbox": [
+    0.5,
+    0.0,
+    0.61,
+    0.09
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "fist-sized",
+   "material": "black",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.brass_union_header",
+   "class": "pipe",
+   "seen_as": "small pipe with brass unions at the header",
+   "bbox": [
+    0.57,
+    0.05,
+    0.63,
+    0.14
+   ],
+   "zone": "cab.roof",
+   "relations": [
+    [
+     "right_of",
+     "motor.wiper"
+    ]
+   ],
+   "size_cue": "pencil-thick",
+   "material": "brass, copper",
+   "confidence": "medium",
+   "notes": "Washer or air line?"
+  },
+  {
+   "id": "kit.sun_visors",
+   "class": "kit",
+   "seen_as": "left sun visor hinged at the header (edge of the right one at top right)",
+   "bbox": [
+    0.28,
+    0.04,
+    0.57,
+    0.22
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey sheet",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_left",
+   "class": "window",
+   "seen_as": "left windscreen, thick rubber seal, rounded corners",
+   "bbox": [
+    0.17,
+    0.17,
+    0.7,
+    0.62
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "glass, rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "part of the right windscreen",
+   "bbox": [
+    0.72,
+    0.07,
+    1.0,
+    0.65
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "right_of",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "glass, rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.windscreen_centre_post",
+   "class": "frame",
+   "seen_as": "centre post between the screens",
+   "bbox": [
+    0.64,
+    0.0,
+    0.77,
+    0.68
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.windscreen_centre",
+   "class": "clamp",
+   "seen_as": "hinged clamp at the post foot",
+   "bbox": [
+    0.73,
+    0.58,
+    0.79,
+    0.67
+   ],
+   "zone": "cab.dash",
+   "on": "new.frame.windscreen_centre_post",
+   "relations": [
+    [
+     "on",
+     "new.frame.windscreen_centre_post"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.pillar_left_diagram",
+   "class": "plate",
+   "seen_as": "diagram plate and a smaller black plate on the pillar",
+   "bbox": [
+    0.11,
+    0.29,
+    0.17,
+    0.41
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [
+    [
+     "on",
+     "new.frame.pillar_left"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.ring_pillar_left",
+   "class": "bracket",
+   "seen_as": "grey ring bracket on the pillar",
+   "bbox": [
+    0.11,
+    0.42,
+    0.18,
+    0.55
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [
+    [
+     "below",
+     "new.plate.pillar_left_diagram"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": "Holder of something round (empty)."
+  },
+  {
+   "id": "new.plate.clutch_instruction",
+   "class": "plate",
+   "seen_as": "black clutch-use instruction plate for the driver on the pillar",
+   "bbox": [
+    0.09,
+    0.55,
+    0.15,
+    0.68
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [
+    [
+     "below",
+     "new.bracket.ring_pillar_left"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.instrument.gauge_by_pu303",
+   "class": "instrument",
+   "seen_as": "round gauge 0-1 in a light blue square bezel left of PU-303",
+   "bbox": [
+    0.17,
+    0.63,
+    0.23,
+    0.71
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "about 0.1 m bezel",
+   "material": "blue cast bezel, white face",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.pu303",
+   "class": "console",
+   "seen_as": "black panel with lamps and two hour meters on the left cheek, angled to the driver",
+   "bbox": [
+    0.2,
+    0.65,
+    0.32,
+    0.95
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "control.steering_wheel"
+    ],
+    [
+     "left_of",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "about 0.3 x 0.4 m",
+   "material": "black face, grey frame",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "three-spoke wheel on a steep column",
+   "bbox": [
+    0.21,
+    0.43,
+    0.59,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "0.5 m",
+   "material": "black plastic",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.driver_dash",
+   "class": "console",
+   "seen_as": "driver panel, partly behind the wheel",
+   "bbox": [
+    0.32,
+    0.65,
+    0.53,
+    0.92
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.console.centre_dash",
+   "class": "console",
+   "seen_as": "centre panel with gauges, four ОТКЛ toggles, hour counter, lamps, socket",
+   "bbox": [
+    0.52,
+    0.7,
+    0.89,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.commander_dash",
+   "class": "console",
+   "seen_as": "left end of the commander toggle strip",
+   "bbox": [
+    0.89,
+    0.73,
+    1.0,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "dash housing and shelf under the screens",
+   "bbox": [
+    0.15,
+    0.55,
+    1.0,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.gear_positions",
+   "class": "plate",
+   "seen_as": "gear diagram plate above the driver panel",
+   "bbox": [
+    0.51,
+    0.66,
+    0.56,
+    0.71
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.dash",
+   "class": "handle",
+   "seen_as": "tubular handles on the panels",
+   "bbox": [
+    0.7,
+    0.78,
+    0.92,
+    0.98
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.grey_driver_left_low",
+   "class": "box",
+   "seen_as": "grey box low left with red marks",
+   "bbox": [
+    0.13,
+    0.83,
+    0.2,
+    0.93
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "left_of",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "shoebox",
+   "material": "grey",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.red_cap_fitting_left",
+   "class": "unknown",
+   "seen_as": "red-capped round fitting low left",
+   "bbox": [
+    0.2,
+    0.93,
+    0.24,
+    1.0
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "fist-sized",
+   "material": "grey, red cap",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "clutch instruction plate",
+  "ring bracket on the pillar",
+  "gauge in blue bezel by PU-303",
+  "brass pipe at the header"
+ ],
+ "doubts": [
+  "The black housing at the header is taken as the wiper motor (g084-c notes); not certain.",
+  "Wiper arm visible outside the right screen not listed (outside)."
+ ]
+}

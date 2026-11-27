@@ -1,0 +1,401 @@
+{
+ "photo": "g093-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "over the aisle by the right wall, about head height, beside SP-2M's rear end",
+  "looks": "aft and steeply down along the floor at the foot of the right wall",
+  "covers": [
+   "rack.sp2m",
+   "cover.floor_tunnel",
+   "rack.0096_9m"
+  ],
+  "lens": "wide"
+ },
+ "components": [
+  {
+   "id": "rack.sp2m",
+   "class": "rack",
+   "seen_as": "lower rear part of the right rack, blocks leaning in from the image's left",
+   "bbox": [
+    0.0,
+    0.0,
+    0.33,
+    0.86
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey frame, white faces",
+   "confidence": "high",
+   "notes": "looking aft, the right wall is on the image's left"
+  },
+  {
+   "id": "block.sp2_r3",
+   "class": "block",
+   "seen_as": "block with a meter and green window and rows of fuse holders",
+   "bbox": [
+    0.0,
+    0.03,
+    0.24,
+    0.33
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "above",
+     "block.sp2_r4"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_r4",
+   "class": "block",
+   "seen_as": "block with fuse groups behind guard rails, cables with fabric sleeves at its foot",
+   "bbox": [
+    0.06,
+    0.2,
+    0.32,
+    0.48
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "below",
+     "block.sp2_r3"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_m4",
+   "class": "block",
+   "seen_as": "block with a red connector strip and a table cover",
+   "bbox": [
+    0.0,
+    0.42,
+    0.18,
+    0.83
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "forward_of",
+     "block.sp2_r4"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "new.strap.sp2m_bottom",
+   "class": "strap",
+   "seen_as": "two brown leather straps with buckles hanging from small plates under the rack's foot",
+   "bbox": [
+    0.21,
+    0.42,
+    0.36,
+    0.67
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "below",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "about two fingers wide",
+   "material": "brown leather, steel plates",
+   "confidence": "medium",
+   "notes": "use unknown (tie-downs for something stowed?)"
+  },
+  {
+   "id": "new.floor.walkway_right",
+   "class": "floor",
+   "seen_as": "dark, flat strip along the foot of the rack, below the blocks, running aft",
+   "bbox": [
+    0.15,
+    0.55,
+    0.47,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [
+    [
+     "below",
+     "rack.sp2m"
+    ],
+    [
+     "right_of",
+     "cover.floor_tunnel"
+    ]
+   ],
+   "size_cue": "as wide as about half a block",
+   "material": "dark grey-green paint, worn",
+   "confidence": "low",
+   "notes": "the book's text speaks of an access walkway under the panel to the generator and engine compartment; this strip is the best candidate"
+  },
+  {
+   "id": "cover.floor_tunnel",
+   "class": "cover",
+   "seen_as": "a raised, pressed cover running fore and aft with a row of square stiffening bays, its aisle-side face stepped",
+   "bbox": [
+    0.3,
+    0.15,
+    0.88,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "left_of",
+     "new.floor.walkway_right"
+    ]
+   ],
+   "size_cue": "each bay about a block's height",
+   "material": "grey paint, much worn to bare primer",
+   "confidence": "medium",
+   "notes": "could be the walkway itself rather than a tunnel cover"
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "ribbed grey floor plates at the right of the image, toward the aisle's centre",
+   "bbox": [
+    0.78,
+    0.4,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [
+    [
+     "left_of",
+     "cover.floor_tunnel"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.right_rear_floor",
+   "class": "sponson",
+   "seen_as": "a sloped dark box at the foot of the wall just aft of SP-2M",
+   "bbox": [
+    0.22,
+    0.14,
+    0.56,
+    0.45
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sp2m"
+    ],
+    [
+     "below",
+     "new.kit.t_key_rear_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "dark grey paint",
+   "confidence": "low",
+   "notes": "wheel arch, the foot of SP-3M-2 or a box: not settled"
+  },
+  {
+   "id": "new.box.rear_floor_right",
+   "class": "box",
+   "seen_as": "angular grey box on the floor at the rear, beyond the tunnel cover",
+   "bbox": [
+    0.45,
+    0.0,
+    0.85,
+    0.25
+   ],
+   "zone": "compartment.rear",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "aft_of",
+     "cover.floor_tunnel"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": "g096-a shows angled grey boxes beside the cabinet's foot"
+  },
+  {
+   "id": "new.kit.t_key_rear_right",
+   "class": "kit",
+   "seen_as": "a T-shaped key or crank held in a clip on a sloped grey panel",
+   "bbox": [
+    0.23,
+    0.07,
+    0.33,
+    0.14
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "about a hand wide",
+   "material": "steel",
+   "confidence": "low",
+   "notes": "g096-a shows T-handles on the rear walls"
+  },
+  {
+   "id": "new.box.rear_right_latched",
+   "class": "box",
+   "seen_as": "box edge with a latch and hinge at the top",
+   "bbox": [
+    0.2,
+    0.0,
+    0.4,
+    0.07
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "pylon.turret",
+   "class": "pylon",
+   "seen_as": "curved grey surface with a framed arched edge across the top",
+   "bbox": [
+    0.27,
+    0.0,
+    0.66,
+    0.2
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": "the curve suggests the turret's base; not settled"
+  },
+  {
+   "id": "rack.0096_9m",
+   "class": "rack",
+   "seen_as": "foot of a cabinet at top right with round connectors",
+   "bbox": [
+    0.86,
+    0.0,
+    1.0,
+    0.05
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey",
+   "confidence": "low",
+   "notes": "by the silver-sleeved cables, as in g093-a and g096-a"
+  },
+  {
+   "id": "new.loom.0096_9m_bottom",
+   "class": "loom",
+   "seen_as": "round connectors with silver-sleeved cables",
+   "bbox": [
+    0.86,
+    0.0,
+    1.0,
+    0.17
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [
+    [
+     "below",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "connector about a fist wide",
+   "material": "steel, silver fabric",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.0096_9m_plinth",
+   "class": "box",
+   "seen_as": "white panel at the right edge",
+   "bbox": [
+    0.91,
+    0.23,
+    1.0,
+    0.4
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "below",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white paint",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "belt.operators",
+   "class": "belt",
+   "seen_as": "brown strap crossing at the right edge",
+   "bbox": [
+    0.83,
+    0.39,
+    1.0,
+    0.45
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "",
+   "material": "brown webbing or leather",
+   "confidence": "low",
+   "notes": "a harness strap hanging off the bench, by its colour"
+  }
+ ],
+ "not_in_register": [
+  "a dark strip along the right wall's foot (new.floor.walkway_right)",
+  "two leather straps under SP-2M",
+  "a sloped box at the wall's foot aft of SP-2M",
+  "a T-key in a clip at the rear right"
+ ],
+ "doubts": [
+  "which surface is the book's walkway: the dark strip under the rack or the raised pressed cover",
+  "the top of the frame (curved surface, boxes) is too foreshortened to name with confidence"
+ ]
+}

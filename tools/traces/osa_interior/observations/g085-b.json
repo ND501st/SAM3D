@@ -1,0 +1,342 @@
+{
+ "photo": "g085-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "close in front of the commander right front",
+  "looks": "square-on at the DP-3B",
+  "covers": [
+   "instrument.dp3b"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "instrument.dp3b",
+   "class": "instrument",
+   "seen_as": "DP-3B grey cast case: R/h meter, check button, green and red lamps, range switch, plates",
+   "bbox": [
+    0.2,
+    0.28,
+    0.73,
+    0.56
+   ],
+   "zone": "cab.dash",
+   "on": "new.bracket.dp3b_stud",
+   "relations": [
+    [
+     "above",
+     "new.box.dp3b_junction"
+    ],
+    [
+     "right_of",
+     "new.handle.dash_right"
+    ]
+   ],
+   "size_cue": "about 0.25 x 0.15 m",
+   "material": "grey cast metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.dp3b_stud",
+   "class": "bracket",
+   "seen_as": "bent bracket with a threaded stud hanging the DP-3B from the screen frame",
+   "bbox": [
+    0.33,
+    0.18,
+    0.56,
+    0.29
+   ],
+   "zone": "cab.dash",
+   "on": "hull.windscreen_right",
+   "relations": [
+    [
+     "above",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.dp3b_junction",
+   "class": "box",
+   "seen_as": "fuse/junction box with two 2A fuse holders and a knob",
+   "bbox": [
+    0.22,
+    0.54,
+    0.66,
+    0.64
+   ],
+   "zone": "cab.dash",
+   "on": "instrument.dp3b",
+   "relations": [
+    [
+     "below",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "DP-3B width",
+   "material": "grey cast metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.dp3b_cables",
+   "class": "connector",
+   "seen_as": "two cable connectors under the junction box",
+   "bbox": [
+    0.35,
+    0.64,
+    0.52,
+    0.77
+   ],
+   "zone": "cab.dash",
+   "on": "new.box.dp3b_junction",
+   "relations": [
+    [
+     "below",
+     "new.box.dp3b_junction"
+    ]
+   ],
+   "size_cue": "thumb-sized",
+   "material": "metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.dp3b_braided",
+   "class": "cable",
+   "seen_as": "braided cables from the connectors down",
+   "bbox": [
+    0.38,
+    0.69,
+    0.72,
+    0.93
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "below",
+     "new.connector.dp3b_cables"
+    ]
+   ],
+   "size_cue": "thumb-thick",
+   "material": "metal braid",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.dash_right",
+   "class": "handle",
+   "seen_as": "large tubular grab handle left of the DP-3B",
+   "bbox": [
+    0.07,
+    0.35,
+    0.19,
+    0.69
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "hand-length",
+   "material": "grey tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.cab_right_instruction",
+   "class": "plate",
+   "seen_as": "tall black instruction plate on the wall at the right",
+   "bbox": [
+    0.89,
+    0.38,
+    1.0,
+    0.6
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "right_of",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "palm-wide, longer",
+   "material": "black metal",
+   "confidence": "high",
+   "notes": "Text unreadable."
+  },
+  {
+   "id": "heater.cab",
+   "class": "heater",
+   "seen_as": "large grey cylindrical housing behind the DP-3B",
+   "bbox": [
+    0.64,
+    0.36,
+    1.0,
+    0.64
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "behind",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "wider than the DP-3B",
+   "material": "grey painted",
+   "confidence": "low",
+   "notes": "Identity inferred (heater box at the commander, g087 notes)."
+  },
+  {
+   "id": "new.pipe.green_white_banded",
+   "class": "pipe",
+   "seen_as": "green-and-white banded pipe at the bottom",
+   "bbox": [
+    0.25,
+    0.92,
+    0.87,
+    1.0
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "below",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "wrist-thick",
+   "material": "painted tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.under_commander_dash",
+   "class": "loom",
+   "seen_as": "white, black and red-tagged cables low left",
+   "bbox": [
+    0.0,
+    0.72,
+    0.45,
+    1.0
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "new.handle.dash_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "PVC",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_right_wall",
+   "class": "loom",
+   "seen_as": "black cables at the right",
+   "bbox": [
+    0.73,
+    0.22,
+    0.88,
+    0.95
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "lower frame and hinge of the screen at the top",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.12
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "above",
+     "new.bracket.dp3b_stud"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel frame",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.windscreen_right_lower",
+   "class": "clamp",
+   "seen_as": "clamp at the top left on the screen frame",
+   "bbox": [
+    0.01,
+    0.03,
+    0.1,
+    0.09
+   ],
+   "zone": "cab.dash",
+   "on": "hull.windscreen_right",
+   "relations": [],
+   "size_cue": "hand-sized",
+   "material": "steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.windscreen_right_latch",
+   "class": "clamp",
+   "seen_as": "hinged loop latches at the top right",
+   "bbox": [
+    0.82,
+    0.1,
+    0.98,
+    0.25
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "hand-length",
+   "material": "grey steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "grey dash side surface at the left",
+   "bbox": [
+    0.0,
+    0.14,
+    0.17,
+    0.8
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "DP-3B junction box and stud bracket",
+  "wall instruction plate"
+ ],
+ "doubts": [
+  "The grey cylinder behind the DP-3B is taken as the cab heater; low.",
+  "The latches at the top may belong to the screen shutter rather than the glass."
+ ]
+}

@@ -1,0 +1,167 @@
+{
+ "about": "Flats of the cabin's panels (tools/recon/osa/panel_flats.py): which picture, which picked edge chains bound the plate, what gives its size. Numbers only; the pictures stay in out/recon (wwp_gecko is copyrighted).",
+ "flats": [
+  {
+   "id": "dash",
+   "photo": "g085-a",
+   "what": "the dashboard's plane: the instrument plate and, in the same plane to its right, the switch plate",
+   "tile": {
+    "box": [
+     0,
+     250,
+     2130,
+     1099
+    ],
+    "sigma": 2.5,
+    "min": 220
+   },
+   "edges": {
+    "top": [
+     18,
+     61
+    ],
+    "right": [
+     11
+    ],
+    "bottom": [
+     {
+      "n": 2,
+      "side": "bottom"
+     }
+    ],
+    "left": [
+     17,
+     54
+    ]
+   },
+   "round_min": 0.12,
+   "width_mm": 445,
+   "extend_mm": [
+    18,
+    18,
+    345,
+    30
+   ],
+   "px_per_mm": 3.0,
+   "scale_basis": "the instrument plate is 445 mm wide if its instruments are of their usual classes: the three small gauges' bezels then measure 68 mm (the 60 mm class of Soviet lorry instruments), the tachometer's 83 mm (the 80 mm class), the speedometer's 122 mm. No drawing gives the plate's size: good to about 3 %"
+  },
+  {
+   "id": "dash_g084c",
+   "photo": "g084-c",
+   "what": "the dashboard's plane seen in g084-c: the plate behind the steering wheel, left of the instrument plate, and what the wheel hides in the other views",
+   "match_flat": "dash",
+   "match_box_mm": [
+    -222,
+    -125,
+    222,
+    125
+   ],
+   "box_mm": [
+    -640,
+    -140,
+    240,
+    150
+   ],
+   "px_per_mm": 3.0
+  },
+  {
+   "id": "dash_g083a",
+   "photo": "g083-a",
+   "what": "the dashboard's plane seen in g083-a: the plate behind the steering wheel, left of the instrument plate, and what the wheel hides in the other views",
+   "match_flat": "dash",
+   "match_box_mm": [
+    -222,
+    -125,
+    222,
+    125
+   ],
+   "box_mm": [
+    -640,
+    -140,
+    560,
+    150
+   ],
+   "px_per_mm": 3.0
+  },
+  {
+   "id": "dash_g084a",
+   "photo": "g084-a",
+   "what": "the dashboard's plane seen in g084-a: the plate behind the steering wheel, left of the instrument plate, and what the wheel hides in the other views",
+   "match_flat": "dash",
+   "match_box_mm": [
+    -222,
+    -125,
+    222,
+    125
+   ],
+   "box_mm": [
+    -640,
+    -140,
+    560,
+    150
+   ],
+   "px_per_mm": 3.0
+  },
+  {
+   "id": "pu303",
+   "photo": "g084-d",
+   "what": "PU-303, the gas-turbine unit's control panel, from the book's drawing of it (every control labelled); the drawing is cut off at its left edge",
+   "tile": {
+    "box": [
+     0,
+     0,
+     1554,
+     1870
+    ],
+    "sigma": 2.5,
+    "min": 220
+   },
+   "edges": {
+    "top": [
+     {
+      "n": 2,
+      "side": "top"
+     }
+    ],
+    "right": [
+     0
+    ],
+    "bottom": [
+     57
+    ]
+   },
+   "mirror": {
+    "side": "left",
+    "from": "right",
+    "pairs": [
+     [
+      13,
+      21
+     ],
+     [
+      8,
+      20
+     ]
+    ]
+   },
+   "aspect_from_sides": true,
+   "width_mm": 300,
+   "px_per_mm": 4.0,
+   "scale_basis": "mon_2112_80 Fig. 3 draws PU-303 0.31 m wide in plan (about 4.7 mm per pixel: good to 10 mm); a drawing, so its proportions are as drawn"
+  },
+  {"id": "so_panel_g094a", "photo": "g094-a", "what": "the so_panel through the certified camera of g094-a (grade A), in the data's millimetres", "view": {"panel": "so_panel"}, "extend_mm": [40, 140, 40, 260], "px_per_mm": 3},
+  {"id": "op_panel_g094a", "photo": "g094-a", "what": "the op_panel through the certified camera of g094-a (grade A), in the data's millimetres", "view": {"panel": "op_panel"}, "extend_mm": [150, 140, 40, 260], "px_per_mm": 3},
+  {"id": "fo_panel_g094a", "photo": "g094-a", "what": "the fo_panel through the certified camera of g094-a (grade A), in the data's millimetres", "view": {"panel": "fo_panel"}, "extend_mm": [40, 140, 60, 260], "px_per_mm": 3},
+  {"id": "sl3m_panel_g096a", "photo": "g096-a", "what": "the sl3m_panel through the certified camera of g096-a (grade A), in the data's millimetres", "view": {"panel": "sl3m_panel"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
+  {"id": "sl3m_panel_g097b", "photo": "g097-b", "what": "the sl3m_panel through the certified camera of g097-b (grade A), in the data's millimetres", "view": {"panel": "sl3m_panel"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
+  {"id": "sl3m_panel_g098b", "photo": "g098-b", "what": "the sl3m_panel through the certified camera of g098-b (grade A), in the data's millimetres", "view": {"panel": "sl3m_panel"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
+  {"id": "pwr_cabinet_g093a", "photo": "g093-a", "what": "the pwr_cabinet through the certified camera of g093-a (grade A), in the data's millimetres", "view": {"panel": "pwr_cabinet"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
+  {"id": "pwr_cabinet_g096a", "photo": "g096-a", "what": "the pwr_cabinet through the certified camera of g096-a (grade A), in the data's millimetres", "view": {"panel": "pwr_cabinet"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
+  {"id": "pwr_cabinet_g097b", "photo": "g097-b", "what": "the pwr_cabinet through the certified camera of g097-b (grade A), in the data's millimetres", "view": {"panel": "pwr_cabinet"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
+  {"id": "sp2m_panel_g092a", "photo": "g092-a", "what": "the sp2m_panel through the certified camera of g092-a (grade A), in the data's millimetres", "view": {"panel": "sp2m_panel"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
+  {"id": "sp2m_panel_g092e", "photo": "g092-e", "what": "the sp2m_panel through the certified camera of g092-e (grade A), in the data's millimetres", "view": {"panel": "sp2m_panel"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
+  {"id": "op_panel_g094b", "photo": "g094-b", "what": "the op_panel through the grade-B camera of g094-b (the close-up of 0062-6M1 and OS81-9M), in the data's millimetres: for reading parts, placed only after a fit on the grade-A flat's blocks", "view": {"panel": "op_panel"}, "extend_mm": [40, 60, 40, 60], "px_per_mm": 4},
+  {"id": "so_panel_g095a", "photo": "g095-a", "what": "the so_panel through the grade-B camera of g095-a (straight on, 0094 to OP63), in the data's millimetres: for reading parts, placed only after a fit on the grade-A flat's blocks", "view": {"panel": "so_panel"}, "extend_mm": [40, 60, 40, 60], "px_per_mm": 4},
+  {"id": "fo_panel_g095b", "photo": "g095-b", "what": "the fo_panel through the grade-B camera of g095-b (0004-14M to OS52-14M), in the data's millimetres: for reading parts, placed only after a fit on the grade-A flat's blocks", "view": {"panel": "fo_panel"}, "extend_mm": [40, 60, 40, 60], "px_per_mm": 4}
+ ]
+}

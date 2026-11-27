@@ -66,6 +66,7 @@ Flight Fly(const std::string& scenario_text, unsigned seed) {
     }
     def.seed = seed;
     ScenarioRunner runner(std::move(def), std::move(console));
+    runner.SetRandomFaults(false);  // the radars' calibration over seeds, not the dice's faults (test_faults.cpp)
     while (!runner.Finished() && runner.Time() < 700.0) {
         runner.Step(0.1);
         const double r = runner.TargetRange("t1");

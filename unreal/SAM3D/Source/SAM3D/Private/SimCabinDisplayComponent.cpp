@@ -340,8 +340,8 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			: Kind == simcore::CabinDisplayKind::PlotBoard ? 2.5f
 			: Kind == simcore::CabinDisplayKind::StatusBoard ? 4.0f
 			: Kind == simcore::CabinDisplayKind::Document ? 1.0f : 6.0f;  // paper: its own colour, lit by the cabin
-		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"),
-			bTv ? FLinearColor(0.93f * Gain, 0.97f * Gain, Gain, 1.0f) : FLinearColor(Gain, Gain, Gain, 1.0f));
+		BaseTint = bTv ? FLinearColor(0.93f * Gain, 0.97f * Gain, Gain, 1.0f) : FLinearColor(Gain, Gain, Gain, 1.0f);
+		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"), BaseTint);
 		// The tube's character (M_CabinCRT): curvature, halo (amount, radius), raster lines (strength, count), noise
 		// (strength, grain), flicker, vignette, reflection of the cabin lamps. Dials and meters are flat glass.
 		struct FCrt { float Curve, Glow, GlowR, Scan, Lines, Noise, Grain, Flick, Vig, Refl; };
@@ -358,6 +358,8 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		case simcore::CabinDisplayKind::PlotBoard: Crt = {0.0f, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f, 100.0f, 0.0f, 0.1f, 0.4f}; break;
 		default: break;
 		}
+		BaseGlow = Crt.Glow;
+		BaseGlowR = Crt.GlowR;
 		ScreenMaterial->SetScalarParameterValue(TEXT("Curvature"), Crt.Curve);
 		ScreenMaterial->SetScalarParameterValue(TEXT("GlowAmount"), Crt.Glow);
 		ScreenMaterial->SetScalarParameterValue(TEXT("GlowRadius"), Crt.GlowR);
@@ -506,12 +508,14 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	const simcore::CabinDisplay& Display = Layout->displays[LayoutIndex];
 	const simcore::ConsoleData& Console = Runner->Console();
 	const bool bOn = simcore::CabinLayout::DisplayOn(Display, Console.panel, Console.equipment);
+	Picture = simcore::ScopePictureOf(Display, Console.panel);
+	ApplyPicture(Display, bOn);
 	// A network client never steps its own sim: its scopes come from the knowledge stream, and its sweep runs on the
 	// frame clock (the stream's views arrive a few times a second).
 	const bool bMirror = Sim->IsMirrorOnly();
 	const simcore::em::ViewScope* Mirrored = bMirror ? Sim->GetMirroredScope() : nullptr;
 	Feed = Mirrored != nullptr ? simcore::FromViewScope(*Mirrored)
-	                           : simcore::ScopeFeedOf(Runner->Engagement(), Runner->GetLauncher(), Runner->Time(), Runner->Fuel());
+	                           : simcore::ScopeFeedOf(Runner->Engagement(), Runner->GetLauncher(), Runner->Time(), Runner->Fuel(), Runner->OwnDash());
 	auto StepSeconds = [&]() {
 		if (bMirror)
 		{
@@ -618,7 +622,9 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			DrawDial(Canvas, Size, Display, Console, bOn, simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment));
 			break;
 		case simcore::CabinDisplayKind::Meter:
-			DrawMeter(Canvas, Size, Display, Console, bOn);
+			// A meter without lamps of its own is read by the cabin's light, powered or not.
+			DrawMeter(Canvas, Size, Display, Console, bOn,
+				Display.lit_when.empty() || simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment));
 			break;
 		case simcore::CabinDisplayKind::Counters:
 			DrawCounters(Canvas, Size, Display, *Runner, bOn);
@@ -646,6 +652,33 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Context);
 }
 
+// The picture's knobs on the tube itself (voenizdat_osa_1991 p50-52, p98-99, p103): its gain follows the brightness (the
+// range and elevation indicators and the TV are all phosphor; the search scope's face and scale are not, so it scales its
+// own traces in DrawPpi), its halo spreads as the spot goes out of focus; the TV's contrast is its camera's, and its cross
+// goes out below the cut-off of ЯРК. ПЕРЕКРЕСТ.
+void USimCabinDisplayComponent::ApplyPicture(const simcore::CabinDisplay& Display, bool bOn)
+{
+	if (!Display.picture.Any() || ScreenMaterial == nullptr)
+	{
+		return;
+	}
+	const bool bTv = Kind == simcore::CabinDisplayKind::Tv;
+	const double Level = Kind == simcore::CabinDisplayKind::Ppi ? 1.0
+		: Kind == simcore::CabinDisplayKind::RangeScope ? FMath::Max(Picture.trace, Picture.trace_2) : Picture.trace;
+	const double Blur = FMath::Clamp(FMath::Max(Picture.blur, Kind == simcore::CabinDisplayKind::RangeScope || bTv ? Picture.blur_2 : 0.0), 0.0, 1.0);
+	const float L = static_cast<float>(Level);
+	ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"),
+		FLinearColor(BaseTint.R * L, BaseTint.G * L, BaseTint.B * L, BaseTint.A));
+	ScreenMaterial->SetScalarParameterValue(TEXT("GlowAmount"), BaseGlow + static_cast<float>(0.9 * Blur));
+	ScreenMaterial->SetScalarParameterValue(TEXT("GlowRadius"), FMath::Max(BaseGlowR, 0.004f) * static_cast<float>(1.0 + 4.0 * Blur));
+	if (bTv && Capture != nullptr)
+	{
+		const double K = 1.35 * Picture.contrast;
+		Capture->PostProcessSettings.ColorContrast = FVector4(K, K, K, 1.0);
+	}
+	(void)bOn;  // the TV's cross: UpdateTv
+}
+
 bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn, uint32& Key) const
 {
 	Key = GetTypeHash(bOn);
@@ -653,13 +686,21 @@ bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display,
 	{
 	case simcore::CabinDisplayKind::Dial:
 		Key = HashCombine(Key, GetTypeHash(simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment)));
-		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(Console.panel.GetValue(Display.control) * 100.0)));
+		// The needle's reading: a control, the simulation's readout (gyro, fuel) or the gauge's levels.
+		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(
+			simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l, Feed.dash) * 100.0)));
 		return true;
 	case simcore::CabinDisplayKind::Meter:
-		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(simcore::MeterValue(Display, Console) * 1000.0)));
+		Key = HashCombine(Key, GetTypeHash(simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment)));
+		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(simcore::MeterValue(Display, Console, Feed.dash.valid ? Feed.dash.supply_v : -1.0) * 1000.0)));
 		return true;
 	case simcore::CabinDisplayKind::Ppi:
-		// Off: the dead tube behind its filter, with the scale round it.
+		// Off: the dead tube behind its filter, with the scale round it and the course-parameter disc as it is turned.
+		if (!Display.course_control.empty())
+		{
+			Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(Console.panel.GetValue(Display.course_control) * 10.0)));
+		}
+		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(Picture.scale_light * 100.0)));
 		return !bOn;
 	case simcore::CabinDisplayKind::RangeScope:
 	case simcore::CabinDisplayKind::ElevationScope:
@@ -700,19 +741,9 @@ void USimCabinDisplayComponent::DrawPpiFace(const FVector2D& Size)
 	{
 		const FVector2D C = FaceSize * 0.5;
 		const double S = FMath::Min(FaceSize.X, FaceSize.Y);
-		// The azimuth scale around the tube, as on OP81-16M (samsim_panels): 0 to 59 clockwise from the top (hundreds of
-		// thousandths, 6000 to the circle), light marks on a dark ring, with a tick every half division.
-		const FLinearColor ScaleInk(0.32f, 0.32f, 0.3f);
+		// The dark glass. The azimuth scale, its ticks and figures, is on the housing's dark cone outside the glass, not
+		// on the screen (samsim_panels at 10x; SM_RackSL2M, build_cabin_interior.py).
 		Disc(Canvas, C, 0.5 * S, FLinearColor(0.012f, 0.012f, 0.012f));
-		for (int32 I = 0; I < 120; ++I)
-		{
-			const double A = UE_DOUBLE_TWO_PI * I / 120.0;
-			Line(Canvas, Polar(C, A, 0.437 * S), Polar(C, A, (I % 2 == 0 ? 0.452 : 0.446) * S), 1.0f, ScaleInk);
-		}
-		for (int32 I = 0; I < 60; ++I)
-		{
-			Text(Canvas, FString::FromInt(I), Polar(C, UE_DOUBLE_TWO_PI * I / 60.0, 0.474 * S), ScaleInk, 0.8f);
-		}
 	}
 	FlushShapes();
 	UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Context);
@@ -728,12 +759,31 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	if (FaceTarget != nullptr)
 	{
 		FlushShapes();
-		Canvas->K2_DrawTexture(FaceTarget, FVector2D::ZeroVector, Size, FVector2D::ZeroVector, FVector2D::UnitVector, FLinearColor::White,
-			BLEND_Opaque);
+		// ОСВЕЩЕНИЕ ШКАЛЫ: the scale's marks lit from 0.15 of their brightness (the glass's own reflection) to full.
+		const float Lit = static_cast<float>(0.15 + 0.85 * Picture.scale_light);
+		Canvas->K2_DrawTexture(FaceTarget, FVector2D::ZeroVector, Size, FVector2D::ZeroVector, FVector2D::UnitVector,
+			FLinearColor(Lit, Lit, Lit, 1.0f), BLEND_Opaque);
 	}
+	// The knobs (simcore::ScopePictureOf): ЯРКОСТЬ the sweep, noise and echoes; КОНТРАСТНОСТЬ the echoes against the
+	// noise; РРУ the receiver's gain under both; ЯРКОСТЬ МЕТОК the range marks; ЯРКОСТЬ ВИЗИРА the SSC cursor.
+	const float TraceK = static_cast<float>(Picture.trace);
+	const float NoiseK = static_cast<float>(Picture.trace * Picture.gain * FMath::Clamp(2.0 - Picture.contrast, 0.3, 1.7));
+	const float EchoK = static_cast<float>(Picture.trace * FMath::Min(1.0, 0.25 + Picture.gain) * Picture.contrast);
+	const float MarksK = static_cast<float>(Picture.marks);
+	const float CursorK = static_cast<float>(Picture.cursor);
+	// The course-parameter scale: dark lines engraved on the turning disc over the filter (voenizdat_osa_1991 p41-42),
+	// drawn last, on the tube lit or dead.
+	auto CourseScale = [&]()
+	{
+		for (const simcore::CabinScaleLine& L : simcore::CourseScaleLines(Display, Runner.Console()))
+		{
+			Line(Canvas, C + FVector2D(L.x0, -L.y0) * R, C + FVector2D(L.x1, -L.y1) * R, 1.2f, FLinearColor(0.03f, 0.02f, 0.01f));
+		}
+	};
 	if (!bOn)
 	{
 		DeadFilter(Canvas, C, R);
+		CourseScale();
 		return;
 	}
 	const simcore::ConsoleData& Console = Runner.Console();
@@ -791,7 +841,7 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 			const double A0 = Sweep - UE_DOUBLE_TWO_PI * (K + 1) / Sectors;
 			const double A1 = Sweep - UE_DOUBLE_TWO_PI * K / Sectors;
 			const double Fresh = FMath::Exp(-(Period * (K + 0.5) / Sectors) / Persist);
-			Wedge(Canvas, C, A0, A1, 0.0, R, Phosphor * static_cast<float>((bRadiating ? 0.07 : 0.03) * Fresh));
+			Wedge(Canvas, C, A0, A1, 0.0, R, Phosphor * static_cast<float>((bRadiating ? 0.07 : 0.03) * Fresh * TraceK));
 		}
 	}
 
@@ -809,8 +859,8 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 			const double A0 = UE_DOUBLE_TWO_PI * I / Sectors;
 			const double A1 = UE_DOUBLE_TWO_PI * (I + 1) / Sectors;
 			const double Fresh = Left(0.5 * (A0 + A1));
-			Wedge(Canvas, C, A0, A1, Rr - 2.2, Rr + 2.2, Phosphor * static_cast<float>(0.05 * Fresh));
-			Wedge(Canvas, C, A0, A1, Rr - 0.8, Rr + 0.8, SearchGlow(0.12 + 0.55 * Fresh) * 0.8f);
+			Wedge(Canvas, C, A0, A1, Rr - 2.2, Rr + 2.2, Phosphor * static_cast<float>(0.05 * Fresh * MarksK));
+			Wedge(Canvas, C, A0, A1, Rr - 0.8, Rr + 0.8, SearchGlow(0.12 + 0.55 * Fresh) * (0.8f * MarksK));
 		}
 	}
 
@@ -837,20 +887,20 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 				const double A = A0 + Grain.FRand() * UE_DOUBLE_TWO_PI / Sectors;
 				const double Rr = R * FMath::Sqrt(Grain.FRand());
 				const float Spark = Grain.FRandRange(0.15f, 0.55f);
-				Polygon(Canvas, Polar(C, A, Rr), 1.1, 4, SearchGlow(Fresh * Spark));
+				Polygon(Canvas, Polar(C, A, Rr), 1.1, 4, SearchGlow(Fresh * Spark) * NoiseK);
 			}
 			for (int32 I = 0; ClutterR > 0.0 && I < 4; ++I)
 			{
 				const double A = A0 + Grain.FRand() * UE_DOUBLE_TWO_PI / Sectors;
 				const FVector2D P = Polar(C, A, ClutterR * FMath::Sqrt(Grain.FRand()));
-				Polygon(Canvas, P, 1.5, 4, SearchGlow(Fresh * Grain.FRandRange(0.25f, 0.6f)) * 0.8f);  // speckle, never a solid patch
+				Polygon(Canvas, P, 1.5, 4, SearchGlow(Fresh * Grain.FRandRange(0.25f, 0.6f)) * (0.8f * NoiseK));  // speckle, never a solid patch
 			}
 		}
 	}
 	for (int32 I = 0; I < 12; ++I)
 	{
 		const double A = UE_DOUBLE_TWO_PI * I / 12.0;
-		Line(Canvas, Polar(C, A, R * 0.95), Polar(C, A, R), 1.5f, Phosphor * 0.35f);
+		Line(Canvas, Polar(C, A, R * 0.95), Polar(C, A, R), 1.5f, Phosphor * (0.35f * MarksK));
 	}
 
 	// Fading echoes, and IFF replies as arcs just beyond the echo: 20 degrees wide in open reception, narrow when
@@ -861,12 +911,14 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		if (B.strobe)
 		{
 			// A noise jammer's strobe (roadmap E3): a grainy bright spoke along its azimuth across the whole scale, as
-			// bright as the jamming is strong; it has no range.
-			const float Strength = static_cast<float>(B.brightness);
+			// bright as the jamming is strong; it has no range. Its sector narrows as РРУ and ЯРКОСТЬ are turned down, so
+			// the cursor can be laid on its middle (voenizdat_osa_1991 p266, simcore::JamSectorScale).
+			const float Strength = static_cast<float>(B.brightness * Picture.trace * Picture.gain);
+			const double Spread = 0.02 * simcore::JamSectorScale(Picture);
 			Glow(Canvas, C, Polar(C, B.azimuth_rad, R), 2.5f, SearchGlow(0.9) * Strength);
 			for (int32 I = 0; I < 40; ++I)
 			{
-				const FVector2D P = Polar(C, B.azimuth_rad + Noise.FRandRange(-0.02, 0.02), R * Noise.FRand());
+				const FVector2D P = Polar(C, B.azimuth_rad + Noise.FRandRange(-Spread, Spread), R * Noise.FRand());
 				Polygon(Canvas, P, 1.3, 4, SearchGlow(Noise.FRandRange(0.4f, 1.0f)) * Strength);
 			}
 			continue;
@@ -875,7 +927,7 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		{
 			continue;
 		}
-		const float Strength = static_cast<float>(B.brightness);
+		const float Strength = static_cast<float>(B.brightness) * EchoK;
 		if (B.iff_reply)
 		{
 			const double Half = FMath::DegreesToRadians(bGated ? 2.0 : 10.0);
@@ -902,9 +954,9 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		for (int32 I = 4; I >= 1; --I)
 		{
 			const double A = Sweep - FMath::DegreesToRadians(0.8 * I);
-			Line(Canvas, C, Polar(C, A, R), 2.0f, SearchGlow(0.55 / I) * 0.5f);
+			Line(Canvas, C, Polar(C, A, R), 2.0f, SearchGlow(0.55 / I) * (0.5f * TraceK));
 		}
-		Glow(Canvas, C, Polar(C, Sweep, R), 1.8f, SearchGlow(1.0) * (bRadiating ? 0.95f : 0.6f));
+		Glow(Canvas, C, Polar(C, Sweep, R), 1.8f, SearchGlow(1.0) * ((bRadiating ? 0.95f : 0.6f) * TraceK));
 	}
 
 	// The SSC azimuth line and its range gate, which the range officer puts on the target mark.
@@ -912,14 +964,15 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	{
 		const simcore::TrackSensorDef& Track = Console.track;
 		const double Az = FMath::DegreesToRadians(Console.panel.GetValue(Track.az_wheel));
-		Line(Canvas, C, Polar(C, Az, R), 1.5f, Amber * 0.7f);
+		Line(Canvas, C, Polar(C, Az, R), 1.5f, Amber * (0.7f * CursorK));
 		const double Gate = Console.panel.GetValue(Track.range_wheel);
 		if (Gate >= MinM && Gate <= MaxM)
 		{
 			const double Rg = RadiusOf(Gate);
-			Line(Canvas, Polar(C, Az - 0.06, Rg), Polar(C, Az + 0.06, Rg), 2.0f, Amber);
+			Line(Canvas, Polar(C, Az - 0.06, Rg), Polar(C, Az + 0.06, Rg), 2.0f, Amber * CursorK);
 		}
 	}
+	CourseScale();
 }
 
 // ---------------------------------------------------------------------------------------------- range indicator
@@ -948,12 +1001,17 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 	const double MissileRange = SweepChannel != 0 ? Feed.MissileRangeM(SweepChannel) : -1.0;
 	const bool bFollowMissile = SweepChannel != 0 && MissileRange >= 0.0;
 	const double FineCentre = SweepChannel != 0 ? (bFollowMissile ? MissileRange : Gate) : Gate;
-	const double X0 = 0.05 * Size.X;
-	const double X1 = 0.95 * Size.X;
+	// The receiver's gain (simcore::ScopePicture::gain: РРУ by hand, ДОП. УСИЛ.): the grass with it, the echoes until
+	// they saturate. The shift knobs move each sweep (shift_x, shift_y: fractions of the screen).
+	const double NoiseGain = Picture.gain;
+	const double EchoGain = FMath::Min(1.0, 0.25 + Picture.gain);
 
-	// One sweep: baseline, grass while radiating, echo spikes, gate marks. [FromM, ToM] maps to X0..X1.
-	auto Sweep = [&](double Y, double FromM, double ToM, double SpikeH, double TickM, bool bMissileSweep)
+	// One sweep: baseline, grass while radiating, echo spikes, gate marks. [FromM, ToM] maps to X0..X1, moved by Shift.
+	auto Sweep = [&](double Y, double FromM, double ToM, double SpikeH, double TickM, bool bMissileSweep, const FVector2D& Shift)
 	{
+		Y += Shift.Y;
+		const double X0 = 0.05 * Size.X + Shift.X;
+		const double X1 = 0.95 * Size.X + Shift.X;
 		auto XOf = [&](double M) { return X0 + (M - FromM) / (ToM - FromM) * (X1 - X0); };
 		// The graticule: a division every TickM, longer every fifth (op_panel's legend: "1 div = 1000 m" on the rough
 		// sweep, "1 div = 5 m" on the precise one).
@@ -976,7 +1034,7 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			double PrevY = Y;
 			for (double X = X0; X <= X1; X += 2.5)
 			{
-				const double Ny = bRadiating ? Grass.FRandRange(0.0, 1.0) * Grass.FRandRange(0.0, 9.0) : 0.0;
+				const double Ny = bRadiating ? Grass.FRandRange(0.0, 1.0) * Grass.FRandRange(0.0, 9.0) * NoiseGain : 0.0;
 				if (Back == 0)
 				{
 					Glow(Canvas, FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.6f, TraceGreen);
@@ -998,7 +1056,7 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			// A pulse: its rise and fall a few pixels apart, the top a little rounded, slightly different each
 			// sweep (the receiver's noise rides on it).
 			const double X = XOf(RangeM);
-			const double H = SpikeH * Noise.FRandRange(0.93, 1.0);
+			const double H = SpikeH * EchoGain * Noise.FRandRange(0.93, 1.0);
 			Glow(Canvas, FVector2D(X - 4.0, Y), FVector2D(X - 1.5, Y - H), 1.4f, TraceGreen);
 			Glow(Canvas, FVector2D(X - 1.5, Y - H), FVector2D(X + 1.5, Y - H * 0.97), 1.4f, TraceGreen);
 			Glow(Canvas, FVector2D(X + 1.5, Y - H * 0.97), FVector2D(X + 4.0, Y), 1.4f, TraceGreen);
@@ -1027,10 +1085,12 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 		}
 	};
 	++RangeSweeps;  // a new pair of sweeps each picture (the tube's own sweeps are far faster than the redraw)
-	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y, 1000.0, false);
+	const FVector2D Shift1(Picture.shift_x * Size.X, -Picture.shift_y * Size.Y);
+	const FVector2D Shift2(Picture.shift_x_2 * Size.X, -Picture.shift_y_2 * Size.Y);
+	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y, 1000.0, false, Shift1);
 	const double Half = 0.5 * Display.magnified_window_m;
-	Sweep(0.85 * Size.Y, FineCentre - Half, FineCentre + Half, 0.25 * Size.Y, 5.0, SweepChannel != 0);
-	Line(Canvas, FVector2D(0.5 * Size.X, 0.6 * Size.Y), FVector2D(0.5 * Size.X, 0.88 * Size.Y), 1.0f, Amber * 0.5f);
+	Sweep(0.85 * Size.Y, FineCentre - Half, FineCentre + Half, 0.25 * Size.Y, 5.0, SweepChannel != 0, Shift2);
+	Line(Canvas, FVector2D(0.5 * Size.X, 0.6 * Size.Y) + Shift2, FVector2D(0.5 * Size.X, 0.88 * Size.Y) + Shift2, 1.0f, Amber * 0.5f);
 
 	// The range counter: where the gate is (it follows the target while tracking in range), as five lit drum digits
 	// like the readout strip's, not a text line painted on the picture.
@@ -1056,19 +1116,77 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	const FVector2D C = Size * 0.5;
 	const double R = 0.48 * FMath::Min(Size.X, Size.Y);
 	Disc(Canvas, C, R, bOn ? AmberGlass * 0.12f : AmberGlass);
+	// The graticule engraved on the yellow filter (samsim_panels at 8x, 14 Nov 2026; corrected by the project owner the
+	// same day: what looked like a line across the middle is a reflection): a vertical line down the left, 0.63 of the
+	// radius in from the middle and three quarters of it up and down, with six long marks and a short one between each,
+	// every 0.15 R, standing to its left. Dark on the filter, seen against the tube's light when it is on.
+	auto Graticule = [&](const FLinearColor& Ink)
+	{
+		const double Sx = C.X - 0.63 * R;
+		Line(Canvas, FVector2D(Sx, C.Y - 0.75 * R), FVector2D(Sx, C.Y + 0.75 * R), 1.5f, Ink);
+		for (int32 I = -5; I <= 5; ++I)
+		{
+			const double Y = C.Y + I * 0.15 * R;
+			Line(Canvas, FVector2D(Sx - ((I % 2) != 0 ? 0.12 : 0.06) * R, Y), FVector2D(Sx, Y), 1.2f, Ink);
+		}
+	};
 	const simcore::ConsoleData& Console = Runner.Console();
 	if (!bOn || !ElevScope.IsValid() || ElevRaster < 0 || ElevRaster >= static_cast<int32>(Display.rasters.size()) ||
 		ElevRaster >= static_cast<int32>(Console.track.beams_deg.size()))
 	{
+		Graticule(FLinearColor(0.09f, 0.06f, 0.0f));
 		return;
 	}
 	const simcore::ElevationRaster& Raster = Display.rasters[ElevRaster];
 	const double ElLow = Console.track.beams_deg[ElevRaster].first;
 	const double ElHigh = Console.track.beams_deg[ElevRaster].second;
 	const double Half = 0.66 * R;  // the square fits inside the round screen
-	const double Left = C.X - Half;
-	const double Right = C.X + Half;
-	auto YOfScreen = [&](double Fraction) { return C.Y + Half - 2.0 * Half * Fraction; };  // 0 bottom, 1 top
+	// ГОРИЗ. СМЕЩ. and ВЕРТ. СМЕЩ. (OS81-10M's slotted potentiometers) move the picture the tube writes; the graticule on
+	// the filter and the tube's face stay where they are.
+	const FVector2D S = C + FVector2D(Picture.shift_x * Size.X, -Picture.shift_y * Size.Y);
+	const double Left = S.X - Half;
+	const double Right = S.X + Half;
+	// АМПЛ. РАЗВ. ε (the third slotted potentiometer) sets the elevation sweep's amplitude: the picture stands taller or
+	// shorter about its middle, the raster's lines with it, and so reads high or low against the filter's marks.
+	auto YOfScreen = [&](double Fraction) { return S.Y + Picture.sweep * (Half - 2.0 * Half * Fraction); };  // 0 bottom, 1 top
+	// What the tube writes stays on its round face, however far the potentiometers move or stretch the picture.
+	auto OnTube = [&](FVector2D& A, FVector2D& B)
+	{
+		const FVector2D D = B - A;
+		const FVector2D F = A - C;
+		const double Qa = D.SizeSquared();
+		const double Qb = 2.0 * FVector2D::DotProduct(F, D);
+		const double Qc = F.SizeSquared() - R * R;
+		const double Disc = Qb * Qb - 4.0 * Qa * Qc;
+		if (Qa <= 0.0 || Disc <= 0.0)
+		{
+			return false;
+		}
+		const double T0 = FMath::Max(0.0, (-Qb - FMath::Sqrt(Disc)) / (2.0 * Qa));
+		const double T1 = FMath::Min(1.0, (-Qb + FMath::Sqrt(Disc)) / (2.0 * Qa));
+		if (T0 >= T1)
+		{
+			return false;
+		}
+		const FVector2D A0 = A;
+		A = A0 + D * T0;
+		B = A0 + D * T1;
+		return true;
+	};
+	auto TubeLine = [&](FVector2D A, FVector2D B, float Thickness, const FLinearColor& Ink)
+	{
+		if (OnTube(A, B))
+		{
+			Line(Canvas, A, B, Thickness, Ink);
+		}
+	};
+	auto TubeGlow = [&](FVector2D A, FVector2D B, float Thickness, const FLinearColor& Ink)
+	{
+		if (OnTube(A, B))
+		{
+			Glow(Canvas, A, B, Thickness, Ink);
+		}
+	};
 	const double Top = YOfScreen(Raster.screen_high);
 	const double Bottom = YOfScreen(Raster.screen_low);
 	auto YOfEl = [&](double El)
@@ -1076,7 +1194,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 		const double F = (El - ElLow) / (ElHigh - ElLow);
 		return Bottom + (Top - Bottom) * FMath::Clamp(F, 0.0, 1.0);
 	};
-	auto XOfOffset = [&](double OffsetM) { return C.X + OffsetM / (0.5 * Display.range_window_m) * Half; };
+	auto XOfOffset = [&](double OffsetM) { return S.X + OffsetM / (0.5 * Display.range_window_m) * Half; };
 
 	// The tube's face lit faintly from behind the amber filter, darker to the rim (the dead tube's filter, lit).
 	for (int32 I = 0; I < 6; ++I)
@@ -1090,10 +1208,11 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	// flecks that change every picture (the same "grass" as the range sweep's, drawn as the raster writes it).
 	FRandomStream Grass((ElevFrames / 2) * 4099 + LayoutIndex);
 	int32 Row = 0;
-	for (double Y = Top; Y <= Bottom; Y += 4.0, ++Row)
+	const double Pitch = 4.0 * FMath::Max(0.5, Picture.sweep);  // the raster's lines are as many, spread with the sweep
+	for (double Y = Top; Y <= Bottom; Y += Pitch, ++Row)
 	{
 		const float Even = 0.07f + 0.04f * static_cast<float>((Row * 37) % 5) / 4.0f;
-		Line(Canvas, FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * Even);
+		TubeLine(FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * Even);
 		if (!bRadiating)
 		{
 			continue;
@@ -1103,32 +1222,32 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 		{
 			const double X = Grass.FRandRange(Left, Right - 6.0);
 			const double W = Grass.FRandRange(2.0, 7.0);
-			Line(Canvas, FVector2D(X, Y), FVector2D(X + W, Y), 1.2f, SearchGlow(Grass.FRandRange(0.15, 0.4)));
+			TubeLine(FVector2D(X, Y), FVector2D(X + W, Y), 1.2f, SearchGlow(Grass.FRandRange(0.15, 0.4)));
 		}
 	}
 	// The band's edges and the range marks: engraved on the filter, so seen in the tube's own light only faintly.
-	Line(Canvas, FVector2D(Left, Top), FVector2D(Right, Top), 1.5f, Phosphor * 0.28f);
-	Line(Canvas, FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
-	Line(Canvas, FVector2D(Left, Top), FVector2D(Left, Bottom), 1.5f, Phosphor * 0.28f);
-	Line(Canvas, FVector2D(Right, Top), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
+	TubeLine(FVector2D(Left, Top), FVector2D(Right, Top), 1.5f, Phosphor * 0.28f);
+	TubeLine(FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
+	TubeLine(FVector2D(Left, Top), FVector2D(Left, Bottom), 1.5f, Phosphor * 0.28f);
+	TubeLine(FVector2D(Right, Top), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
 	for (int32 I = -2; I <= 2; ++I)
 	{
-		const double X = C.X + I * 0.5 * Half;
-		Line(Canvas, FVector2D(X, Bottom + 2.0), FVector2D(X, Bottom + (I == 0 ? 9.0 : 5.0)), 1.0f, Phosphor * 0.3f);
+		const double X = S.X + I * 0.5 * Half;
+		TubeLine(FVector2D(X, Bottom + 2.0), FVector2D(X, Bottom + (I == 0 ? 9.0 : 5.0)), 1.0f, Phosphor * 0.3f);
 	}
 	// The range gate sits in the middle of the range window.
-	Line(Canvas, FVector2D(C.X, Bottom), FVector2D(C.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
+	TubeLine(FVector2D(S.X, Bottom), FVector2D(S.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
 
 	// Where the antenna points now: the raster's brightest line, with the phosphor's bloom round it, while the tracking
 	// radar radiates; a dim line otherwise.
 	const double AntennaY = YOfEl(Feed.antenna_el_deg);
 	if (bRadiating)
 	{
-		Glow(Canvas, FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.4f, SearchGlow(0.85));
+		TubeGlow(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.4f, SearchGlow(0.85));
 	}
 	else
 	{
-		Line(Canvas, FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.0f, Phosphor * 0.35f);
+		TubeLine(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.0f, Phosphor * 0.35f);
 	}
 
 	// Target marks: a blip drawn along the raster's lines (the echo is as long as the pulse, a few lines high), struck
@@ -1142,9 +1261,10 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 		for (int32 L = -2; L <= 2; ++L)
 		{
 			const double W = (L == 0 ? 9.0 : L == 1 || L == -1 ? 7.0 : 4.0);
-			Glow(Canvas, P + FVector2D(-W, 2.0 * L), P + FVector2D(W, 2.0 * L), 1.4f, Ink * (L == 0 ? 1.0f : 0.7f));
+			TubeGlow(P + FVector2D(-W, 2.0 * L), P + FVector2D(W, 2.0 * L), 1.4f, Ink * (L == 0 ? 1.0f : 0.7f));
 		}
 	}
+	Graticule(FLinearColor(0.03f, 0.02f, 0.0f));
 }
 
 // ---------------------------------------------------------------------------------------------- instruments
@@ -1170,16 +1290,47 @@ void USimCabinDisplayComponent::DrawDial(UCanvas* Canvas, const FVector2D& Size,
 		return;
 	}
 	// A control's value, or for a readout dial (the OR-31M Qc scale) the simulation's, from the feed (the server's on a client).
-	const double A = UE_DOUBLE_TWO_PI * simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l) / Display.value_per_turn;
+	const double A = UE_DOUBLE_TWO_PI * simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l, Feed.dash) / Display.value_per_turn;
 	Line(Canvas, C, Polar(C, A, 0.8 * R), 3.0f, FLinearColor(0.7f, 0.05f, 0.02f));
 	Disc(Canvas, C, 0.06 * R, Ink);
 }
 
 void USimCabinDisplayComponent::DrawMeter(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
-	const simcore::ConsoleData& Console, bool bOn)
+	const simcore::ConsoleData& Console, bool bOn, bool bLit)
 {
-	const FLinearColor Face(0.8f, 0.78f, 0.7f);
-	const FLinearColor Ink(0.05f, 0.05f, 0.05f);
+	// A meter with its own lamps (`lit_when`, the guidance error meters' ОСВЕЩ.) is dim with them off, as a dial is.
+	const FLinearColor Face = bLit ? FLinearColor(0.8f, 0.78f, 0.7f) : FLinearColor(0.07f, 0.07f, 0.06f);
+	const FLinearColor Ink = bLit ? FLinearColor(0.05f, 0.05f, 0.05f) : FLinearColor(0.2f, 0.2f, 0.18f);
+	if (Display.face == "arched")
+	{
+		// ДЦ (samsim_panels at 8x, 14 Nov 2026): a white face in a window with rounded top corners, the black case below
+		// it; its scale a row of dots on an arc over the pivot, the figures under them, V in the middle, and over the pivot
+		// the needle's black hump; the needle swings ±40 deg from under the hump.
+		const FLinearColor Case(0.02f, 0.02f, 0.02f);
+		Line(Canvas, FVector2D(0.0, 0.5 * Size.Y), FVector2D(Size.X, 0.5 * Size.Y), static_cast<float>(Size.Y), Case);
+		const double Rc = 0.24 * Size.Y;                               // the window's top corners
+		Line(Canvas, FVector2D(0.0, 0.5 * Size.Y + 0.5 * Rc), FVector2D(Size.X, 0.5 * Size.Y + 0.5 * Rc), static_cast<float>(Size.Y - Rc), Face);
+		Line(Canvas, FVector2D(Rc, 0.5 * Rc), FVector2D(Size.X - Rc, 0.5 * Rc), static_cast<float>(Rc), Face);
+		Disc(Canvas, FVector2D(Rc, Rc), Rc, Face);
+		Disc(Canvas, FVector2D(Size.X - Rc, Rc), Rc, Face);
+		const FVector2D Pivot(0.5 * Size.X, 0.95 * Size.Y);
+		const double R = 0.8 * Size.Y;
+		constexpr double Swing = 40.0;
+		for (int32 I = 0; I <= Display.marks; ++I)
+		{
+			const double A = FMath::DegreesToRadians(-Swing + 2.0 * Swing * I / FMath::Max(1, Display.marks));
+			Disc(Canvas, Polar(Pivot, A, 0.92 * R), 0.022 * Size.Y, Ink);
+			Text(Canvas, Label(simcore::MeterMark(Display, I)), Polar(Pivot, A, 0.78 * R), Ink, 1.0f);
+		}
+		Text(Canvas, FString(UTF8_TO_TCHAR(Display.unit.c_str())), FVector2D(0.5 * Size.X, 0.5 * Size.Y), Ink, 1.3f);
+		const double Reading = bOn ? simcore::MeterValue(Display, Console, Feed.dash.valid ? Feed.dash.supply_v : -1.0) : 0.0;
+		const double Fraction = simcore::MeterFraction(Display, Reading);
+		const double A = FMath::DegreesToRadians(-Swing + 2.0 * Swing * Fraction);
+		Line(Canvas, Pivot, Polar(Pivot, A, 0.95 * R), 2.0f, Ink);
+		Disc(Canvas, Pivot, 0.36 * Size.Y, Case);                      // the hump over the pivot
+		Disc(Canvas, Pivot, 0.30 * Size.Y, FLinearColor(0.06f, 0.06f, 0.06f));
+		return;
+	}
 	// Fill the face: one line as thick as the face is tall.
 	Line(Canvas, FVector2D(0.0, 0.5 * Size.Y), FVector2D(Size.X, 0.5 * Size.Y), static_cast<float>(Size.Y), Face);
 	const FVector2D Pivot(0.5 * Size.X, 0.92 * Size.Y);
@@ -1189,12 +1340,12 @@ void USimCabinDisplayComponent::DrawMeter(UCanvas* Canvas, const FVector2D& Size
 	{
 		const double A = FMath::DegreesToRadians(-SwingDeg + 2.0 * SwingDeg * I / Display.marks);
 		Line(Canvas, Polar(Pivot, A, 0.88 * R), Polar(Pivot, A, R), 2.0f, Ink);
-		Text(Canvas, Label(Display.full_scale * I / Display.marks), Polar(Pivot, A, 0.75 * R), Ink, 1.2f);
+		Text(Canvas, Label(simcore::MeterMark(Display, I)), Polar(Pivot, A, 0.75 * R), Ink, 1.2f);
 	}
 	Text(Canvas, FString::Printf(TEXT("%s  %s"), *FString(UTF8_TO_TCHAR(Display.label.c_str())), *FString(UTF8_TO_TCHAR(Display.unit.c_str()))),
 		FVector2D(0.5 * Size.X, 0.55 * Size.Y), Ink, 1.3f);
-	const double Reading = bOn ? simcore::MeterValue(Display, Console) : 0.0;
-	const double Fraction = FMath::Clamp(Reading / Display.full_scale, 0.0, 1.0);
+	const double Reading = bOn ? simcore::MeterValue(Display, Console, Feed.dash.valid ? Feed.dash.supply_v : -1.0) : 0.0;
+	const double Fraction = simcore::MeterFraction(Display, Reading);
 	const double A = FMath::DegreesToRadians(-SwingDeg + 2.0 * SwingDeg * Fraction);
 	Line(Canvas, Pivot, Polar(Pivot, A, 0.95 * R), 2.5f, FLinearColor(0.7f, 0.05f, 0.02f));
 }
@@ -1862,11 +2013,12 @@ void USimCabinDisplayComponent::DrawStatusBoard(UCanvas* Canvas, const FVector2D
 
 void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore::ScenarioRunner& Runner, bool bOn)
 {
+	const bool bCross = bOn && Picture.cursor > 0.0;  // ЯРК. ПЕРЕКРЕСТ turned below its cut-off puts it out
 	for (UStaticMeshComponent* Part : Parts)
 	{
 		if (Part != nullptr && Part != Parts[0])
 		{
-			Part->SetVisibility(bOn);  // crosshair
+			Part->SetVisibility(bCross);  // crosshair
 		}
 	}
 	if (Capture == nullptr)
@@ -1893,7 +2045,7 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 			const int32 K = I % kMarksPerArm;
 			const bool bAcross = Arm < 2;
 			const std::vector<double>& Marks = bAcross ? Across : Upward;
-			const bool bShow = bOn && K < static_cast<int32>(Marks.size());
+			const bool bShow = bCross && K < static_cast<int32>(Marks.size());
 			Mark->SetVisibility(bShow);
 			if (!bShow)
 			{

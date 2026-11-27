@@ -1,0 +1,153 @@
+{
+ "photo": "g092-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "over the operators' bench, raised",
+  "looks": "down along the bench; seat backs at image left (aisle side), the footwell toward the left wall at image right; image top probably aft",
+  "covers": [
+   "bench.operators",
+   "belt.operators"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "bench.operators",
+   "class": "bench",
+   "seen_as": "long olive leatherette cushion with rounded ends",
+   "bbox": [
+    0.29,
+    0.02,
+    0.86,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "fills the frame length; a buckle is a few cm",
+   "material": "olive leatherette",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "belt.operators",
+   "class": "belt",
+   "seen_as": "canvas lap belts, one with a metal buckle lying on the cushion, others from the hinge side",
+   "bbox": [
+    0.06,
+    0.0,
+    0.53,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas, steel buckles",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cushion.operator_seat_back_folded",
+   "class": "cushion",
+   "seen_as": "padded olive seat backs folded beside the bench (two seen)",
+   "bbox": [
+    0.0,
+    0.0,
+    0.25,
+    0.85
+   ],
+   "zone": "compartment.aisle",
+   "relations": [
+    [
+     "beside",
+     "bench.operators"
+    ]
+   ],
+   "size_cue": "",
+   "material": "olive leatherette on steel pan",
+   "confidence": "medium",
+   "notes": "which seat (deputy commander, senior operator, operator) not readable"
+  },
+  {
+   "id": "new.bracket.operator_seat_back_hinges",
+   "class": "bracket",
+   "seen_as": "grey hinge brackets, links and a tubular strut of the folding backs",
+   "bbox": [
+    0.02,
+    0.05,
+    0.45,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "relations": [
+    [
+     "beside",
+     "bench.operators"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "ribbed mat/grating in the footwell beyond the bench",
+   "bbox": [
+    0.8,
+    0.35,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.footwell_left",
+   "class": "cable",
+   "seen_as": "grey cable crossing the footwell floor",
+   "bbox": [
+    0.86,
+    0.5,
+    1.0,
+    0.66
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.panel_beside_bench_far",
+   "class": "unknown",
+   "seen_as": "grey vertical panel along the bench's far side at the top right",
+   "bbox": [
+    0.78,
+    0.0,
+    0.98,
+    0.45
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "could be the consoles' base or the bench's side"
+  }
+ ],
+ "not_in_register": [
+  "canvas lap belts with buckles on the operators' bench",
+  "folding seat-back hinges"
+ ],
+ "doubts": [
+  "Orientation is inferred (seat backs on the aisle side, footwell toward the consoles); the view could be the other way along the bench.",
+  "Whether the cushion is the bench's or a seat's own folding cushion is not clear."
+ ]
+}

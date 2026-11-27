@@ -1,0 +1,14 @@
+{
+ "photo": "g098-c",
+ "image": "raw",
+ "observer": "Claude (Opus 5.5), 9 Nov 2026: the raw scan (2412 x 2455) blurred 3x3, whole with a 0.05 grid; little shell shows here, so read at that scale",
+ "covers": "the aft end of the right wall's rack and the folded table in front of it; only the floor's corner at the bottom and the rack's right end show the shell",
+ "notes": "session A (9A33BM2/BM3, not identified). The blue band of letters across the top of the frame is the book's printed page heading, not a part of the vehicle. The oval sticker on the table is a later civilian one on this vehicle.",
+ "details": [
+  {"id": "d01", "on": "hull.floor", "kind": "surface", "what": "the floor at the frame's bottom right: dark, mottled and stained, no plate edges visible", "bbox": [0.70, 0.80, 1.0, 1.0], "relief": "flush", "build": "texture", "confidence": "medium", "status": "blocked"},
+  {"id": "d02", "on": "hull.wall_right", "kind": "edge", "what": "the rack's right end at the bulkhead: a plain vertical frame strip with a step in it level with the upper block", "line": [[0.92, 0.07], [0.925, 0.30], [0.915, 0.45]], "relief": "raised", "build": "mesh", "confidence": "medium", "status": "absent"},
+  {"id": "d03", "on": "new.post.rear_right_table", "kind": "part", "what": "a folding sheet table hinged out from the rack, covering the lower block's front: not the floor, but it sits at about hip height over the box (a short mention)", "line": [[0.08, 0.76], [0.42, 0.67], [0.86, 0.57], [0.96, 0.54]], "relief": "raised", "size_cue": "as wide as the lower block", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d04", "on": "new.post.rear_right_table", "kind": "pattern", "what": "a row of triangular or louvred shapes under the table's near edge", "line": [[0.45, 0.68], [0.60, 0.61], [0.90, 0.52]], "pattern": {"count": 12, "note": "about a dozen"}, "relief": "raised", "build": "mesh", "confidence": "low", "status": "absent"},
+  {"id": "d05", "on": "box.stowage_5937", "kind": "part", "what": "the stowage tin with the stencilled number standing on or near the floor beside the table (a short mention, for placing it)", "bbox": [0.67, 0.62, 0.99, 0.90], "relief": "raised", "build": "mesh", "confidence": "high", "status": "absent"}
+ ]
+}

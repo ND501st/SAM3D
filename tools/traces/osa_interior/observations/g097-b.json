@@ -1,0 +1,337 @@
+{
+ "photo": "g097-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle forward of the cabinet, a little to the vehicle right of its face, about eye height",
+  "looks": "aft at the cabinet, slightly down; the left-wall rack and the gauge in the background right",
+  "covers": [
+   "rack.0096_9m",
+   "rack.sl3m",
+   "new.instrument.pressure_gauge"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.0096_9m",
+   "class": "rack",
+   "seen_as": "whole cabinet: louvred side wall with a red plate, sloping top with closed lid, door hinged on three hinges at the left",
+   "bbox": [
+    0.15,
+    0.03,
+    0.69,
+    0.79
+   ],
+   "zone": "compartment.rear",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "forward_of",
+     "new.unknown.pylon_hanging_drum"
+    ],
+    [
+     "right_of",
+     "rack.sl3m"
+    ]
+   ],
+   "size_cue": "fuse holders about 4 cm",
+   "material": "grey enamel sheet steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.0096_9m_lid",
+   "class": "cover",
+   "seen_as": "closed top lid with black plate",
+   "bbox": [
+    0.29,
+    0.03,
+    0.63,
+    0.19
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.0096_9m_side",
+   "class": "plate",
+   "seen_as": "red rectangular plate on the cabinet side wall",
+   "bbox": [
+    0.15,
+    0.35,
+    0.2,
+    0.52
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [],
+   "size_cue": "",
+   "material": "red enamel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.0096_9m_plugs",
+   "class": "connector",
+   "seen_as": "six round plugs under the cabinet with stencils, red and blue bands",
+   "bbox": [
+    0.22,
+    0.79,
+    0.57,
+    0.9
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [],
+   "size_cue": "each about 8 cm across",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cabinet_plugs",
+   "class": "loom",
+   "seen_as": "silver braided-sleeve cables from the plugs down to the floor",
+   "bbox": [
+    0.22,
+    0.85,
+    0.6,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "silver fabric sleeving",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.pylon_hanging_drum",
+   "class": "unknown",
+   "seen_as": "tall grey cylinder behind the cabinet at the left with a flanged skirt low",
+   "bbox": [
+    0.0,
+    0.05,
+    0.16,
+    0.86
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": "part of the turret column; same object as in g099-a by shape"
+  },
+  {
+   "id": "pylon.turret",
+   "class": "pylon",
+   "seen_as": "grey fabric cover rising to the roof behind the cabinet",
+   "bbox": [
+    0.09,
+    0.0,
+    0.3,
+    0.3
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.rail.pylon_tube",
+   "class": "rail",
+   "seen_as": "bent tube running down from behind the cabinet at the left",
+   "bbox": [
+    0.07,
+    0.6,
+    0.16,
+    0.8
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey tube",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.rear_floor_step",
+   "class": "sponson",
+   "seen_as": "grey plinth box at the lower left",
+   "bbox": [
+    0.0,
+    0.7,
+    0.12,
+    0.9
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "rack.sl3m",
+   "class": "rack",
+   "seen_as": "white blocks with orange fuse holders and black knobs, two columns, at the top right",
+   "bbox": [
+    0.63,
+    0.0,
+    1.0,
+    0.42
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.tray_left_rear",
+   "class": "box",
+   "seen_as": "grey sheet box with a tubular rail and a tray right of the cabinet",
+   "bbox": [
+    0.66,
+    0.42,
+    0.8,
+    0.62
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "left_of",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.gauge_panel",
+   "class": "bracket",
+   "seen_as": "angled grey sheet panel at the right carrying the gauge",
+   "bbox": [
+    0.78,
+    0.41,
+    1.0,
+    0.8
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.instrument.pressure_gauge",
+   "class": "instrument",
+   "seen_as": "pressure gauge with green sticker, top right",
+   "bbox": [
+    0.94,
+    0.42,
+    1.0,
+    0.5
+   ],
+   "zone": "compartment.left_wall",
+   "on": "new.bracket.gauge_panel",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.gauge_blue",
+   "class": "hose",
+   "seen_as": "blue tube and brass tee under the gauge",
+   "bbox": [
+    0.86,
+    0.48,
+    0.97,
+    0.75
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "seat.operator",
+   "class": "seat",
+   "seen_as": "folded seat in khaki canvas with tan straps and grey steel frame, bottom right",
+   "bbox": [
+    0.55,
+    0.65,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas, steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.gas_mask_bags",
+   "class": "kit",
+   "seen_as": "khaki canvas bags with leather straps on the seat",
+   "bbox": [
+    0.68,
+    0.68,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "seat.operator",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "quilted lining at the top",
+   "bbox": [
+    0.4,
+    0.0,
+    1.0,
+    0.12
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the cabinet side's red plate and louvres"
+ ],
+ "doubts": [
+  "the grey cylinder at the left is taken as the hanging drum of g099-a; it may be the pylon's own column"
+ ]
+}

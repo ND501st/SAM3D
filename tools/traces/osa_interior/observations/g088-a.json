@@ -1,0 +1,423 @@
+{
+ "photo": "g088-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "just behind the front seats, raised",
+  "looks": "forward and down along the axis",
+  "covers": [
+   "seat.driver",
+   "seat.commander",
+   "control.gear_lever",
+   "intercom.a1"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "seat.driver",
+   "class": "seat",
+   "seen_as": "square cushion forward and backrest folded down rearward, nail-head trimmed rolled edge nearest",
+   "bbox": [
+    0.01,
+    0.21,
+    0.45,
+    0.85
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "about 0.45 m wide by eye",
+   "material": "olive leatherette",
+   "confidence": "high",
+   "notes": "early type (book text on g089)"
+  },
+  {
+   "id": "seat.commander",
+   "class": "seat",
+   "seen_as": "same seat type, folded the same way",
+   "bbox": [
+    0.53,
+    0.23,
+    0.95,
+    0.86
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "right_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "as the driver's",
+   "material": "olive leatherette",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "black steering wheel rim and spokes at the top left",
+   "bbox": [
+    0.07,
+    0.0,
+    0.42,
+    0.19
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black plastic",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "control.gear_lever",
+   "class": "control",
+   "seen_as": "lever with a black ball knob in a rubber boot",
+   "bbox": [
+    0.48,
+    0.0,
+    0.56,
+    0.19
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "new.control.seat_t_rod"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel, black knob",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cushion.cab_floor_mat",
+   "class": "cushion",
+   "seen_as": "ribbed black rubber mat ahead of the seats",
+   "bbox": [
+    0.29,
+    0.0,
+    0.76,
+    0.22
+   ],
+   "zone": "cab",
+   "on": "new.floor.cab",
+   "relations": [
+    [
+     "forward_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.seat_t_rod",
+   "class": "control",
+   "seen_as": "vertical rod with a T top between the seats",
+   "bbox": [
+    0.46,
+    0.39,
+    0.49,
+    0.8
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "right_of",
+     "seat.driver"
+    ],
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "about a seat cushion high",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": "handbrake or seat lock"
+  },
+  {
+   "id": "new.frame.seat_cross_frame",
+   "class": "frame",
+   "seen_as": "tubular cross-frame between the seats",
+   "bbox": [
+    0.46,
+    0.29,
+    0.53,
+    0.53
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "beside",
+     "new.control.seat_t_rod"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.channel_between_seats",
+   "class": "sponson",
+   "seen_as": "orange-brown painted channel in the floor between the seats",
+   "bbox": [
+    0.46,
+    0.28,
+    0.53,
+    0.8
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "below",
+     "new.frame.seat_cross_frame"
+    ]
+   ],
+   "size_cue": "",
+   "material": "orange-brown paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "intercom.a1",
+   "class": "intercom",
+   "seen_as": "R-124 box at shoulder height on the right wall",
+   "bbox": [
+    0.86,
+    0.42,
+    0.95,
+    0.58
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "right_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey cast alloy",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "box.zip",
+   "class": "box",
+   "seen_as": "light grey cabinet below and aft of the box, bottom right",
+   "bbox": [
+    0.86,
+    0.57,
+    1.0,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "below",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.cab_right_pillar_grip",
+   "class": "handle",
+   "seen_as": "black hand grip at the top right",
+   "bbox": [
+    0.88,
+    0.02,
+    0.96,
+    0.15
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.frame.cab_right_pillar",
+   "relations": [],
+   "size_cue": "hand-sized",
+   "material": "black rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.heater_commander_footwell",
+   "class": "duct",
+   "seen_as": "pressed sloped casing with a pipe at the top right",
+   "bbox": [
+    0.78,
+    0.0,
+    0.97,
+    0.3
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey sheet",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_right_wall",
+   "class": "loom",
+   "seen_as": "blue cable along the right wall",
+   "bbox": [
+    0.77,
+    0.25,
+    0.85,
+    0.5
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "blue",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.a1_lead",
+   "class": "cable",
+   "seen_as": "black lead from the box",
+   "bbox": [
+    0.77,
+    0.47,
+    0.88,
+    0.53
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "connects",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_left_wall_down",
+   "class": "loom",
+   "seen_as": "white, grey and black cables running down the left wall",
+   "bbox": [
+    0.0,
+    0.25,
+    0.21,
+    0.8
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.cab_left_red_stencil",
+   "class": "box",
+   "seen_as": "grey connector box with red stencilled marks, top left",
+   "bbox": [
+    0.0,
+    0.06,
+    0.07,
+    0.12
+   ],
+   "zone": "cab.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.step.cab_rear_tread",
+   "class": "step",
+   "seen_as": "ribbed rubber tread strips riveted to a raised step, foreground",
+   "bbox": [
+    0.37,
+    0.85,
+    0.92,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "aft_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black rubber on steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.under_seats_grey",
+   "class": "box",
+   "seen_as": "grey box in the foreground under the driver's seat",
+   "bbox": [
+    0.0,
+    0.86,
+    0.4,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "aft_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey",
+   "confidence": "low",
+   "notes": "a faint \"A-1\"(?) mark per the notes, not legible here"
+  },
+  {
+   "id": "new.floor.cab",
+   "class": "floor",
+   "seen_as": "cab floor round the seats",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": "as the base for the mat"
+  }
+ ],
+ "not_in_register": [
+  "T-rod, cross-frame and floor channel between the seats; tread strips on a step behind them"
+ ],
+ "doubts": [
+  "the T-rod's function (handbrake or seat lock)",
+  "the grey boxes in the foreground are not identified"
+ ]
+}

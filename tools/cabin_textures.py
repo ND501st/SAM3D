@@ -40,7 +40,16 @@ INK = (24, 24, 22)           # engraved letters filled black
 INK_ON_BLACK = (205, 203, 192)
 DIAGRAM_INK = (52, 48, 40)
 LOOK_COLOURS = {'black': (22, 22, 21), 'white': PLATE, 'grey': (150, 153, 146)}   # grey: the cab dashboards (rwd_mb3 9a33_31/32)
-CAP_HEIGHT_M = 0.0034        # letter height (samsim_panels at 1 mm per pixel: 3-4 mm)
+LOOK_COLOURS.update({'bluegrey': (112, 124, 135), 'lightgrey': (161, 163, 165)})   # Unreal's LookColor in sRGB
+CAP_HEIGHT_M = 0.0040        # letter height (samsim_panels at 1 mm per pixel: 3-4 mm; SŁ-2M on SAM's AK photo at 3x: 3.6-4.2)
+LABEL_BOLD = True            # the engraved capitals are heavy (SAM Simulator's AK photo at 3x: strokes about 0.6 mm)
+STROKE_EM = 0.045            # and a stroke round them: heavier and wider than Arial Narrow Bold (ПЕЛЕНГ on the photo at 12x
+                             # 8% wider than drawn without it, its strokes thicker; the project owner's review, 14 Nov 2026)
+
+
+def stroke_of(f):
+    return max(0, int(round(STROKE_EM * f.size)))
+TOGGLE_LEVER_M = 0.008       # a toggle's lever leans up past its bush: the legend above stands clear of its tip
 GAP_M = 0.003                # between an item and its label
 
 
@@ -236,13 +245,13 @@ class Face:
         r, g, b = self.img.getpixel((int(min(max(x, 0), self.w - 1)), int(min(max(y, 0), self.h - 1))))
         return INK_ON_BLACK if r + g + b < 330 else INK
 
-    def text(self, u, v, s, cap_m=CAP_HEIGHT_M, max_w_m=0.12, anchor='mm', bold=False):
+    def text(self, u, v, s, cap_m=CAP_HEIGHT_M, max_w_m=0.12, anchor='mm', bold=LABEL_BOLD):
         """Text centred on (u, v) (anchor 'mm'), on two lines if long, shrunk to fit max_w_m."""
         if not s:
             return
-        lines = [s]
+        lines = s.split(chr(10))
         f = self.font(cap_m, bold)
-        if f.getlength(s) > max_w_m * self.ppm and ' ' in s:
+        if len(lines) == 1 and f.getlength(s) > max_w_m * self.ppm and ' ' in s:
             words = s.split(' ')
             best = min(range(1, len(words)), key=lambda k: abs(len(' '.join(words[:k])) - len(' '.join(words[k:]))))
             lines = [' '.join(words[:best]), ' '.join(words[best:])]
@@ -254,13 +263,119 @@ class Face:
         y -= (len(lines) - 1) * line_h / 2
         ink = self.ink_at(u, v)
         for i, line in enumerate(lines):
-            self.draw.text((x, y + i * line_h), line, fill=ink, font=f, anchor=anchor)
+            if line.strip() == '⊥' and anchor == 'mm':     # the earth sign: Arial Narrow has no U+22A5, so drawn
+                hgt = 0.75 * f.size
+                yy = y + i * line_h
+                lw = max(1, int(round(0.11 * hgt)))
+                self.draw.line([(x, yy - hgt / 2), (x, yy + hgt / 2)], fill=ink, width=lw)
+                self.draw.line([(x - 0.45 * hgt, yy + hgt / 2), (x + 0.45 * hgt, yy + hgt / 2)], fill=ink, width=lw)
+                continue
+            self.draw.text((x, y + i * line_h), line, fill=ink, font=f, anchor=anchor, stroke_width=stroke_of(f), stroke_fill=ink)
+
+    def text_turned(self, u, v, s, cap_m, angle_deg, bold=LABEL_BOLD):
+        """Text centred on (u, v), turned anticlockwise (a chart's upright cells read bottom to top at 90)."""
+        f = self.font(cap_m, bold)
+        lines = s.split('\n')
+        line_h = f.size * 1.05
+        w = int(max(f.getlength(line) for line in lines)) + 4
+        h = int(line_h * len(lines)) + 4
+        mask = Image.new('L', (w, h), 0)
+        d = ImageDraw.Draw(mask)
+        for i, line in enumerate(lines):
+            d.text((w / 2, 2 + line_h * (i + 0.5)), line, fill=255, font=f, anchor='mm', stroke_width=stroke_of(f), stroke_fill=255)
+        mask = mask.rotate(angle_deg, expand=True, resample=Image.BICUBIC)
+        x, y = self.px(u, v)
+        ink = Image.new('RGB', mask.size, self.ink_at(u, v))
+        self.img.paste(ink, (int(round(x - mask.width / 2)), int(round(y - mask.height / 2))), mask)
+
+    def frame(self, u, v, w, h):
+        (x0, y0), (x1, y1) = self.px(u - w / 2, v + h / 2), self.px(u + w / 2, v - h / 2)
+        lw = max(1, int(round(0.0008 * self.ppm)))     # the charts' rules: about 0.8 mm (SAM's AK photo at 5x)
+        self.draw.rectangle([x0, y0, x1, y1], outline=self.ink_at(u, v), width=lw)
+
+    def arrowhead(self, u, v, r, a_deg, sense, ink):
+        """A filled arrowhead on a printed arc at angle a_deg, pointing along the arc (sense +1: the way the angles
+        grow, clockwise; -1: back), 4.5 mm long (SAM's AK photo: the locks' ОТКР. arrows)."""
+        a = math.radians(a_deg)
+        du, dv = math.sin(a), math.cos(a)                # radial
+        tu, tv = dv * sense, -du * sense                 # along the arc
+        L, Wd = 0.0045, 0.0019
+        tip = (u + du * r + tu * L * 0.6, v + dv * r + tv * L * 0.6)
+        back = (u + du * r - tu * L * 0.4, v + dv * r - tv * L * 0.4)
+        pts = [tip, (back[0] + du * Wd, back[1] + dv * Wd), (back[0] - du * Wd, back[1] - dv * Wd)]
+        self.draw.polygon([self.px(*q) for q in pts], fill=ink)
+
+    def scale(self, u, v, diameter_m, angles_deg, marks, arrow=''):
+        """A printed scale round a knob: an arc through the marks' angles, a tick and a figure at each (SAM's AK photo:
+        КОМПЕНСАЦИЯ ВЕТРА's 0-270°, СКОРОСТЬ П А's - and +)."""
+        ink = self.ink_at(u, v)
+        r = diameter_m / 2
+        lw = max(1, int(round(0.0005 * self.ppm)))
+        a0, a1 = min(angles_deg), max(angles_deg)
+        pts = []
+        steps = max(8, int(abs(a1 - a0) / 3))
+        for k in range(steps + 1):
+            a = math.radians(a0 + (a1 - a0) * k / steps)
+            pts.append(self.px(u + r * math.sin(a), v + r * math.cos(a)))
+        if len(angles_deg) > 1:
+            self.draw.line(pts, fill=ink, width=lw)
+        if arrow in ('first', 'both'):
+            self.arrowhead(u, v, r, angles_deg[0], 1 if angles_deg[0] > angles_deg[-1] else -1, ink)
+        if arrow in ('last', 'both'):
+            self.arrowhead(u, v, r, angles_deg[-1], 1 if angles_deg[-1] > angles_deg[0] else -1, ink)
+        for a, mark in zip(angles_deg, marks):
+            if arrow and not mark:
+                continue                                # a lock's arc: no ticks at its ends, its words engraved apart
+            ra = math.radians(a)
+            du, dv = math.sin(ra), math.cos(ra)
+            self.draw.line([self.px(u + du * r, v + dv * r), self.px(u + du * (r + 0.004), v + dv * (r + 0.004))], fill=ink,
+                           width=lw)
+            if mark:
+                anchor = 'mm' if abs(du) < 0.3 else ('rm' if du < 0 else 'lm')
+                rr = r + 0.006 if anchor == 'mm' else r + 0.0045
+                self.text(u + du * rr, v + dv * rr + (0.001 if anchor == 'mm' else 0.0), mark, cap_m=CAP_HEIGHT_M * 0.9,
+                          max_w_m=0.03, anchor=anchor)
+
+    def label_at(self, where, u, v, w_m, h_m, s, **kw):
+        """An item's label above it (the default), below it, or beside it, as engraved on the real plate."""
+        if where in (None, '', 'above'):
+            self.label_above(u, v, h_m, s, **kw)
+        elif where == 'below':
+            self.label_below(u, v, h_m, s, **kw)
+        else:
+            left = where == 'left'
+            words = s.split(' ')
+            if len(s) > 8 and len(words) > 1:           # beside an item, a long label stands on two lines (ВЕРТ. / СМЕЩ.)
+                best = min(range(1, len(words)), key=lambda k: abs(len(' '.join(words[:k])) - len(' '.join(words[k:]))))
+                s = ' '.join(words[:best]) + '\n' + ' '.join(words[best:])
+            uu = u - w_m / 2 - GAP_M if left else u + w_m / 2 + GAP_M
+            lines = s.split('\n')
+            f = self.font(CAP_HEIGHT_M, LABEL_BOLD)
+            line_h = f.size * 1.05
+            x, y = self.px(uu, v)
+            y -= (len(lines) - 1) * line_h / 2
+            ink = self.ink_at(uu, v)
+            for i, line in enumerate(lines):
+                self.draw.text((x, y + i * line_h), line, fill=ink, font=f, anchor='rm' if left else 'lm', stroke_width=stroke_of(f),
+                               stroke_fill=ink)
+
+    anchors = ()                     # the labelled items' (u, v) on this face: a label keeps to the room between them
+
+    def room(self, u, v, kw):
+        """A label's width: no wider than the gap to the next labelled item on its row (switches 23 mm apart)."""
+        gaps = [abs(a[0] - u) for a in self.anchors if abs(a[1] - v) < 0.02 and abs(a[0] - u) > 0.004]
+        kw = dict(kw)
+        if gaps:
+            kw['max_w_m'] = min(kw.get('max_w_m', 0.12), 0.95 * min(gaps))
+        return kw
 
     def label_above(self, u, v, height_m, s, **kw):
-        n_lines = 2 if len(s) > 18 and ' ' in s else 1
+        kw = self.room(u, v, kw)
+        n_lines = 2 if (len(s) > 18 or self.font(CAP_HEIGHT_M).getlength(s) > kw.get('max_w_m', 0.12) * self.ppm) and ' ' in s else 1
         self.text(u, v + height_m / 2 + GAP_M + n_lines * CAP_HEIGHT_M * 0.75, s, **kw)
 
     def label_below(self, u, v, height_m, s, **kw):
+        kw = self.room(u, v, kw)
         self.text(u, v - height_m / 2 - GAP_M - CAP_HEIGHT_M * 0.75, s, **kw)
 
     def ticks(self, u, v, radius_m, angles_deg, labels):
@@ -271,10 +386,13 @@ class Face:
             p0 = self.px(u + du * (radius_m + 0.001), v + dv * (radius_m + 0.001))
             p1 = self.px(u + du * (radius_m + 0.005), v + dv * (radius_m + 0.005))
             self.draw.line([p0, p1], fill=ink, width=max(1, int(0.0006 * self.ppm)))
-            f = self.font(CAP_HEIGHT_M * 0.8)
-            tw = f.getlength(lab) / self.ppm
-            rr = radius_m + 0.007 + 0.5 * abs(du) * tw + 0.0015
-            self.text(u + du * rr, v + dv * rr, lab, cap_m=CAP_HEIGHT_M * 0.8, max_w_m=0.05)
+            if abs(du) < 0.2:                           # the legend over the top of the knob: centred above its tick
+                rr = radius_m + 0.0075
+                self.text(u + du * rr, v + dv * rr + 0.0012, lab, cap_m=CAP_HEIGHT_M * 0.85, max_w_m=0.05)
+            else:                                       # a side legend: beside its tick, reading away from the knob
+                rr = radius_m + 0.0062
+                self.text(u + du * rr, v + dv * rr, lab, cap_m=CAP_HEIGHT_M * 0.85, max_w_m=0.05,
+                          anchor='rm' if du < 0 else 'lm')
 
     def diagram(self, u, v, w, h):
         (x0, y0), (x1, y1) = self.px(u - w / 2, v + h / 2), self.px(u + w / 2, v - h / 2)
@@ -299,11 +417,12 @@ class Face:
                     half = (x1 - x0) / cols * rng.uniform(0.15, 0.35)
                     self.draw.line([(cx - half, cy), (cx + half, cy)], fill=DIAGRAM_INK, width=lw)
 
-    def dial(self, u, v, w, h, black, scale=None):
+    def dial(self, u, v, w, h, black, scale=None, marks=None, unit=''):
         """An instrument face under the cabin's bezel: a black (or white) face with a printed scale, its needle at rest
         and a hub. Round when w == h (a 270 degree scale, 0 to 10, as on the vehicle's dash gauges in rwd_mb3
         9a33_31/32), else a rectangular meter with a 100 degree arc. The scale itself is generic: no source gives
-        the dial markings, only that the faces are black with white print."""
+        the dial markings, only that the faces are black with white print. A fixture that gives `marks` (its figures,
+        read from a photo) has them printed evenly over the span, with its `unit` under the hub."""
         face = (22, 22, 21) if black else (222, 220, 208)
         ink = (226, 224, 214) if black else (28, 28, 26)
         lw = max(1, int(round(0.0006 * self.ppm)))
@@ -312,6 +431,8 @@ class Face:
             return self.compass(u, v, w, h, face, ink, lw)
         if scale == 'counters':
             return self.counters(u, v, w, h)
+        if scale == 'hours':
+            return self.hour_meter(u, v, w)
         round_dial = abs(w - h) < 1e-6
         if round_dial:
             cx, cy = self.px(u, v)
@@ -327,22 +448,44 @@ class Face:
             a = math.radians(angle_deg)
             return self.px(pivot[0] + math.sin(a) * rad, pivot[1] + math.cos(a) * rad)
 
+        if marks:
+            n_major = len(marks) - 1
         steps = n_major * 5
         for k in range(steps + 1):
             a = start + span * k / steps
             major = k % 5 == 0
             d.line([at(a, radius * (0.78 if major else 0.89)), at(a, radius)], fill=ink, width=lw * (2 if major else 1))
-        f = self.font((0.07 * w) if round_dial else (0.1 * h))
+        f = self.font((0.085 if marks else 0.07) * w if round_dial else (0.1 * h))
         for k in range(n_major + 1):
             a = start + span * k / n_major
-            x, y = at(a, radius * 0.5)
-            d.text((x, y), str(k * (2 if n_major == 5 else 1)), fill=ink, font=f, anchor='mm')
-        # needle at rest, a little off zero, and the hub
-        a = start + 0.18 * span
+            x, y = at(a, radius * (0.6 if marks else 0.5))   # a photographed dial's figures stand just inside its ticks
+            text = marks[k] if marks else str(k * (2 if n_major == 5 else 1))
+            d.text((x, y), text, fill=ink, font=f, anchor='mm')
+        if unit:
+            x, y = self.px(pivot[0], pivot[1] - (0.2 * w if round_dial else 0.12 * h))
+            d.text((x, y), unit, fill=ink, font=self.font((0.06 * w) if round_dial else (0.08 * h)), anchor='mm')
+        # needle at rest: on the photographed dial's zero (the ammeter's is in the middle), else a little off the stop
+        rest = (marks.index('0') if '0' in marks else 0) / n_major if marks else 0.18
+        a = start + rest * span
         d.line([at(a, 0), at(a, radius * 0.92)], fill=ink if black else (150, 30, 20), width=lw * 2)
         hx, hy = self.px(*pivot)
         hr = (0.05 * w if round_dial else 0.07 * h) * self.ppm
         d.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=(70, 70, 68) if black else (60, 60, 58))
+
+    def hour_meter(self, u, v, w):
+        """The engine-hour meter on the driver's instrument plate (wwp_gecko g085-a): a round grey face with a black
+        window of white digit wheels across its middle. The hours shown are a placeholder."""
+        d = self.draw
+        cx, cy = self.px(u, v)
+        r = 0.45 * w * self.ppm
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(150, 152, 150), outline=(95, 96, 94),
+                  width=max(1, int(round(0.0008 * self.ppm))))
+        (x0, y0), (x1, y1) = self.px(u - 0.27 * w, v + 0.075 * w), self.px(u + 0.27 * w, v - 0.075 * w)
+        d.rectangle([x0, y0, x1, y1], fill=(18, 18, 17))
+        f = self.font(0.11 * w)
+        for k, ch in enumerate('01234'):
+            x, _ = self.px(u - 0.216 * w + 0.108 * w * k, v)
+            d.text((x, cy), ch if k < 4 else '7', fill=(222, 220, 210) if k < 4 else (200, 40, 30), font=f, anchor='mm')
 
     def counters(self, u, v, w, h):
         """The SOC/SSC readout strip (0094-5; opisybroni 54539, and a Polish-modernised console in user_modernised_2,
@@ -438,6 +581,10 @@ def bake_panel(layout, console, panel, ppm, seed):
     defs = {c['id']: c for c in console['controls']}
     pid = panel['id']
     lamp_labels = [(lp['at_m'], lp.get('look', {}).get('label') or lp['label']) for lp in layout['lamps'] if lp['panel'] == pid]
+    face.anchors = ([c['at_m'] for c in layout['controls'] if c['panel'] == pid and c.get('look', {}).get('label')]
+                    + [lp['at_m'] for lp in layout['lamps'] if lp['panel'] == pid and lp.get('look', {}).get('label')]
+                    + [f['at_m'] for f in layout.get('fixtures', []) if f['panel'] == pid and f.get('label')
+                       and f['kind'] not in ('nameplate', 'bezel', 'window', 'legend', 'diagram')])
     # controls: grime where hands go, then labels
     for ctl in layout['controls']:
         if ctl['panel'] != pid:
@@ -456,6 +603,11 @@ def bake_panel(layout, console, panel, ppm, seed):
             continue
         parts = split_parts(label)
         positions = defn.get('position_labels') or []
+        if any(f['kind'] == 'scale' and f['panel'] == pid and
+               ((abs(f['at_m'][0] - u) < 0.002 and abs(f['at_m'][1] - v) < 0.002) or
+                (any(f.get('marks', [])) and math.hypot(f['at_m'][0] - u, f['at_m'][1] - v) < 0.008))
+               for f in layout.get('fixtures', [])):
+            continue                                    # its printed scale carries its legends (and a text its title)
         if style in ('rotary', 'key') and len(positions) > 2:
             angles = position_angles('rotary', len(positions))
             if len(parts) == len(positions):
@@ -465,14 +617,18 @@ def bake_panel(layout, console, panel, ppm, seed):
                 face.label_above(u, v, size + 0.026, label)
             else:
                 face.label_above(u, v, size, label)
-        elif style == 'toggle' and len(parts) == 2:
+        elif style == 'toggle' and len(parts) == 2 and look.get('kind') not in ('jack', 'socket'):
             title, up, down = toggle_legends(parts, positions)
-            face.label_above(u, v, size, up)
+            if look.get('up', 1) == 0:             # position 0 stands up (УГОЛ ЗРЕНИЯ's ШИРОКИЙ on SAM's AK photo)
+                up, down = down, up
+            lever = size + TOGGLE_LEVER_M          # the up legend clears the lever's tip (SAM's AK photo: 16 mm up, 14 down)
+            face.label_above(u, v, lever, up)
             face.label_below(u, v, size, down)
             if title:
-                face.label_above(u, v, size + 2 * (CAP_HEIGHT_M + GAP_M), title)
+                face.label_above(u, v, lever + 2 * (CAP_HEIGHT_M + GAP_M), title)
         else:
-            face.label_above(u, v, size, label)
+            w = look.get('size_m', size)
+            face.label_at(look.get('label_at'), u, v, w[0] if isinstance(w, list) else w, size, label)
     # lamps (legend lamps carry their own text)
     for lamp in layout['lamps']:
         if lamp['panel'] != pid:
@@ -480,8 +636,8 @@ def bake_panel(layout, console, panel, ppm, seed):
         look = lamp.get('look', {})
         if look.get('kind') == 'legend' or not look.get('label'):
             continue
-        size = item_height(look, 0.022) * (1.4 if look.get('kind') in (None, 'lamp', 'lamp_button') else 1.0)
-        face.label_above(lamp['at_m'][0], lamp['at_m'][1], size, look['label'])
+        size = item_height(look, 0.022) * (1.4 if look.get('kind') in (None, 'lamp', 'lamp_button', 'signal') else 1.0)
+        face.label_at(look.get('label_at'), lamp['at_m'][0], lamp['at_m'][1], size, size, look['label'])
     # fixtures
     for fx in layout.get('fixtures', []):
         if fx['panel'] != pid:
@@ -493,10 +649,24 @@ def bake_panel(layout, console, panel, ppm, seed):
         if kind == 'diagram':
             face.diagram(u, v, w, h)
             continue
+        if kind == 'text':
+            cap = h if isinstance(size, list) else size
+            if fx.get('angle_deg'):
+                face.text_turned(u, v, fx['label'], cap, fx['angle_deg'])
+            else:                                       # "label_at": "right" runs right from its point, "left" ends there
+                face.text(u, v, fx['label'], cap_m=cap, max_w_m=w if isinstance(size, list) else 0.2,
+                          anchor={'right': 'lm', 'left': 'rm'}.get(fx.get('label_at'), 'mm'))
+            continue
+        if kind == 'scale':
+            face.scale(u, v, w, fx['angles_deg'], fx['marks'], fx.get('arrow', ''))
+            continue
+        if kind == 'frame':
+            face.frame(u, v, w, h)
+            continue
         if kind in ('nameplate', 'bezel', 'window', 'legend'):
             continue
         if kind == 'gauge':
-            face.dial(u, v, w, h, fx.get('color') == 'black', fx.get('scale'))
+            face.dial(u, v, w, h, fx.get('color') == 'black', fx.get('scale'), fx.get('marks'), fx.get('unit', ''))
             if fx.get('scale') == 'counters':
                 continue
         if kind in ('knob', 'pointer_knob', 'bar_knob', 'trim', 'toggle', 'lever', 'button', 'lamp_button'):
@@ -504,12 +674,14 @@ def bake_panel(layout, console, panel, ppm, seed):
         label = fx.get('label', '')
         if not label:
             continue
-        parts = split_parts(label)
-        if kind == 'toggle' and len(parts) == 2:
-            face.label_above(u, v, h, parts[0])
-            face.label_below(u, v, h, parts[1])
+        sides = [p.strip() for p in label.split('—')]
+        if kind == 'toggle' and len(sides) == 2:            # "UP — DOWN"; either side may be empty ("— ГОТ.": below only)
+            if sides[0]:
+                face.label_above(u, v, h, sides[0])
+            if sides[1]:
+                face.label_below(u, v, h, sides[1])
         else:
-            face.label_above(u, v, h if kind == 'oval' else max(w, h), label)
+            face.label_at(fx.get('label_at'), u, v, w, h if kind == 'oval' else max(w, h), label)
     face.scratches(seed, int(panel['size_m'][0] * panel['size_m'][1] * 160))
     return face.finish()
 

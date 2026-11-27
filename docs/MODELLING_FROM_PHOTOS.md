@@ -40,6 +40,8 @@ python tools/photo_trace.py rectify tools/traces/<name>.json PHOTO --check
   into `plate_edges` (keep `"offset": [500, 100]`), set `width_mm` from the flattened right edge, run again: `front_mm.png`
   is the front at 5 px/mm with a 40 mm margin, and `front_mm_grid.jpg` the same with a mm grid.
 * Check: a round part's circle fit (next step) should come out round. The R-123M's band selector was round to 0.6 %.
+  If round parts come out as ellipses, all stretched across alike, set `"aspect"` in the config: two vanishing points
+  fix the flat only up to a stretch across. The ПАНЕЛЬ ИНДИКАЦИИ's caps needed 1.227 (`tools/traces/panel_ind_g095b.json`).
 * **A manual's drawing** of the front (the R-111's ТО fig. 4) is flattened the same way (`tools/traces/r111_drawing.json`)
   and names every control by its number, but take positions from the photograph: the circle fits showed the drawing
   about 4 % wide. Keep both and say which was used.
@@ -127,12 +129,22 @@ python tools/photo_trace.py overlay tools/traces/<name>.json out/traces/<name>/r
   (`tools/blender/radio_front_model.py`); a new set of the kind is a trace module, a colour scheme and a line in
   `build_pu12m_radios.py`.
 
+### When there is a set of photos of a whole space: compare by depth
+
+Edge overlays say where an outline is; they cannot say a surface is at the wrong angle or that a raised floor is missing. For a space photographed from many cameras (the Osa's compartment), after the steps above run the depth comparison, `tools/recon/holistic_diff.py` (`docs/OSA_INTERIOR_HOLISTIC.md` section 32). It renders the model through each photo's camera and compares depth and surface direction per pixel against the photo's depth map, then says in words what is wrong: which part, turned, moved, raised, missing or excess, and by how much. `measure` turns a region of a photo into a plane in metres. Edit from those numbers and re-score: an edit that does not raise the score did not help.
+
 ## 7. Into the cabin
 
 * Export headless (`build_<name>.py`), which also writes `art/cabin_interior/manifest.json` (size, and the face plane).
 * In `data/cabins/osa_ak.json`: the shell part (mesh, centre, size, yaw), a **bare** panel in the plane where the
   controls' shafts come out (the mesh carries its own front), the controls and lamps at `CONTROL_MM`; keep the set's back
   where it was when its depth changes.
+* **Each part is drawn once.** A face traced part by part (SŁ-1M, SP-2M) models every switch, knob, lamp and jack it
+  sees. Where the layout puts a control or lamp on one of them, mark the part `game='<the layout's id>'` in the trace: the
+  model leaves it out (a bracket round it may stay) and the cabin draws it, so it moves and lights. Give the layout item
+  the part's look (its size, ring and colour: a black cap read as a jack becomes a lamp with a black ring, a window an
+  oblong lamp of the window's size). `tools/tests/test_face_game_items.py` holds every face to it: an item on a part the
+  mesh still draws is a switch drawn over a switch, or a button drawn over a lamp (found on 28 items on 16 Nov 2026).
 * Unreal: `python tools/ue_import_cabin_interior.py meshes --only SM_...` with the mesh in the import tool's `PLAIN` list
   (no Nanite: its reduced fallback drops millimetre letters and screws), then photograph it in place with
   `tools/ue_panel_shot.py`. Close the editor and revert the material assets it re-saved unchanged before committing.

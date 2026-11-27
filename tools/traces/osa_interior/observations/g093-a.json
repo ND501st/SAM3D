@@ -1,0 +1,266 @@
+{
+ "photo": "g093-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle at the front end of the operators' bench, about seat-back height",
+  "looks": "aft along the bench toward the power cabinet behind its rear end",
+  "covers": [
+   "seat.deputy_commander",
+   "seat.senior_operator",
+   "seat.operator",
+   "rack.0096_9m"
+  ],
+  "lens": "normal, close"
+ },
+ "components": [
+  {
+   "id": "seat.deputy_commander",
+   "class": "seat",
+   "seen_as": "edge of a green padded seat back raised upright, nearest the camera, out of focus",
+   "bbox": [
+    0.0,
+    0.18,
+    0.2,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "forward_of",
+     "seat.senior_operator"
+    ]
+   ],
+   "size_cue": "only its rim shows",
+   "material": "green leatherette",
+   "confidence": "low",
+   "notes": "the nearest of three backs; which seat it is follows from the camera looking aft"
+  },
+  {
+   "id": "seat.senior_operator",
+   "class": "seat",
+   "seen_as": "green padded seat back, raised upright, nail-head trim along the welt",
+   "bbox": [
+    0.11,
+    0.06,
+    0.65,
+    0.95
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "aft_of",
+     "seat.deputy_commander"
+    ],
+    [
+     "forward_of",
+     "seat.operator"
+    ]
+   ],
+   "size_cue": "about as tall as the power cabinet's upper half",
+   "material": "green leatherette over padding, chrome nail heads",
+   "confidence": "low",
+   "notes": "the book's caption: the padded backs folded up; middle seat by order along the bench"
+  },
+  {
+   "id": "seat.operator",
+   "class": "seat",
+   "seen_as": "a second padded back, raised, further away, its lower edge on a rusted hinge bar",
+   "bbox": [
+    0.57,
+    0.07,
+    0.84,
+    0.6
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "aft_of",
+     "seat.senior_operator"
+    ],
+    [
+     "in_front_of",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "smaller by distance, same shape as the nearer back",
+   "material": "green leatherette, steel hinge bar",
+   "confidence": "low",
+   "notes": "the rearmost seat, just forward of the cabinet"
+  },
+  {
+   "id": "new.handle.seat_back",
+   "class": "handle",
+   "seen_as": "tubular hoop on the side of the near back, its grip wrapped in a tan sleeve with white plastic ends",
+   "bbox": [
+    0.14,
+    0.57,
+    0.24,
+    0.88
+   ],
+   "zone": "compartment.aisle",
+   "on": "seat.senior_operator",
+   "relations": [],
+   "size_cue": "a hand's grip long",
+   "material": "steel tube, tan foam or cork sleeve, white plastic",
+   "confidence": "low",
+   "notes": "could be the back's fold catch rather than a grab handle"
+  },
+  {
+   "id": "rack.0096_9m",
+   "class": "rack",
+   "seen_as": "white-faced power cabinet with a hinged face: a meter with a green window top right, two push buttons, rows of yellow fuse holders, toggle switches",
+   "bbox": [
+    0.6,
+    0.0,
+    1.0,
+    0.53
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "seat.operator"
+    ]
+   ],
+   "size_cue": "its face wider than a seat back",
+   "material": "white enamel face, grey cabinet",
+   "confidence": "medium",
+   "notes": "identified by matching its face to g096-a (the cabinet behind the bench); hinge visible at top left"
+  },
+  {
+   "id": "new.loom.0096_9m_bottom",
+   "class": "loom",
+   "seen_as": "round connectors under the cabinet with silver-sleeved cables hanging down",
+   "bbox": [
+    0.71,
+    0.5,
+    0.93,
+    0.68
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [
+    [
+     "below",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "connectors about a fist wide",
+   "material": "steel connector shells, silver fabric sleeves",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "rack.sp3m",
+   "class": "rack",
+   "seen_as": "edge of a grey-framed white block with a vertical red connector strip and a knob, at the image's left top",
+   "bbox": [
+    0.0,
+    0.04,
+    0.09,
+    0.26
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel, grey frame",
+   "confidence": "low",
+   "notes": "looking aft, the image's left is the vehicle's right: so probably the rear right rack; identity a guess"
+  },
+  {
+   "id": "hull.bulkhead_rear",
+   "class": "bulkhead",
+   "seen_as": "dark grey surface across the top behind the seat backs",
+   "bbox": [
+    0.15,
+    0.0,
+    0.6,
+    0.1
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [
+    [
+     "behind",
+     "seat.senior_operator"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": "could equally be the pylon's lower part"
+  },
+  {
+   "id": "bench.operators",
+   "class": "bench",
+   "seen_as": "grey bench frame with fold links and pins, the long green bench cushion at bottom right",
+   "bbox": [
+    0.55,
+    0.55,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "relations": [
+    [
+     "below",
+     "seat.operator"
+    ]
+   ],
+   "size_cue": "links about a forearm long",
+   "material": "grey-painted steel, green leatherette",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "belt.operators",
+   "class": "belt",
+   "seen_as": "khaki webbing harness straps lying over the bench frame",
+   "bbox": [
+    0.72,
+    0.62,
+    0.95,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [],
+   "size_cue": "about a hand wide",
+   "material": "khaki cotton webbing",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.0096_9m_plinth",
+   "class": "box",
+   "seen_as": "white box face low in the gap between the backs",
+   "bbox": [
+    0.43,
+    0.84,
+    0.6,
+    1.0
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "below",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white or light grey paint",
+   "confidence": "low",
+   "notes": "the cabinet's base box as in g096-a, by position only"
+  }
+ ],
+ "not_in_register": [
+  "a tubular grip on the side of a padded seat back (new.handle.seat_back)"
+ ],
+ "doubts": [
+  "the direction of view: taken as aft from the bench's front end, because the cabinet's face matches 0096-9M in g096-a",
+  "which back belongs to which seat is by order along the bench, not seen",
+  "the block at top left (taken for SP-3M-2) is too cropped to name"
+ ]
+}

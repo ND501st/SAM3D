@@ -1,0 +1,500 @@
+{
+ "photo": "g087-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "at the driver's seat, eye height",
+  "looks": "right across the commander's seat to the right wall; forward is image left",
+  "covers": [
+   "seat.commander",
+   "intercom.a1",
+   "fuse_panel.cab_right",
+   "instrument.dp3b"
+  ],
+  "lens": "slightly wide"
+ },
+ "components": [
+  {
+   "id": "seat.commander",
+   "class": "seat",
+   "seen_as": "olive leatherette cushion (bottom) and nail-trimmed backrest upright (right)",
+   "bbox": [
+    0.27,
+    0.27,
+    1.0,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "cushion about 3 A-2 boxes wide",
+   "material": "olive leatherette",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "intercom.a1",
+   "class": "intercom",
+   "seen_as": "R-124 subscriber box plated \"A-2\" with a central rotary switch, connector at its left",
+   "bbox": [
+    0.59,
+    0.42,
+    0.74,
+    0.57
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [
+    [
+     "aft_of",
+     "new.frame.cab_right_pillar"
+    ],
+    [
+     "below",
+     "fuse_panel.cab_right"
+    ]
+   ],
+   "size_cue": "a hand-span wide",
+   "material": "grey cast alloy",
+   "confidence": "medium",
+   "notes": "the box's plate reads A-2; matched to the register's commander box by place"
+  },
+  {
+   "id": "fuse_panel.cab_right",
+   "class": "fuse_panel",
+   "seen_as": "light grey panel with key lock, six red lamp lenses over six fuse holders, a row of jacks",
+   "bbox": [
+    0.54,
+    0.0,
+    0.88,
+    0.2
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.rail.cab_right_tube_shelf",
+   "relations": [
+    [
+     "above",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "about 2.5 A-2 boxes wide",
+   "material": "light grey paint",
+   "confidence": "medium",
+   "notes": "designation not visible"
+  },
+  {
+   "id": "new.rail.cab_right_tube_shelf",
+   "class": "rail",
+   "seen_as": "tubular rail/shelf under the fuse panel along the wall",
+   "bbox": [
+    0.49,
+    0.21,
+    1.0,
+    0.26
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "below",
+     "fuse_panel.cab_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.orange_connector_covers",
+   "class": "kit",
+   "seen_as": "loose orange connector caps lying on the shelf",
+   "bbox": [
+    0.63,
+    0.12,
+    0.83,
+    0.21
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.rail.cab_right_tube_shelf",
+   "relations": [],
+   "size_cue": "finger-long",
+   "material": "orange plastic",
+   "confidence": "high",
+   "notes": "loose"
+  },
+  {
+   "id": "radio.r123m_right",
+   "class": "radio",
+   "seen_as": "grey unit with black knobs and connectors and a cable coil in a tube frame, top right",
+   "bbox": [
+    0.85,
+    0.0,
+    1.0,
+    0.2
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "aft_of",
+     "fuse_panel.cab_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey",
+   "confidence": "low",
+   "notes": "could also be its БП-26 or another box"
+  },
+  {
+   "id": "instrument.dp3b",
+   "class": "instrument",
+   "seen_as": "grey case with handle and small meter window, two connectors below",
+   "bbox": [
+    0.07,
+    0.18,
+    0.21,
+    0.41
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "forward_of",
+     "new.box.heater_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey case",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "plate.lowering_board",
+   "class": "plate",
+   "seen_as": "board edge with a blue inset of five round push buttons, far left",
+   "bbox": [
+    0.0,
+    0.25,
+    0.1,
+    0.53
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey, blue inset",
+   "confidence": "medium",
+   "notes": "identified by g085/g087-d"
+  },
+  {
+   "id": "new.box.heater_control",
+   "class": "box",
+   "seen_as": "white control box: toggle, push button, red lamp in a square bezel, a label strip",
+   "bbox": [
+    0.28,
+    0.03,
+    0.41,
+    0.19
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "forward_of",
+     "new.frame.cab_right_pillar"
+    ]
+   ],
+   "size_cue": "about the A-2 box's size",
+   "material": "white/light grey paint",
+   "confidence": "high",
+   "notes": "the personal heater panel of the caption"
+  },
+  {
+   "id": "new.plate.heater_lever_diagram",
+   "class": "plate",
+   "seen_as": "vertical black plate with a lever diagram beside the heater box",
+   "bbox": [
+    0.4,
+    0.1,
+    0.45,
+    0.2
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "beside",
+     "new.box.heater_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.heater_instructions",
+   "class": "plate",
+   "seen_as": "black instruction plate on the sloped surface",
+   "bbox": [
+    0.22,
+    0.19,
+    0.36,
+    0.31
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.duct.heater_commander_footwell",
+   "relations": [
+    [
+     "below",
+     "new.box.heater_control"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black plate",
+   "confidence": "high",
+   "notes": "unreadable"
+  },
+  {
+   "id": "new.duct.heater_commander_footwell",
+   "class": "duct",
+   "seen_as": "sloped pressed casing running down from the heater area",
+   "bbox": [
+    0.2,
+    0.15,
+    0.42,
+    0.45
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey sheet",
+   "confidence": "low",
+   "notes": "a duct by look"
+  },
+  {
+   "id": "new.pipe.green_white_banded",
+   "class": "pipe",
+   "seen_as": "grey pipe with a green-and-white band, bending down to the floor",
+   "bbox": [
+    0.22,
+    0.37,
+    0.42,
+    0.8
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "wrist-thick",
+   "material": "grey paint, green/white bands",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.red_caps_floor_right",
+   "class": "cover",
+   "seen_as": "red plastic caps on floor fittings",
+   "bbox": [
+    0.04,
+    0.64,
+    0.24,
+    0.74
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "palm-sized each",
+   "material": "red plastic",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "grey rim at the lower left",
+   "bbox": [
+    0.0,
+    0.56,
+    0.08,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.cushion.cab_floor_mat",
+   "class": "cushion",
+   "seen_as": "ribbed rubber mat at the lower left",
+   "bbox": [
+    0.07,
+    0.74,
+    0.27,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "black rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.cab_right_pillar",
+   "class": "frame",
+   "seen_as": "vertical hull pillar between the heater box and the A-2 box",
+   "bbox": [
+    0.41,
+    0.0,
+    0.49,
+    0.63
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "forward_of",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.cab_right_black_lever",
+   "class": "control",
+   "seen_as": "lever with a long black grip by the pillar",
+   "bbox": [
+    0.38,
+    0.3,
+    0.43,
+    0.43
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "forward_of",
+     "new.frame.cab_right_pillar"
+    ]
+   ],
+   "size_cue": "hand-long grip",
+   "material": "black plastic",
+   "confidence": "medium",
+   "notes": "purpose unknown (heater?)"
+  },
+  {
+   "id": "new.loom.cab_right_dash_white",
+   "class": "loom",
+   "seen_as": "white and black cables under the dash",
+   "bbox": [
+    0.03,
+    0.43,
+    0.41,
+    0.62
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_right_wall",
+   "class": "loom",
+   "seen_as": "blue cable clipped along the wall round the A-2 box",
+   "bbox": [
+    0.49,
+    0.06,
+    0.74,
+    0.59
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [],
+   "size_cue": "",
+   "material": "blue insulation",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.a1_lead",
+   "class": "cable",
+   "seen_as": "black lead from the A-2 box's connector down to the floor",
+   "bbox": [
+    0.22,
+    0.47,
+    0.73,
+    0.78
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "connects",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "box.zip",
+   "class": "box",
+   "seen_as": "grey ribbed cabinet behind the backrest, right",
+   "bbox": [
+    0.74,
+    0.25,
+    1.0,
+    0.6
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "aft_of",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": "the box under the right radio; which register box it is is not settled"
+  },
+  {
+   "id": "new.hull_wall.cab_right",
+   "class": "hull_wall",
+   "seen_as": "right wall surface round the A-2 box",
+   "bbox": [
+    0.49,
+    0.25,
+    0.75,
+    0.6
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "high",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "heater control box and plates, fuse panel on a tube shelf, a green/white pipe"
+ ],
+ "doubts": [
+  "the A-2-labelled box: register lists it as intercom.a1 (commander); the label is the R-124 box type",
+  "the top-right unit may be the right R-123M, its power unit or another box",
+  "the grey cabinet behind the seat may be box.zip, box.zczz1a_1 or box.zczz1a_2"
+ ]
+}

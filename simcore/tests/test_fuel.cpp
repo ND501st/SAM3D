@@ -56,10 +56,12 @@ SC_TEST("fuel: the Osa's fuel block loads; bad ones are refused with paths") {
     ConsoleData c;
     std::string error;
     SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", c, &error));
-    SC_EXPECT(c.has_fuel && c.fuel.sources.size() == 2);
+    SC_EXPECT(c.has_fuel && c.fuel.sources.size() == 3);  // the ГТА, the ГОМ and the drive engine
     SC_EXPECT_NEAR(c.fuel.tank_l, 300.0, 1e-12);
     SC_EXPECT_NEAR(c.fuel.sources[0].stationary_lph, 75.0, 1e-12);
-    SC_EXPECT_NEAR(c.fuel.sources[0].moving_lph, 100.0, 1e-12);
+    SC_EXPECT_NEAR(c.fuel.sources[0].moving_lph, 75.0, 1e-12);  // the turbine's own; the driving is the engine's 25
+    SC_EXPECT_NEAR(c.fuel.sources[2].stationary_lph, 0.0, 1e-12);
+    SC_EXPECT_NEAR(c.fuel.sources[2].moving_lph, 25.0, 1e-12);
     SC_EXPECT_NEAR(c.fuel.sources[1].stationary_lph, 25.0, 1e-12);
     std::ifstream file(kData + "/procedures/osa_ak.json", std::ios::binary);
     std::ostringstream ss;

@@ -1,0 +1,186 @@
+{
+ "photo": "g098-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle at the rear, eye height, close",
+  "looks": "right and down at the aft right-wall rack with its front flap folded down",
+  "covers": [
+   "rack.sp3m",
+   "kit.first_aid",
+   "new.box.stowage_5937"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.sp3m",
+   "class": "rack",
+   "seen_as": "the rack with its four instrument blocks exposed",
+   "bbox": [
+    0.0,
+    0.06,
+    1.0,
+    0.72
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [],
+   "size_cue": "blocks about 0.2 m wide",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp3_0094_11m",
+   "class": "block",
+   "seen_as": "white top panel: jacks, fuse cover, key latches, fuse holders",
+   "bbox": [
+    0.0,
+    0.06,
+    0.62,
+    0.26
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.block.sp3m_top_right",
+   "class": "block",
+   "seen_as": "drawer with two handles and a clear window",
+   "bbox": [
+    0.63,
+    0.06,
+    0.98,
+    0.27
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.sp3m_front_flap",
+   "class": "cover",
+   "seen_as": "front flap folded down as a shelf on two pins, louvres along its hinge",
+   "bbox": [
+    0.05,
+    0.5,
+    1.0,
+    0.95
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.under_sp3m",
+   "class": "loom",
+   "seen_as": "black coax and silver-sleeved cables across the block fronts",
+   "bbox": [
+    0.03,
+    0.38,
+    0.8,
+    0.68
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.sticker_wir_bauen",
+   "class": "plate",
+   "seen_as": "round civilian sticker on the flap",
+   "bbox": [
+    0.39,
+    0.67,
+    0.59,
+    0.78
+   ],
+   "zone": "compartment.right_wall",
+   "on": "new.cover.sp3m_front_flap",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.stowage_5937",
+   "class": "box",
+   "seen_as": "long grey box with hinged lid, stencil 5937-8005064",
+   "bbox": [
+    0.67,
+    0.6,
+    1.0,
+    0.86
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "below",
+     "rack.sp3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey sheet steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "kit.first_aid",
+   "class": "kit",
+   "seen_as": "white first-aid box, red cross just visible, bottom",
+   "bbox": [
+    0.43,
+    0.81,
+    0.72,
+    1.0
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.black_cloth",
+   "class": "kit",
+   "seen_as": "dark cloth under the flap",
+   "bbox": [
+    0.25,
+    0.75,
+    0.55,
+    0.95
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the stowage box stencil (likely the chassis number)"
+ ],
+ "doubts": [
+  "a band of the page title runs across the top 6% of the scan: not a component"
+ ]
+}

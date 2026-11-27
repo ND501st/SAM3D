@@ -1,0 +1,499 @@
+{
+ "photo": "g100-c",
+ "vehicle": "9A33BM3-1 ex-NVA (book's interior session of g097-g100; cabinet labelled 0096-9M2)",
+ "camera": {
+  "stands": "in the compartment's rear, about eye height",
+  "looks": "aft at the rear bulkhead on the vehicle's left of the door (image right = vehicle left)",
+  "covers": [
+   "hull.door_rear",
+   "fan.blower_rear",
+   "new.duct.bulkhead_outlet_upper",
+   "new.duct.bulkhead_outlet_lower"
+  ],
+  "lens": "normal, flash"
+ },
+ "components": [
+  {
+   "id": "hull.bulkhead_rear",
+   "class": "bulkhead",
+   "seen_as": "pale grey-green bulkhead sheet",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.door_rear",
+   "class": "door",
+   "seen_as": "the door's latch edge with its ribs, handle and flange",
+   "bbox": [
+    0.0,
+    0.0,
+    0.37,
+    0.73
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "on",
+     "hull.bulkhead_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "pressed steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.lining.door_rear_seal",
+   "class": "lining",
+   "seen_as": "black seal in the door's flange",
+   "bbox": [
+    0.0,
+    0.0,
+    0.33,
+    0.72
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "plate.gom",
+   "class": "plate",
+   "seen_as": "the red warning plate's lower right corner",
+   "bbox": [
+    0.0,
+    0.0,
+    0.17,
+    0.04
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "enamelled plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.door_seal_positions",
+   "class": "plate",
+   "seen_as": "black plate with the latch lever's open / closed-sealing diagram",
+   "bbox": [
+    0.03,
+    0.47,
+    0.14,
+    0.58
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.door_rear",
+   "class": "handle",
+   "seen_as": "the door's grab handle on its pad",
+   "bbox": [
+    0.03,
+    0.18,
+    0.31,
+    0.31
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "a hand's grip long",
+   "material": "pressed steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.door_rear_latch_upper",
+   "class": "control",
+   "seen_as": "upper cam lever (lever only)",
+   "bbox": [
+    0.16,
+    0.0,
+    0.32,
+    0.12
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.door_rear_latch_lower",
+   "class": "control",
+   "seen_as": "lower cam lever and its keeper on the frame",
+   "bbox": [
+    0.21,
+    0.36,
+    0.4,
+    0.57
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "about a hand and a half long",
+   "material": "steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.bulkhead_lower_flap",
+   "class": "cover",
+   "seen_as": "corner of the small hinged hatch low under the door",
+   "bbox": [
+    0.0,
+    0.86,
+    0.12,
+    1.0
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "below",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted sheet steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "fan.blower_rear",
+   "class": "fan",
+   "seen_as": "round blower (black ring, white hub) in a screwed frame, mostly hidden by the outlet cover",
+   "bbox": [
+    0.52,
+    0.21,
+    0.62,
+    0.72
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "left_of",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "ring about as tall as the door's handle pad is wide",
+   "material": "sheet frame, black ring",
+   "confidence": "high",
+   "notes": "stencils on the frame partly legible"
+  },
+  {
+   "id": "new.duct.bulkhead_outlet_upper",
+   "class": "duct",
+   "seen_as": "dark grey tall rectangular box cover over most of the blower opening: an outlet",
+   "bbox": [
+    0.6,
+    0.22,
+    0.81,
+    0.71
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "left_of",
+     "fan.blower_rear"
+    ],
+    [
+     "left_of",
+     "hull.door_rear"
+    ],
+    [
+     "above",
+     "new.duct.bulkhead_outlet_lower"
+    ]
+   ],
+   "size_cue": "about as tall as the door's lower half",
+   "material": "painted sheet steel, dark grey",
+   "confidence": "high",
+   "notes": "the book's text calls the dark grey objects heating and ventilation outlets"
+  },
+  {
+   "id": "new.duct.bulkhead_outlet_lower",
+   "class": "duct",
+   "seen_as": "dark grey wedge box at floor level with a sloping front and a coil spring on its top edge",
+   "bbox": [
+    0.68,
+    0.73,
+    0.93,
+    0.97
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "below",
+     "new.duct.bulkhead_outlet_upper"
+    ],
+    [
+     "left_of",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "about a shoe's length wide",
+   "material": "painted sheet steel, dark grey",
+   "confidence": "high",
+   "notes": "the spring suggests a sprung flap"
+  },
+  {
+   "id": "new.shelf.bulkhead_angled_hood",
+   "class": "shelf",
+   "seen_as": "angled sheet shelf/hood across the top with screws",
+   "bbox": [
+    0.35,
+    0.0,
+    0.86,
+    0.14
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "above",
+     "fan.blower_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted sheet steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "fan.rear_left",
+   "class": "fan",
+   "seen_as": "underside of a round fan housing above the hood",
+   "bbox": [
+    0.74,
+    0.0,
+    1.0,
+    0.17
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "above",
+     "new.shelf.bulkhead_angled_hood"
+    ]
+   ],
+   "size_cue": "about as wide as the outlet cover",
+   "material": "grey painted housing",
+   "confidence": "medium",
+   "notes": "notes tie it to the fan grille seen in g099-d over the GA-3"
+  },
+  {
+   "id": "new.loom.bulkhead_left_white_sleeve",
+   "class": "loom",
+   "seen_as": "thick white-sleeved cable loom coming down from the fan housing and bending toward the wall",
+   "bbox": [
+    0.75,
+    0.13,
+    0.97,
+    0.5
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [
+    [
+     "left_of",
+     "new.duct.bulkhead_outlet_upper"
+    ]
+   ],
+   "size_cue": "about a wrist thick",
+   "material": "white fabric sleeve",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.bulkhead_braided",
+   "class": "hose",
+   "seen_as": "grey braided hose beside the white loom",
+   "bbox": [
+    0.8,
+    0.43,
+    0.95,
+    0.52
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [
+    [
+     "beside",
+     "new.loom.bulkhead_left_white_sleeve"
+    ]
+   ],
+   "size_cue": "about two fingers thick",
+   "material": "grey braid",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.bulkhead_blue",
+   "class": "hose",
+   "seen_as": "blue hose with a tan sleeve end at the right edge",
+   "bbox": [
+    0.9,
+    0.39,
+    1.0,
+    0.47
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [
+    [
+     "beside",
+     "new.hose.bulkhead_braided"
+    ]
+   ],
+   "size_cue": "",
+   "material": "blue plastic",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.bulkhead_white_left",
+   "class": "cable",
+   "seen_as": "thin white cable from the fan housing round under the outlet",
+   "bbox": [
+    0.53,
+    0.12,
+    0.88,
+    0.8
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [
+    [
+     "below",
+     "new.duct.bulkhead_outlet_upper"
+    ]
+   ],
+   "size_cue": "pencil-thin",
+   "material": "white sheath",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.bulkhead_brass_fitting",
+   "class": "connector",
+   "seen_as": "small brass fitting with a blue wire at the right edge",
+   "bbox": [
+    0.94,
+    0.55,
+    1.0,
+    0.59
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [],
+   "size_cue": "thumb-sized",
+   "material": "brass",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.control.floor_knob_rear_left",
+   "class": "control",
+   "seen_as": "black knob standing up from the floor",
+   "bbox": [
+    0.66,
+    0.94,
+    0.69,
+    0.99
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "in_front_of",
+     "new.duct.bulkhead_outlet_lower"
+    ]
+   ],
+   "size_cue": "thumb-sized",
+   "material": "black plastic",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.floor_tray_rear_left",
+   "class": "box",
+   "seen_as": "corner of an open sheet tray on the floor with a tan item in it",
+   "bbox": [
+    0.41,
+    0.95,
+    0.6,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "sheet steel",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "two dark grey outlets on the bulkhead left of the door",
+  "white loom, braided hose and blue hose coming down the bulkhead's left part",
+  "black knob on the floor and the floor tray"
+ ],
+ "doubts": [
+  "whether the round housing at the top right is fan.rear_left (Fig. 3's rear-left ventilator)",
+  "the blue hose may be the one that runs along the left wall in g100-d"
+ ]
+}

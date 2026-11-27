@@ -1,0 +1,701 @@
+{
+ "photo": "g092-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "at the forward end of the aisle, by the curtain, eye height",
+  "looks": "right-aft along the right wall (+x, -y); image left forward, image right aft; strong perspective",
+  "covers": [
+   "rack.sp2m",
+   "curtain.cab",
+   "rack.sp3m",
+   "hull.roof",
+   "kit.first_aid"
+  ],
+  "lens": "wide"
+ },
+ "components": [
+  {
+   "id": "rack.sp2m",
+   "class": "rack",
+   "seen_as": "three columns of white drawer blocks in an aluminium frame on the right wall",
+   "bbox": [
+    0.02,
+    0.0,
+    0.82,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [
+    [
+     "aft_of",
+     "curtain.cab"
+    ],
+    [
+     "forward_of",
+     "rack.sp3m"
+    ]
+   ],
+   "size_cue": "18 blocks, each column about 0.5 m wide",
+   "material": "white enamel faces, aluminium frame",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_f0",
+   "class": "block",
+   "seen_as": "forward column top block (orange fuse holders)",
+   "bbox": [
+    0.03,
+    0.0,
+    0.38,
+    0.24
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_f1",
+   "class": "block",
+   "seen_as": "forward column second block (two yellow windows, four knobs)",
+   "bbox": [
+    0.03,
+    0.2,
+    0.38,
+    0.44
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_f2",
+   "class": "block",
+   "seen_as": "forward column third block (printed table cover, hand grips)",
+   "bbox": [
+    0.04,
+    0.44,
+    0.38,
+    0.64
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_f3",
+   "class": "block",
+   "seen_as": "forward column fourth block (printed table cover)",
+   "bbox": [
+    0.06,
+    0.64,
+    0.39,
+    0.84
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_f4",
+   "class": "block",
+   "seen_as": "forward column bottom block (plain)",
+   "bbox": [
+    0.06,
+    0.84,
+    0.39,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_m0",
+   "class": "block",
+   "seen_as": "middle column top block (three yellow windows)",
+   "bbox": [
+    0.4,
+    0.07,
+    0.65,
+    0.29
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": "plate ОР-31М on g092-d"
+  },
+  {
+   "id": "block.sp2_m1",
+   "class": "block",
+   "seen_as": "middle column meter block",
+   "bbox": [
+    0.4,
+    0.26,
+    0.65,
+    0.45
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_m2",
+   "class": "block",
+   "seen_as": "middle column four-window block",
+   "bbox": [
+    0.4,
+    0.45,
+    0.65,
+    0.62
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_m3",
+   "class": "block",
+   "seen_as": "middle column fourth block (table cover)",
+   "bbox": [
+    0.4,
+    0.61,
+    0.65,
+    0.77
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": "plate ОР-22М1 on g092-e"
+  },
+  {
+   "id": "block.sp2_m4",
+   "class": "block",
+   "seen_as": "middle column bottom block (table cover)",
+   "bbox": [
+    0.4,
+    0.76,
+    0.65,
+    0.94
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": "plate ОР-13М1 on g092-e"
+  },
+  {
+   "id": "block.sp2_r0_0",
+   "class": "block",
+   "seen_as": "aft column, first narrow top block",
+   "bbox": [
+    0.655,
+    0.15,
+    0.695,
+    0.32
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r0_1",
+   "class": "block",
+   "seen_as": "aft column, second narrow top block",
+   "bbox": [
+    0.695,
+    0.16,
+    0.735,
+    0.32
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r0_2",
+   "class": "block",
+   "seen_as": "aft column, third narrow top block",
+   "bbox": [
+    0.735,
+    0.18,
+    0.77,
+    0.32
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r0_3",
+   "class": "block",
+   "seen_as": "aft column, fourth narrow top block",
+   "bbox": [
+    0.77,
+    0.19,
+    0.81,
+    0.32
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r1",
+   "class": "block",
+   "seen_as": "aft column wide block under the narrow ones",
+   "bbox": [
+    0.65,
+    0.3,
+    0.81,
+    0.44
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r2",
+   "class": "block",
+   "seen_as": "aft column block with two vertical red sockets",
+   "bbox": [
+    0.65,
+    0.44,
+    0.81,
+    0.57
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r3",
+   "class": "block",
+   "seen_as": "aft column fuse panel with many yellow-capped holders and guard rails",
+   "bbox": [
+    0.65,
+    0.57,
+    0.81,
+    0.7
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": "0091-17М1 by g092-e"
+  },
+  {
+   "id": "block.sp2_r4",
+   "class": "block",
+   "seen_as": "aft column bottom fuse panel, sloped over the wheel arch",
+   "bbox": [
+    0.65,
+    0.7,
+    0.78,
+    0.85
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "above",
+     "new.sponson.wheel_arch_right_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": "0091-18 by g092-e"
+  },
+  {
+   "id": "curtain.cab",
+   "class": "curtain",
+   "seen_as": "yellow-khaki curtain at the left edge, forward of the rack",
+   "bbox": [
+    0.0,
+    0.0,
+    0.08,
+    0.72
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.indicator_obestochennosti",
+   "class": "box",
+   "seen_as": "the de-energisation indicator box at the lower left edge",
+   "bbox": [
+    0.0,
+    0.73,
+    0.06,
+    0.92
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "insulated grey roof and its sloping edge over the rack",
+   "bbox": [
+    0.4,
+    0.0,
+    1.0,
+    0.17
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.roof_round_olive_rear_right",
+   "class": "unknown",
+   "seen_as": "round olive-drab item at the roof, rear right",
+   "bbox": [
+    0.86,
+    0.13,
+    0.94,
+    0.18
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "possibly fan.rear_top (Fig. 3 \"Wentylator\", rear top right)"
+  },
+  {
+   "id": "new.cable.roof_rear_right",
+   "class": "cable",
+   "seen_as": "white cable along the roof to a cable entry at the rear right",
+   "bbox": [
+    0.82,
+    0.15,
+    0.93,
+    0.21
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "lamp.blue",
+   "class": "lamp",
+   "seen_as": "round lamp with a blue glass dome on the wall aft of the rack",
+   "bbox": [
+    0.82,
+    0.22,
+    0.86,
+    0.27
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "fist-sized",
+   "material": "",
+   "confidence": "medium",
+   "notes": "register places lamp.blue on the rear bulkhead; here it is at the rear right corner"
+  },
+  {
+   "id": "rack.sp3m",
+   "class": "rack",
+   "seen_as": "cabinet aft of SP-2M: a light panel, an open chassis of components and a dark tray",
+   "bbox": [
+    0.83,
+    0.2,
+    1.0,
+    0.47
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "by position SP-3M-2 (relay blocks); not confirmed"
+  },
+  {
+   "id": "new.loom.right_wall_aft_of_sp2m",
+   "class": "loom",
+   "seen_as": "cables running down the corner between SP-2M and the cabinet aft of it",
+   "bbox": [
+    0.81,
+    0.21,
+    0.87,
+    0.55
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.strut_rear_right",
+   "class": "frame",
+   "seen_as": "diagonal grey strut from the cabinet down to the wheel arch",
+   "bbox": [
+    0.82,
+    0.42,
+    0.93,
+    0.76
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.hinged_rear_right",
+   "class": "bracket",
+   "seen_as": "hinged aluminium bracket on the strut",
+   "bbox": [
+    0.85,
+    0.53,
+    0.93,
+    0.64
+   ],
+   "zone": "compartment.rear",
+   "on": "new.frame.strut_rear_right",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.t_key_rear_right",
+   "class": "kit",
+   "seen_as": "grey T-handle held on the wall/strut",
+   "bbox": [
+    0.82,
+    0.64,
+    0.87,
+    0.69
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "the T-handle of g092-e; perhaps a block or hatch key"
+  },
+  {
+   "id": "new.hook.right_wall_rear_holder",
+   "class": "hook",
+   "seen_as": "small white-wrapped holder above the T-handle",
+   "bbox": [
+    0.81,
+    0.61,
+    0.84,
+    0.64
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "kit.first_aid",
+   "class": "kit",
+   "seen_as": "white box with a red cross at the right edge",
+   "bbox": [
+    0.95,
+    0.52,
+    1.0,
+    0.66
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.cylinder_rear_right",
+   "class": "kit",
+   "seen_as": "grey cylindrical item beside the first-aid box",
+   "bbox": [
+    0.92,
+    0.5,
+    1.0,
+    0.55
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.wheel_arch_right_rear",
+   "class": "sponson",
+   "seen_as": "sloped grey hull surfaces over the wheel arch under the aft column",
+   "bbox": [
+    0.66,
+    0.66,
+    1.0,
+    0.92
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "below",
+     "block.sp2_r4"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "floor plates along the right wall",
+   "bbox": [
+    0.4,
+    0.85,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.strap.under_sp2m_rear",
+   "class": "strap",
+   "seen_as": "strap fittings under the aft column",
+   "bbox": [
+    0.68,
+    0.84,
+    0.73,
+    0.92
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "cabinet with an open chassis aft of SP-2M",
+  "diagonal strut, hinged bracket and T-handle at the rear right",
+  "wheel arch sloping under SP-2M's aft column"
+ ],
+ "doubts": [
+  "Forward-column and r0/r1/r2 block ids follow the register's order by position; only m0, m3, m4, r3, r4 are confirmed by plates (g092-d, g092-e).",
+  "The cabinet aft of SP-2M is taken as SP-3M-2 by position only.",
+  "The olive round item on the roof may be a fan."
+ ]
+}

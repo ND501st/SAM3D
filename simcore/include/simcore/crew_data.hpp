@@ -126,6 +126,18 @@ struct AutoReportDef {
     Condition when;
 };
 
+// A potentiometer a seat sets as the manual says (voenizdat_osa_1991 p52: once the sweep shows, ЯРКОСТЬ is turned up):
+// while `when` holds and the knob stands further than `within` from `to`, the seat's NPC turns it to `to`, a whole turn
+// taking `turn_s` (the seat's skill's wheel rate on top); a player in the seat owes it (a wheel duty).
+struct KnobSettingDef {
+    std::string station;
+    std::string control;
+    std::vector<Condition> when;
+    double to = 0.5;
+    double within = 0.2;
+    double turn_s = 1.5;
+};
+
 struct CrewData {
     std::string system_id;
     std::string commander = "commander";  // the seat that commands the crew (commander_seat): gives the orders, holds the picture
@@ -135,6 +147,7 @@ struct CrewData {
     std::vector<CrewTask> tasks;
     std::vector<CrewFact> facts;
     std::vector<AutoReportDef> reports;
+    std::vector<KnobSettingDef> settings;
     std::vector<std::string> decision_controls;  // steps that are decisions (ПУСК): judgement delays them
     double stand_s = 0.0;  // "standing": getting up and stepping to a panel out of seated reach
     double sit_s = 0.0;    // and back to the seat
@@ -231,7 +244,7 @@ class CrewLoader : public ConsoleLoader {
 public:
     bool LoadCrew(const json::Value& root, const ConsoleData& console, CrewData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "source", "confidence", "commander_seat", "seats", "callouts",
-                             "orders", "tasks", "facts", "reports", "decisions", "standing", "menu"}) ||
+                             "orders", "tasks", "facts", "reports", "settings", "decisions", "standing", "menu"}) ||
             !RequireString(root, "", "system_id", out.system_id) || !Provenance(root, "") ||
             !OptionalString(root, "", "commander_seat", out.commander)) {
             return false;
@@ -244,7 +257,7 @@ public:
         }
         return LoadSeats(root, console, out) && LoadCallouts(root, console, out) && LoadOrders(root, console, out) &&
                LoadTasks(root, console, out) && LoadFacts(root, console, out) && LoadReports(root, console, out) &&
-               LoadDecisions(root, console, out) && LoadStanding(root, out) && LoadMenu(root, out);
+               LoadSettings(root, console, out) && LoadDecisions(root, console, out) && LoadStanding(root, out) && LoadMenu(root, out);
     }
 
     // "menu": { "sectors": [ { "id", "en", "ru", "items": [callout ids] } ], "source", "confidence" }: at most eight
@@ -545,6 +558,34 @@ private:
             if (!console.panel.Has(out.decision_controls[i])) {
                 return Fail(Index("decisions.controls", i), "unknown control '" + out.decision_controls[i] + "'");
             }
+        }
+        return true;
+    }
+
+    // "settings": the potentiometers the crew sets by the manual (KnobSettingDef).
+    bool LoadSettings(const json::Value& root, const ConsoleData& console, CrewData& out) {
+        const json::Value* arr = OptionalArray(root, "", "settings");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& s = arr->items[i];
+            const std::string p = Index("settings", i);
+            KnobSettingDef d;
+            if (!Keys(s, p, {"station", "control", "when", "to", "within", "turn_s", "source", "confidence", "notes"}) ||
+                !RequireString(s, p, "station", d.station) || !RequireString(s, p, "control", d.control) || !Provenance(s, p) ||
+                !OptionalNumber(s, p, "to", d.to) || !OptionalNumber(s, p, "within", d.within) ||
+                !OptionalNumber(s, p, "turn_s", d.turn_s) ||
+                !LoadConditions(s, p, "when", console.panel, console.equipment, d.when)) {
+                return false;
+            }
+            if (!KnownSeat(console, d.station, false)) return Fail(Join(p, "station"), "unknown station '" + d.station + "'");
+            const ControlDef* c = console.panel.Find(d.control);
+            if (c == nullptr || c->kind != ControlKind::Continuous) {
+                return Fail(Join(p, "control"), "'" + d.control + "' is not a potentiometer of the console");
+            }
+            if (d.to < c->min_value || d.to > c->max_value) return Fail(Join(p, "to"), "outside the control's range");
+            if (d.within <= 0.0) return Fail(Join(p, "within"), "must be > 0");
+            if (d.turn_s <= 0.0 || d.turn_s > 30.0) return Fail(Join(p, "turn_s"), "must be from 0 to 30");
+            out.settings.push_back(std::move(d));
         }
         return true;
     }

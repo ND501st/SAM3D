@@ -9,7 +9,8 @@
 // A subsystem is commanded on when all of `enable` hold and, if `enable_any` is
 // not empty, at least one of `enable_any` holds. A latching subsystem (a mode
 // engaged by a push-button, like the Osa's ЦУ АЗ) stays commanded after its
-// enable conditions pass, until all of `release` hold.
+// enable conditions pass, until all of `release` hold or any one of `release_any` does (the Osa's range finder: a
+// press of РУЧНОЕ ends ПОЛУАВТОМАТ as surely as switching the transmitter off).
 // `prerequisites` must hold while starting or running, otherwise it faults.
 // Progress runs 0..1: it rises over `start_time_s` and falls over `stop_time_s`,
 // so reversing half-way (e.g. lowering a half-raised mast) takes only the time
@@ -112,7 +113,8 @@ struct SubsystemDef {
     double stop_time_s = 0.0;              // cool-down / stow time
     std::vector<Condition> enable_any;     // if not empty, at least one must also hold
     bool latching = false;                 // stays commanded once enabled, until `release`
-    std::vector<Condition> release;        // latching only; all true = commanded off (must not be empty)
+    std::vector<Condition> release;        // latching only; all true = commanded off
+    std::vector<Condition> release_any;    // latching only; any one true = commanded off too (one of the two is needed)
     bool start_ready = false;              // starts the session ready (not for latching subsystems)
 };
 
@@ -154,10 +156,10 @@ public:
     bool AddSubsystem(const SubsystemDef& def, const ControlPanel& panel) {
         if (def.id.empty() || index_.count(def.id) != 0) return false;
         if (def.start_time_s < 0.0 || def.stop_time_s < 0.0) return false;
-        if (def.latching == def.release.empty()) return false;
+        if (def.latching == (def.release.empty() && def.release_any.empty())) return false;
         if (def.start_ready && def.latching) return false;
         if (!RefsValid(def.enable, panel) || !RefsValid(def.prerequisites, panel) ||
-            !RefsValid(def.enable_any, panel) || !RefsValid(def.release, panel)) {
+            !RefsValid(def.enable_any, panel) || !RefsValid(def.release, panel) || !RefsValid(def.release_any, panel)) {
             return false;
         }
         index_[def.id] = units_.size();
@@ -195,6 +197,18 @@ public:
         u.progress = 1.0;
         if (u.state != SubsystemState::Ready) Go(u, SubsystemState::Ready);
         return true;
+    }
+
+    // Stretch (or shrink) a subsystem's warm-up from now on: 1 is its data's time. False for unknown ids.
+    bool SetTimeScale(const std::string& id, double scale) {
+        const auto it = index_.find(id);
+        if (it == index_.end() || !(scale > 0.0)) return false;
+        units_[it->second].time_scale = scale;
+        return true;
+    }
+    double TimeScale(const std::string& id) const {
+        const auto it = index_.find(id);
+        return it == index_.end() ? 1.0 : units_[it->second].time_scale;
     }
 
     // Back to the start of the warm-up, if it is ready or warming up; false otherwise (off, stopping, fault).
@@ -262,6 +276,7 @@ private:
         SubsystemState state = SubsystemState::Off;
         double progress = 0.0;
         bool latched = false;
+        double time_scale = 1.0;  // its warm-up's time stretched (the cold: vehicle_systems.hpp)
     };
 
     static constexpr double kProgressEps = 1e-9;
@@ -284,11 +299,16 @@ private:
         return true;
     }
 
+    // A latching subsystem's release: all of `release` (when it has any) or one of `release_any`.
+    bool Released(const SubsystemDef& def, const ControlPanel& panel) const {
+        return (!def.release.empty() && AllHold(def.release, panel)) || AnyHolds(def.release_any, panel);
+    }
+
     bool Commanded(Unit& u, const ControlPanel& panel) {
         const bool enabled =
             AllHold(u.def.enable, panel) && (u.def.enable_any.empty() || AnyHolds(u.def.enable_any, panel));
         if (!u.def.latching) return enabled;
-        if (u.latched && AllHold(u.def.release, panel)) {
+        if (u.latched && Released(u.def, panel)) {
             u.latched = false;
         } else if (!u.latched && enabled) {
             u.latched = true;
@@ -302,7 +322,8 @@ private:
     }
 
     void Rise(Unit& u, double dt) {
-        u.progress = u.def.start_time_s > 0.0 ? u.progress + dt / u.def.start_time_s : 1.0;
+        const double start_s = u.def.start_time_s * u.time_scale;
+        u.progress = start_s > 0.0 ? u.progress + dt / start_s : 1.0;
         if (u.progress >= 1.0 - kProgressEps) {
             u.progress = 1.0;
             Go(u, SubsystemState::Ready);

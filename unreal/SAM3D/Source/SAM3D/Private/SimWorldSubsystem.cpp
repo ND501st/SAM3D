@@ -540,6 +540,7 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 			*ToF(simcore::FormatLocalHour(Runner->Clock().start_local_h)), *ToF(simcore::LightPhaseName(Light.phase)), Light.sun_elevation_deg);
 	}
 	ApplyHelperLevel();
+	ApplyFaultsPreference();
 	LoadCrewPresentation(DataDir);
 	BroadcastNewDebriefEntries();
 	return true;
@@ -1420,6 +1421,50 @@ void USimWorldSubsystem::ApplyHelperLevel()
 namespace
 {
 	const TCHAR* const HelperSection = TEXT("SAM3D.Helper");
+	const TCHAR* const FaultsSection = TEXT("SAM3D.Faults");
+}
+
+bool USimWorldSubsystem::GetFaultsPreference()
+{
+	bool bOn = true;
+	if (GConfig != nullptr)
+	{
+		GConfig->GetBool(FaultsSection, TEXT("On"), bOn, GGameUserSettingsIni);
+	}
+	return bOn;
+}
+
+void USimWorldSubsystem::SetFaultsPreference(bool bOn)
+{
+	if (GConfig == nullptr)
+	{
+		return;
+	}
+	GConfig->SetBool(FaultsSection, TEXT("On"), bOn, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
+void USimWorldSubsystem::ApplyFaultsPreference()
+{
+	const bool bOn = HasUrlOption(TEXT("SimFaults")) ? GetLaunchOption(TEXT("SimFaults")) != TEXT("0") : GetFaultsPreference();
+	// Off turns the dice off; on leaves the scenario's own choice (a lesson keeps them off).
+	auto Apply = [bOn](simcore::ScenarioRunner& R)
+	{
+		if (!bOn)
+		{
+			R.SetRandomFaults(false);
+		}
+	};
+	if (Link)
+	{
+		Apply(Link->Osa());
+		Apply(Link->Post());
+	}
+	else if (Runner)
+	{
+		Apply(*Runner);
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("Faults: %s"), Runner != nullptr && Runner->RandomFaults() ? TEXT("they come by themselves") : TEXT("only the scenario's"));
 }
 
 FString USimWorldSubsystem::GetHelperPreference()
@@ -2814,7 +2859,7 @@ void USimWorldSubsystem::PumpKnowledge()
 			V.time_s = Now;
 			if (R != nullptr && R->EngagementOn())
 			{
-				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time(), R->Fuel()), Keys);
+				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time(), R->Fuel(), R->OwnDash()), Keys);
 			}
 			if (R != nullptr)
 			{

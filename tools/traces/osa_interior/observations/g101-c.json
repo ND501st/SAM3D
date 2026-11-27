@@ -1,0 +1,145 @@
+{
+ "photo": "g101-c",
+ "vehicle": "9A33BM2/BM3 late Czech Army vehicle (Bouchal, 2000s; not the 1980s fit)",
+ "camera": {
+  "stands": "on the deck, presumably at the hatch of g101-b",
+  "looks": "down into the engine compartment",
+  "covers": [
+   "engine"
+  ],
+  "lens": "normal, close"
+ },
+ "components": [
+  {
+   "id": "new.duct.engine_insulated_elbow",
+   "class": "duct",
+   "seen_as": "big grey elbow duct wrapped in heat-insulating fabric",
+   "bbox": [
+    0.05,
+    0.0,
+    0.45,
+    0.25
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "metal, insulating wrap",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.filter.engine_fuel_sediment_cz",
+   "class": "filter",
+   "seen_as": "yellow sediment filter bowl with a yellow pipe to a grey tee/valve",
+   "bbox": [
+    0.19,
+    0.4,
+    0.73,
+    0.64
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "fist-sized bowl",
+   "material": "yellow paint",
+   "confidence": "medium",
+   "notes": "class filter is meant for the FVU; this is a fuel filter, purpose not stated"
+  },
+  {
+   "id": "new.cover.engine_brass_caps",
+   "class": "cover",
+   "seen_as": "three brass screw caps in round holes",
+   "bbox": [
+    0.16,
+    0.68,
+    0.62,
+    0.86
+   ],
+   "zone": "engine",
+   "relations": [
+    [
+     "below",
+     "new.filter.engine_fuel_sediment_cz"
+    ]
+   ],
+   "size_cue": "each palm-sized",
+   "material": "brass",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.engine_green",
+   "class": "pipe",
+   "seen_as": "green-painted pipe rising in a bend",
+   "bbox": [
+    0.7,
+    0.05,
+    1.0,
+    1.0
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "about a wrist thick",
+   "material": "green painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.engine_cream_black",
+   "class": "loom",
+   "seen_as": "cream and black wiring along the casing",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.45
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "cream sheath",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.engine_grey_casing",
+   "class": "unknown",
+   "seen_as": "grey engine casing with a finned plate",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.rail.engine_bay_bar_cz",
+   "class": "rail",
+   "seen_as": "pale bar across the foreground (out of focus)",
+   "bbox": [
+    0.6,
+    0.3,
+    1.0,
+    1.0
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "the notes call it a hatch-frame bar"
+  }
+ ],
+ "not_in_register": [
+  "engine compartment contents (beyond the bulkhead)"
+ ],
+ "doubts": [
+  "not the compartment; the engine bay of a late Czech vehicle",
+  "where in the engine compartment this is is not known"
+ ]
+}

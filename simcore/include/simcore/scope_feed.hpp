@@ -15,6 +15,7 @@
 #include "simcore/engagement.hpp"
 #include "simcore/fuel.hpp"
 #include "simcore/launcher.hpp"
+#include "simcore/vehicle_systems.hpp"
 
 namespace simcore {
 
@@ -34,6 +35,7 @@ struct ScopeFeed {
     Vec3 unit_position;
     std::vector<ScopeStrobe> strobes;  // jamming strobes (EM layer)
     double search_antenna_az_deg = EngagementModel::kNoAntenna;  // where the search antenna points (crew frame)
+    VehicleDash dash;  // the driver's dash and the supply's voltage (not valid without a vehicle model)
 
     double IndicatedToTrueDeg(double indicated_deg) const {
         double d = std::fmod(indicated_deg + indicated_to_true_deg + 180.0, 360.0);
@@ -44,7 +46,8 @@ struct ScopeFeed {
     double MissileRangeM(int channel) const { return channel == 1 || channel == 2 ? missile_range_m[channel - 1] : -1.0; }
 };
 
-inline ScopeFeed ScopeFeedOf(const EngagementModel& e, const Launcher* launcher, double now_s, const FuelModel* fuel = nullptr) {
+inline ScopeFeed ScopeFeedOf(const EngagementModel& e, const Launcher* launcher, double now_s, const FuelModel* fuel = nullptr,
+                             const VehicleDash& dash = VehicleDash()) {
     ScopeFeed f;
     f.valid = true;
     f.search = e.SearchPicture();
@@ -64,6 +67,7 @@ inline ScopeFeed ScopeFeedOf(const EngagementModel& e, const Launcher* launcher,
     f.unit_position = e.UnitPosition();
     f.strobes = e.SearchStrobes();
     f.search_antenna_az_deg = e.SearchAntennaAzimuthDeg();
+    f.dash = dash;
     return f;
 }
 
@@ -114,6 +118,10 @@ inline em::ViewScope ToViewScope(const ScopeFeed& f, EchoKeys& keys) {
     v.unit_position = f.unit_position;
     for (const ScopeStrobe& st : f.strobes) v.strobes.push_back({st.azimuth_deg, st.jn_db});
     v.search_antenna_az_deg = f.search_antenna_az_deg;
+    v.dash_valid = f.dash.valid;
+    const double dash[8] = {f.dash.engine_rpm, f.dash.speed_kmh, f.dash.coolant_c, f.dash.oil_c,
+                            f.dash.oil_pressure, f.dash.ammeter_a, f.dash.network_v, f.dash.supply_v};
+    for (int i = 0; i < 8; ++i) v.dash[i] = dash[i];
     return v;
 }
 
@@ -148,6 +156,15 @@ inline ScopeFeed FromViewScope(const em::ViewScope& v) {
     f.unit_position = v.unit_position;
     for (const em::ViewStrobe& st : v.strobes) f.strobes.push_back({st.azimuth_deg, st.jn_db});
     f.search_antenna_az_deg = v.search_antenna_az_deg;
+    f.dash.valid = v.dash_valid;
+    f.dash.engine_rpm = v.dash[0];
+    f.dash.speed_kmh = v.dash[1];
+    f.dash.coolant_c = v.dash[2];
+    f.dash.oil_c = v.dash[3];
+    f.dash.oil_pressure = v.dash[4];
+    f.dash.ammeter_a = v.dash[5];
+    f.dash.network_v = v.dash[6];
+    f.dash.supply_v = v.dash[7];
     return f;
 }
 

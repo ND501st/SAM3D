@@ -7,6 +7,8 @@
 #include "SimOsaVehicle.generated.h"
 
 class UCameraComponent;
+class UPointLightComponent;
+class USpotLightComponent;
 class USimCabinComponent;
 class USimCrewBodiesComponent;
 class USimCrewVoiceComponent;
@@ -441,6 +443,15 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<UStaticMeshComponent> Hull;
 
+	/** The outside lamps (roadmap C2): the headlights, the sidelights and the tail lamps, lit as the driver's switches
+	 *  and the network have them (simcore::OutsideLampsOf); dark under the light discipline. */
+	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Lights")
+	TArray<TObjectPtr<USpotLightComponent>> Headlights;
+	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Lights")
+	TArray<TObjectPtr<UPointLightComponent>> Sidelights;
+	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Lights")
+	TArray<TObjectPtr<UPointLightComponent>> TailLamps;
+
 	/** Rotates in azimuth: the antenna-launcher unit. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USceneComponent> TurretPivot;
@@ -535,6 +546,8 @@ private:
 
 	void Drive(float DeltaSeconds, class APlayerController* Pc);
 	void FollowGround();
+	/** Lights the hull's lamps from the player's runner's console (a client's is the server's mirror). */
+	void UpdateOutsideLamps(USimWorldSubsystem* Sim);
 	void UpdateSim(USimWorldSubsystem* Sim);
 	void AnimateFromSim(const USimWorldSubsystem* Sim);
 	void HandleHotkeys(class APlayerController* Pc, USimWorldSubsystem* Sim);
@@ -602,6 +615,9 @@ private:
 	double LookPitchDeg = 0.0;
 	int32 HoveredItem = INDEX_NONE;
 	int32 DraggedWheel = INDEX_NONE;
+	/** A spring lever held by a mouse button (ВЛЕВО — ВПРАВО): let go when that button comes up. */
+	int32 HeldLever = INDEX_NONE;
+	FKey HeldLeverKey;
 	/** Holding a hand wheel turns the head onto the display it is worked against (the layout's "watch"), and back to
 	 *  where it was when the wheel is let go: the look to turn to, and the look to come back to. */
 	bool bWheelWatch = false;

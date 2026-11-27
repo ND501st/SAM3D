@@ -1,0 +1,456 @@
+{
+ "photo": "g099-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle at the rear, standing height",
+  "looks": "left at the left wall, slightly down; image right is forward",
+  "covers": [
+   "rack.sl3m",
+   "frame.post_sl2m_sl3m",
+   "rack.sl2m",
+   "new.instrument.pressure_gauge"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.sl3m",
+   "class": "rack",
+   "seen_as": "left-wall rack nearly square-on, two columns of three blocks",
+   "bbox": [
+    0.11,
+    0.0,
+    0.57,
+    0.4
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "aft_of",
+     "frame.post_sl2m_sl3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0093_28",
+   "class": "block",
+   "seen_as": "aft column top block: row of seven fuse holders and lamps",
+   "bbox": [
+    0.11,
+    0.04,
+    0.31,
+    0.16
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [
+    [
+     "above",
+     "block.p_0092_10m"
+    ],
+    [
+     "aft_of",
+     "block.p_0092_8"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0092_10m",
+   "class": "block",
+   "seen_as": "aft column middle block: four fuse holders",
+   "bbox": [
+    0.12,
+    0.16,
+    0.31,
+    0.27
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [
+    [
+     "above",
+     "block.p_0096_10m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0096_10m",
+   "class": "block",
+   "seen_as": "aft column bottom block: fuse cover and three big angle plugs",
+   "bbox": [
+    0.13,
+    0.27,
+    0.32,
+    0.38
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0092_8",
+   "class": "block",
+   "seen_as": "forward column top block: four fuse holders",
+   "bbox": [
+    0.31,
+    0.0,
+    0.57,
+    0.14
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [
+    [
+     "above",
+     "block.p_os94_10"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.p_os94_10",
+   "class": "block",
+   "seen_as": "forward column middle block: five fuse holders",
+   "bbox": [
+    0.31,
+    0.14,
+    0.57,
+    0.28
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [
+    [
+     "above",
+     "block.p_0092_4m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0092_4m",
+   "class": "block",
+   "seen_as": "forward column bottom block: four fuse holders",
+   "bbox": [
+    0.32,
+    0.28,
+    0.57,
+    0.43
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.sl3m_plugs",
+   "class": "loom",
+   "seen_as": "three angle plugs with silver-sleeved cables at the rack's lower left",
+   "bbox": [
+    0.0,
+    0.31,
+    0.2,
+    0.47
+   ],
+   "zone": "compartment.left_wall",
+   "on": "block.p_0096_10m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.shelf.under_sl3m",
+   "class": "shelf",
+   "seen_as": "horizontal sheet shelf under the rack",
+   "bbox": [
+    0.13,
+    0.4,
+    0.56,
+    0.47
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "frame.post_sl2m_sl3m",
+   "class": "frame",
+   "seen_as": "heavy inverted-Y post lined in green-grey resin-like lining",
+   "bbox": [
+    0.55,
+    0.0,
+    0.86,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sl3m"
+    ],
+    [
+     "aft_of",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "glass-fibre-like lining",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.fuse_table_post_left",
+   "class": "plate",
+   "seen_as": "tall narrow aluminium plate listing blocks and fuses",
+   "bbox": [
+    0.68,
+    0.0,
+    0.79,
+    0.38
+   ],
+   "zone": "compartment.left_wall",
+   "on": "frame.post_sl2m_sl3m",
+   "relations": [],
+   "size_cue": "about one to six",
+   "material": "aluminium",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.keys_post_left",
+   "class": "kit",
+   "seen_as": "two T-handled keys on spring clips at the post foot",
+   "bbox": [
+    0.57,
+    0.64,
+    0.68,
+    0.83
+   ],
+   "zone": "compartment.left_wall",
+   "on": "frame.post_sl2m_sl3m",
+   "relations": [],
+   "size_cue": "about 12 cm",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.keys_left",
+   "class": "plate",
+   "seen_as": "small plate \"КЛЮЧИ\"",
+   "bbox": [
+    0.57,
+    0.71,
+    0.62,
+    0.73
+   ],
+   "zone": "compartment.left_wall",
+   "on": "frame.post_sl2m_sl3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.gauge_panel",
+   "class": "bracket",
+   "seen_as": "angled sheet-steel panel in front of the post",
+   "bbox": [
+    0.23,
+    0.48,
+    0.49,
+    0.85
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "in_front_of",
+     "frame.post_sl2m_sl3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.instrument.pressure_gauge",
+   "class": "instrument",
+   "seen_as": "round pressure gauge, white dial, green sticker",
+   "bbox": [
+    0.44,
+    0.51,
+    0.58,
+    0.6
+   ],
+   "zone": "compartment.left_wall",
+   "on": "new.bracket.gauge_panel",
+   "relations": [],
+   "size_cue": "about 10 cm dial",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.gauge_blue",
+   "class": "hose",
+   "seen_as": "blue tube with brass fittings and a brass tee valve under the gauge",
+   "bbox": [
+    0.34,
+    0.58,
+    0.5,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "below",
+     "new.instrument.pressure_gauge"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.white_taped_left_wall",
+   "class": "cable",
+   "seen_as": "white-taped cable rising behind the gauge tube",
+   "bbox": [
+    0.33,
+    0.82,
+    0.45,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.box.tray_left_rear",
+   "class": "box",
+   "seen_as": "grey box with a tubular rail and a tray with a brown rubber pad, lower left",
+   "bbox": [
+    0.0,
+    0.47,
+    0.25,
+    0.85
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "new.bracket.gauge_panel"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.sh3_angle_plug",
+   "class": "connector",
+   "seen_as": "grey angle plug marked \"Ш-3\"(?) under the tray box",
+   "bbox": [
+    0.0,
+    0.74,
+    0.1,
+    0.85
+   ],
+   "zone": "compartment.rear",
+   "on": "new.box.tray_left_rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "column of white panels forward of the post: generator power, transmitter on/off, control work/calibrate, automatic",
+   "bbox": [
+    0.86,
+    0.0,
+    1.0,
+    0.97
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "forward_of",
+     "frame.post_sl2m_sl3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "which rack these panels belong to is not stated in the source"
+  },
+  {
+   "id": "hull.wall_left",
+   "class": "hull_wall",
+   "seen_as": "glossy wall at the top left",
+   "bbox": [
+    0.0,
+    0.0,
+    0.12,
+    0.3
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the shelf under SL-3M",
+  "the angle plug on the tray box"
+ ],
+ "doubts": [
+  "the white panel column right of the post may be the rear end of SL-2M or a separate unit (transmitter control?)",
+  "block names on SL-3M follow the drawing g099-c and fuse counts; the plates are unreadable"
+ ]
+}

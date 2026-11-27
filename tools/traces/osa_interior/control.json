@@ -1,0 +1,142 @@
+{
+ "about": "Control faces for the Osa interior's cameras (docs/OSA_MODELLING_PROCESS.md stage 1; tools/recon/osa/cameras.py). A frame's points are fixed in the cabin; a plate's shape is known and its place is solved with the cameras. A face whose place came from an earlier solve is never a frame.",
+ "face_photos_only": [
+  "g093-b"
+ ],
+ "face_photos_only_why": "g093-b is SP-2M2 square-on: one plane, so its focal length and distance cannot be told apart, and the joint solve's 35 points for it are false matches to the left wall. It supplies SP-2M2's flat and is not used as a camera.",
+ "faces": [
+  {
+   "id": "sp2m",
+   "kind": "frame",
+   "flat": "out/traces/sp2m/front_mm.png",
+   "px_per_mm": 2.0,
+   "margin_mm": 20.0,
+   "size_mm": [
+    1890.0,
+    1240.0
+   ],
+   "panel": "sp2m_panel",
+   "source": "wwp_gecko g093-b flattened and traced in millimetres (tools/blender/sp2m_trace.py); the cabin's sp2m_panel places it. Its 1.89 m width is assumed from SL-2M's (mon_2112_80 Fig. 3), about +-2 %: the whole compartment's scale hangs on it.",
+   "confidence": "medium"
+  },
+  {
+   "id": "cab0096",
+   "kind": "plate",
+   "flat": "out/traces/cabinet0096_g096a/front_mm.png",
+   "px_per_mm": 4.0,
+   "margin_mm": 40.0,
+   "map": "cabinet0096",
+   "panel": "pwr_cabinet",
+   "free": [
+    "scale"
+   ],
+   "source": "wwp_gecko g096-a, the 0096-9M2's door flattened at 4 px/mm (tools/blender/cabinet0096_trace.py). Its shape is the trace's; its place, turn and one scale are solved with the cameras, starting from the cabin's pwr_cabinet.",
+   "confidence": "medium"
+  },
+  {
+   "id": "sp3m_white",
+   "kind": "plate",
+   "from_photo": "g098-b",
+   "tile": {
+    "box": [
+     300,
+     0,
+     1020,
+     560
+    ],
+    "sigma": 2.5,
+    "min": 150
+   },
+   "edges": {
+    "top": [
+     {
+      "n": 0,
+      "side": "top"
+     }
+    ],
+    "bottom": [
+     {
+      "n": 2,
+      "side": "bottom"
+     }
+    ],
+    "left": [
+     {
+      "n": 8,
+      "side": "left"
+     }
+    ],
+    "right": [
+     {
+      "n": 2,
+      "side": "right"
+     }
+    ]
+   },
+   "size_mm": [
+    600.0,
+    300.0
+   ],
+   "extend": [
+    0.05,
+    0.1,
+    0.05,
+    0.1
+   ],
+   "free": [
+    "scale",
+    "aspect"
+   ],
+   "source": "wwp_gecko g098-b: SP-3M's white panel, top left of the rack, a rectangle by its four edges. Its size is not sourced: scale and aspect are solved with the cameras.",
+   "confidence": "low"
+  },
+  {
+   "id": "sl2m",
+   "kind": "plate",
+   "from_photo": "g094-a",
+   "tile": {
+    "box": [
+     0,
+     0,
+     2017,
+     1487
+    ],
+    "sigma": 3.0,
+    "min": 260
+   },
+   "edges": {
+    "top": [
+     {
+      "n": 5,
+      "side": "top"
+     }
+    ],
+    "bottom": [
+     29
+    ],
+    "left": [
+     7
+    ],
+    "right": [
+     12
+    ]
+   },
+   "size_mm": [
+    610.0,
+    880.0
+   ],
+   "extend": [
+    2.2,
+    0.08,
+    0.12,
+    0.3
+   ],
+   "free": [
+    "scale",
+    "aspect"
+   ],
+   "source": "wwp_gecko g094-a: SL-2M's face, flattened through the rectangle of its front column's blocks (the top block's top edge, the fourth block's foot, the column's two sides) and extended over the other two columns. Its size is not sourced: scale and aspect are solved with the cameras.",
+   "confidence": "low"
+  }
+ ]
+}

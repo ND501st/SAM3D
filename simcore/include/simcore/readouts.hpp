@@ -17,6 +17,7 @@
 #include "simcore/cabin.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/vehicle_systems.hpp"
 
 namespace simcore {
 
@@ -81,9 +82,20 @@ inline int CounterReading(const std::string& readout, const ConsoleData& console
 //   gyro_heading  the gyro half-compass's heading in degrees (the Qc scale of block OR-31M, which turns while the gyro is
 //                 being slaved to the course setter and stops once they agree: voenizdat_osa_1991 p48)
 //   fuel          the tank's level in litres (the driver's fuel gauge; 0 without a fuel model)
-inline double DialReading(const CabinDisplay& display, const ConsoleData& console, double gyro_heading_deg, double fuel_l = -1.0) {
+//   engine_rpm    the drive engine's speed in hundreds of rpm; speed_kmh the vehicle's speed; coolant_c, oil_c the
+//                 engine's temperatures; oil_pressure in kgf/cm2; ammeter_a the batteries' current (vehicle_systems.hpp;
+//                 0 without a vehicle model)
+inline double DialReading(const CabinDisplay& display, const ConsoleData& console, double gyro_heading_deg, double fuel_l = -1.0,
+                          const VehicleDash& dash = VehicleDash()) {
+    if (!display.levels.empty()) return LevelReading(display, console);
     if (display.readout == "gyro_heading") return gyro_heading_deg;
     if (display.readout == "fuel") return fuel_l > 0.0 ? fuel_l : 0.0;
+    if (display.readout == "engine_rpm") return dash.valid ? dash.engine_rpm / 100.0 : 0.0;
+    if (display.readout == "speed_kmh") return dash.valid ? dash.speed_kmh : 0.0;
+    if (display.readout == "coolant_c") return dash.valid ? dash.coolant_c : 0.0;
+    if (display.readout == "oil_c") return dash.valid ? dash.oil_c : 0.0;
+    if (display.readout == "oil_pressure") return dash.valid ? dash.oil_pressure : 0.0;
+    if (display.readout == "ammeter_a") return dash.valid ? dash.ammeter_a : 0.0;
     return console.panel.GetValue(display.control);
 }
 

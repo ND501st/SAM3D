@@ -1,0 +1,242 @@
+{
+ "photo": "g083-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "above the floor behind the driver seat",
+  "looks": "straight down; image top is aft, image left is the vehicle right",
+  "covers": [
+   "cushion.floor_mat",
+   "cover.radio_steel",
+   "hull.floor"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "cushion.floor_mat",
+   "class": "cushion",
+   "seen_as": "ribbed rubber floor plate riveted round its edge",
+   "bbox": [
+    0.02,
+    0.54,
+    0.58,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "right_of",
+     "cover.radio_steel"
+    ]
+   ],
+   "size_cue": "about as long as the radio cover is wide x 2",
+   "material": "ribbed black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.floor_plug",
+   "class": "cover",
+   "seen_as": "square steel inset plate at the mat edge with a round screw plug, red marks",
+   "bbox": [
+    0.3,
+    0.86,
+    0.48,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "on": "cushion.floor_mat",
+   "relations": [
+    [
+     "in",
+     "cushion.floor_mat"
+    ]
+   ],
+   "size_cue": "hand-sized plug",
+   "material": "steel",
+   "confidence": "high",
+   "notes": "Drain or access plug."
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "grey painted floor strip between the mat and the raised blocks",
+   "bbox": [
+    0.0,
+    0.34,
+    0.62,
+    0.56
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.step.floor_raised_aft",
+   "class": "step",
+   "seen_as": "thick raised grey blocks/steps with rounded corners beyond the floor strip",
+   "bbox": [
+    0.0,
+    0.0,
+    0.62,
+    0.37
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "aft_of",
+     "cushion.floor_mat"
+    ]
+   ],
+   "size_cue": "shin-high",
+   "material": "grey painted steel",
+   "confidence": "low",
+   "notes": "Could be the bench base or a tunnel cover."
+  },
+  {
+   "id": "new.bracket.hinge_strap_aft",
+   "class": "bracket",
+   "seen_as": "hinged bracket with a khaki strap and pins",
+   "bbox": [
+    0.42,
+    0.02,
+    0.62,
+    0.28
+   ],
+   "zone": "compartment.floor",
+   "relations": [
+    [
+     "aft_of",
+     "cushion.floor_mat"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "steel, khaki webbing",
+   "confidence": "low",
+   "notes": "Seat or bench hinge with a belt; owner not identifiable."
+  },
+  {
+   "id": "cover.radio_steel",
+   "class": "cover",
+   "seen_as": "long steel cover with chamfered end, pressed sunburst grooves either side of a lengthwise rib, four bolt holes",
+   "bbox": [
+    0.61,
+    0.02,
+    0.94,
+    1.0
+   ],
+   "zone": "cab.left_wall",
+   "on": "radio.r123m_left",
+   "relations": [
+    [
+     "left_of",
+     "cushion.floor_mat"
+    ]
+   ],
+   "size_cue": "about 0.25 x 0.6 m (radio-sized)",
+   "material": "pressed steel, worn light grey",
+   "confidence": "high",
+   "notes": "The step of g082 text."
+  },
+  {
+   "id": "mount.r123m_left",
+   "class": "mount",
+   "seen_as": "tubular rail of the radio tray beside the cover",
+   "bbox": [
+    0.58,
+    0.46,
+    0.62,
+    0.99
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "right_of",
+     "cover.radio_steel"
+    ]
+   ],
+   "size_cue": "tube a finger thick",
+   "material": "grey steel tube",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.red_white_left",
+   "class": "cable",
+   "seen_as": "red and white cables beside the cover",
+   "bbox": [
+    0.92,
+    0.24,
+    1.0,
+    0.6
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "cover.radio_steel"
+    ]
+   ],
+   "size_cue": "",
+   "material": "PVC",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.radio_left_dust_cloth",
+   "class": "cover",
+   "seen_as": "cloth beside the cover, pale in the flash",
+   "bbox": [
+    0.92,
+    0.48,
+    1.0,
+    0.76
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "cover.radio_steel"
+    ]
+   ],
+   "size_cue": "",
+   "material": "cloth",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.yellow_canister",
+   "class": "kit",
+   "seen_as": "yellow canister edge at the right",
+   "bbox": [
+    0.94,
+    0.77,
+    1.0,
+    0.93
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "cover.radio_steel"
+    ]
+   ],
+   "size_cue": "",
+   "material": "yellow",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the floor plug in the mat",
+  "the raised blocks aft of the mat"
+ ],
+ "doubts": [
+  "Orientation inferred: the mat with its plug inset is right of the radio cover (g082-b), and the plug is at the mat forward end, so image top is aft. This leaves the hinge-and-strap bracket at the top aft of the mat, not a front seat."
+ ]
+}

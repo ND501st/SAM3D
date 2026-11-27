@@ -216,3 +216,35 @@ SC_TEST("em deception: the library refuses a false-target repeater without targe
     std::printf("    %s\n", r.error.c_str());
     SC_EXPECT(!r.ok && r.error.find("false_targets") != std::string::npos);
 }
+
+// Roadmap C5: an asynchronous repeater's echoes fall anew each sweep along its bearing, and СА blanks them
+// (voenizdat_osa_1991 p30, p36, p266); a synchronous repeater passes СА.
+SC_TEST("em deception: СА blanks an asynchronous repeater's false targets; a synchronous one passes it") {
+    struct Case { bool synchronous; bool sa; };
+    for (const Case c : {Case{false, false}, Case{false, true}, Case{true, true}}) {
+        EmLibrary lib = Lib();
+        for (JammerDef& jd : lib.jammers)
+            if (jd.id == "generic_false_targets_c") jd.synchronous = c.synchronous;
+        EmWorld w(kOrigin, nullptr, 4);
+        SC_EXPECT(w.SetLibrary(lib));
+        const int site = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 5.0);
+        const int radar = w.AddRadar(site, "generic_search_c", true);
+        w.Scene().FindRadar(radar)->sa_on = c.sa;
+        const int jp = Aircraft(w, "attacker", Side::Blue, 0.0, 25000.0, 3000.0);
+        const int j = w.AddJammer(jp, "generic_false_targets_c", true);
+        w.Scene().FindJammer(j)->aim_at_point = true;
+        w.Scene().FindJammer(j)->aim_point = w.Scene().FindPlatform(site)->position;
+        int plots = 0;
+        for (int i = 0; i < 300; ++i) {
+            w.Step(0.1);
+            for (const RadarPlot& p : w.Scene().FindRadar(radar)->last_plots) plots += p.false_target ? 1 : 0;
+        }
+        int ghosts = 0;
+        for (const SensorTrack& t : w.Scene().FindRadar(radar)->tracker.Tracks())
+            if (t.status == TrackStatus::Confirmed && t.debug_truth_platform != jp) ++ghosts;
+        std::printf("    synchronous %d, СА %d: %d false plots, %d ghost tracks\n", c.synchronous, c.sa, plots, ghosts);
+        if (!c.synchronous && !c.sa) SC_EXPECT(plots >= 10);  // seen, scattered along the bearing anew each sweep
+        if (!c.synchronous && c.sa) SC_EXPECT(plots == 0 && ghosts == 0);
+        if (c.synchronous) SC_EXPECT(ghosts >= 3);
+    }
+}

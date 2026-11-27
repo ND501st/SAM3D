@@ -96,6 +96,7 @@ def build_items(console, cabin):
             "size": look_size(entry, FOOTPRINT_M[style]),
             "confidence": control.get("confidence", ""), "launch": control["id"] == launch_button,
             "positions": len(control.get("position_labels", [])), "guards": None,
+            "flap": "flap" in entry,
         })
     for control in controls:
         if control["id"] in placed:
@@ -111,16 +112,19 @@ def build_items(console, cabin):
             "guards": guarded[0]["id"],
         })
     for lamp in cabin.get("lamps", []):
+        # a lit push-button: the lamp draws the lens, and an in_mesh control at its place is pressed through it
+        pressed = [e["control"] for e in cabin.get("controls", []) if e.get("look", {}).get("kind") == "in_mesh"
+                   and e["panel"] == lamp["panel"] and max(abs(e["at_m"][0] - lamp["at_m"][0]), abs(e["at_m"][1] - lamp["at_m"][1])) < 0.001]
         items.append({
             "what": "lamp", "id": lamp["id"], "label": lamp.get("label", ""), "style": "lamp",
             "panel": lamp["panel"], "at": tuple(lamp["at_m"]), "size": look_size(lamp, FOOTPRINT_M["lamp"]),
-            "confidence": lamp.get("confidence", ""), "color": lamp.get("color", "white"),
+            "confidence": lamp.get("confidence", ""), "color": lamp.get("color", "white"), "turned_by": pressed,
         })
     for display in cabin.get("displays", []):
         items.append({
             "what": "display", "id": display["id"], "label": display.get("label", ""), "style": display["kind"],
             "panel": display["panel"], "at": tuple(display["at_m"]), "size": tuple(display["size_m"]),
-            "confidence": display.get("confidence", ""),
+            "confidence": display.get("confidence", ""), "turned_by": [c for c in (display.get("control"), display.get("course_scale", {}).get("control")) if c],
         })
     return items
 
@@ -148,7 +152,8 @@ def find_problems(console, cabin):
             problems.append(f"control '{control['id']}' is not placed on any panel")
     # Covers are flaps hinged 4.5 cm in front of the face (SimCabinComponent), so they may hang past a column's edge
     # or over a neighbour, as the guards in the samsim_panels photos do; only items on the face are checked.
-    on_face = [i for i in items if i["style"] != "cover"]
+    # A control drawn as a hinged flap (a wheel's lock collar folded over its hub) stands in front of the face too.
+    on_face = [i for i in items if i["style"] != "cover" and not i.get("flap")]
     for item in items:
         panel = panels.get(item["panel"])
         if panel is None:
@@ -162,6 +167,8 @@ def find_problems(console, cabin):
         for b in on_face[n + 1:]:
             if a["panel"] != b["panel"]:
                 continue
+            if b["id"] in a.get("turned_by", ()) or a["id"] in b.get("turned_by", ()):
+                continue  # a knob on the scale it turns (ШИРОТА, the PPI's course-parameter disc)
             if _overlap(a, b):
                 problems.append(f"'{a['id']}' and '{b['id']}' overlap on panel '{a['panel']}'")
     return problems

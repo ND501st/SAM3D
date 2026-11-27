@@ -1,0 +1,44 @@
+{
+  "name": "osa_interior",
+  "notes": "The 9A33BM2's compartment from the WWP book's cabin photographs and drawings (docs/OSA_INTERIOR_PIPELINE.md). The photos are a 9A33BM3-1's (ex-NVA): shapes are taken where the AK shares the block (decision D1, docs/OSA_MODEL_ROADMAP.md). Run outputs go to out/recon/osa_interior/ (git-ignored).",
+  "out_dir": "out/recon/osa_interior",
+  "max_item_failure": 0.5,
+  "sources": {
+    "book_run": "out/recon/osa_9a33bm2",
+    "cabin": "data/cabins/osa_ak.json",
+    "faces": "tools/traces/osa_interior",
+    "keypoints": "tools/traces/osa_interior/keypoints/room.json"
+  },
+  "panel_aliases": {
+    "so_panel": ["СЛ-2М", "SL-2M", "SŁ-2M", "main console", "ОП81-16", "OP81-16", "0094-9", "search column", "dial strip", "PPI"],
+    "op_panel": ["СЛ-2М", "SL-2M", "SŁ-2M", "main console", "range column", "ОС81-9", "OS81-9", "0062-6"],
+    "fo_panel": ["СЛ-2М", "SL-2M", "SŁ-2M", "main console", "guidance column", "0004-14", "0004-11", "ОО04-11", "OS52-14", "ОС52-14", "OS81-10"],
+    "gyro_panel": ["СЛ-1М", "SL-1M", "SŁ-1M", "0005-8M", "OS51-8M", "0009-5M"],
+    "sl3m_panel": ["СЛ-3М", "SL-3M", "SŁ-3M", "0096-10M", "0093-28"],
+    "sp1m_panel": ["СП-1М", "SP-1M"],
+    "sp2m_panel": ["СП-2М", "SP-2M", "ОР-22М", "OR-22M", "0091-17"],
+    "sp3m_panel": ["СП-3", "SP-3", "SP-3W2"],
+    "pwr_cabinet": ["0096-9", "ОО96-9", "power cabinet", "cabinet face", "repair toggles"],
+    "pu303_panel": ["PU-303", "ПУ-303"],
+    "driver_panel": ["driver's station", "driver's controls", "dash", "wheel"],
+    "commander_panel": ["commander's dash", "commander dash", "ПРОХОД ПОД МОСТОМ", "9 toggles", "DP-3B"],
+    "radio_left_panel": ["left R-123M", "left radio"],
+    "radio_right_panel": ["right radio", "R-123M"],
+    "r124_a1_panel": ["A-2"],
+    "r124_a2_panel": ["A-1", "R-124"],
+    "aiming_circle_case": ["aiming circle", "ЗИП box"]
+  },
+  "tools": {
+    "blender": "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe",
+    "tesseract": "C:/Program Files/Tesseract-OCR/tesseract.exe",
+    "tessdata": "E:/SAM3D-tools/tessdata"
+  },
+  "stages": {
+    "refs": { "pages": [[82, 101]] },
+    "calib": { "vp_thr_deg": 1.5, "min_chains": 4 },
+    "faces": { "px_per_mm": 4.0, "margin_mm": 20, "max_aspect_spread": 0.05 },
+    "detect": { "circle_votes": 28, "min_r_mm": 3, "max_r_mm": 45 },
+    "verify": { "match_mm": 25 },
+    "build": { "enabled": false, "timeout_s": 1800 }
+  }
+}

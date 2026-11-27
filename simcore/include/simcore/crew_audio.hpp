@@ -12,7 +12,10 @@
 //     the R-124 sidetone puts in his own ears) or a designation coming in.
 //   * The call tone while ТОН. ВЫЗОВ is pressed (1 s, the runner's).
 // The voices themselves are the callouts (CalloutBus::SpeakingNow) and the designations heard
-// (ScenarioRunner::DesignationsHeard). Levels are 0..1, SAM3D's mix: hiss 0.35 open, 0.05 under a carrier.
+// (ScenarioRunner::DesignationsHeard). Levels are 0..1, SAM3D's mix: hiss 0.35 open, 0.05 under a carrier, each times
+// the set's ГРОМКОСТЬ (`volume`, which the presentation applies to the set's voices too).
+// A box with its own ГРОМКОСТЬ (the A-1's knob) sets the level of everything its seat hears in the headset, intercom and
+// set alike (HeadsetLevel).
 #pragma once
 
 #include "simcore/scenario_runner.hpp"
@@ -25,7 +28,21 @@ struct HeadsetSound {
     bool carrier = false;    // something is on the net now
     bool tone = false;       // the call tone
     bool squelched = false;  // the noise suppressor is on
+    double volume = 1.0;     // the set's ГРОМКОСТЬ, 0..1: the hiss and the voices on the set are heard at this level
+    double box_level = 1.0;  // the A-1's own ГРОМКОСТЬ (HeadsetLevel), already in `hiss`
 };
+
+// The level a seat's box puts its headset at, 0..1: the box's ГРОМКОСТЬ (`volume`) while the headset is on, else 1
+// (no box, no knob, or the headset off: what he hears comes through the air).
+inline double HeadsetLevel(const ConsoleData& c, const std::string& station) {
+    if (!c.has_voice) return 1.0;
+    for (const VoiceBoxDef& b : c.voice.boxes) {
+        if (b.station != station) continue;
+        if (b.volume.empty() || c.panel.Get(b.headset) != 1) return 1.0;
+        return std::clamp(VolumeLevel(c.panel, b.volume), 0.0, 1.0);
+    }
+    return 1.0;
+}
 
 // What `station`'s headset carries now. Without the console's voice block (its boxes) only the commander's A-1 reaches
 // a set, the one the network listens on.
@@ -45,8 +62,9 @@ inline HeadsetSound HeadsetSoundNow(const ScenarioRunner& r, const std::string& 
     }
     if (set < 0 || set >= static_cast<int>(c.comms.radios.size())) return out;
     const CommsRadioDef& radio = c.comms.radios[static_cast<std::size_t>(set)];
-    out.on_radio = c.panel.Get(radio.power) == 1 && c.equipment.IsReady(radio.warm) && c.panel.Get(radio.volume) == 1;
+    out.on_radio = c.panel.Get(radio.power) == 1 && c.equipment.IsReady(radio.warm) && VolumeUp(c.panel, radio.volume);
     if (!out.on_radio) return out;
+    out.volume = VolumeLevel(c.panel, radio.volume);
     out.squelched = c.panel.Get(radio.squelch) == 1;
     const double now = r.Time();
     if (const CalloutBus* bus = r.Callouts()) {
@@ -60,7 +78,14 @@ inline HeadsetSound HeadsetSoundNow(const ScenarioRunner& r, const std::string& 
     } else {
         out.hiss = out.squelched ? 0.0 : 0.35;
     }
+    out.hiss *= out.volume;
+    // and the seat's box's own ГРОМКОСТЬ (the A-1's knob), as for every line in his headset
+    out.box_level = HeadsetLevel(c, station);
+    out.hiss *= out.box_level;
     return out;
 }
+
+// The commander's headset (the seat the network's set is listened on without the console's boxes).
+inline HeadsetSound HeadsetSoundNow(const ScenarioRunner& r) { return HeadsetSoundNow(r, r.Cmdr()); }
 
 }  // namespace simcore

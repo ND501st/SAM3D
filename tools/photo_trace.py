@@ -161,7 +161,10 @@ def to_mm_homography(cfg, lines):
         return None, H, vh, vv
     k, m = cfg['px_per_mm'], cfg['margin_mm']
     s = cfg['height_mm'] / (pe['bottom'] - pe['top'])
-    S = np.array([[s * k, 0, (-pe['left'] * s + m) * k], [0, s * k, (-pe['top'] * s + m) * k], [0, 0, 1.0]])
+    # The flat from two vanishing points is right up to a stretch across: `aspect` (default 1) is that stretch, read
+    # from parts known to be round (the ПАНЕЛЬ ИНДИКАЦИИ's lamp caps) when no focal length fixes it.
+    sx = s * cfg.get('aspect', 1.0)
+    S = np.array([[sx * k, 0, (-pe['left'] * sx + m) * k], [0, s * k, (-pe['top'] * s + m) * k], [0, 0, 1.0]])
     return S @ H, H, vh, vv
 
 

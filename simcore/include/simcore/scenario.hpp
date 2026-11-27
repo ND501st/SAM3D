@@ -41,6 +41,8 @@
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
 #include "simcore/crew_mobility.hpp"
+#include "simcore/vehicle_systems.hpp"
+#include "simcore/faults.hpp"
 #include "simcore/crew_training.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
@@ -311,6 +313,15 @@ struct ScenarioDef {
     bool has_vehicle = false;
     VehicleDef vehicle;
     WalkingDef walking;
+    // The vehicle's own systems (data/vehicles/<system>_systems.json, vehicle_systems.hpp: the engine and drive, the
+    // network, lights, climate and fire), loaded when the system has the file (roadmap controls C1-C3, C7, C8).
+    bool has_vehicle_systems = false;
+    VehicleSystemsDef vehicle_systems;
+    // The faults that come about by themselves (data/gameplay/<system>_faults.json, faults.hpp, docs/FAULTS.md), loaded
+    // when the system has the file; the scenario's "faults": {"random", "maintenance", "since_check_h"}.
+    bool has_faults = false;
+    FaultCatalogue faults;
+    FaultOptions fault_options;
     bool has_skills = false;       // a crew member has a "skill": the tiers are loaded
     SkillTable skills;
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
@@ -498,8 +509,7 @@ public:
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
                              "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "date", "utc_offset_h", "supply",
-                             "scenery", "waves", "flights", "packages", "air_radio", "damage", "air_fight", "own_air"})) {
-
+                             "scenery", "waves", "flights", "packages", "air_radio", "damage", "air_fight", "own_air", "faults"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -548,6 +558,7 @@ public:
                 return Fail("assistance", "must be \"demonstrate\", \"guided\", \"hint\", \"unassisted\" or \"exam\"");
             }
         }
+        if (!LoadFaultOptions(root, out)) return false;
         if (!LoadEnvironment(root, out) || !LoadWeather(root, data_dir, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadClockStart(root, out) || !LoadTask(root, data_dir, out)) return false;
@@ -846,6 +857,25 @@ private:
         return true;
     }
 
+    // "faults": {"random": false} turns off the faults that come by themselves (a lesson's, the trainer's: what they
+    // teach is set by the scenario); "maintenance": "kept" | "due" | "overdue"; "since_check_h": hours of work since the
+    // vehicle's last check (faults.hpp).
+    bool LoadFaultOptions(const json::Value& root, ScenarioDef& out) {
+        const json::Value* f = root.Find("faults");
+        if (f == nullptr) return true;
+        if (!out.has_faults) return Fail("faults", "the own unit's system has no faults (data/gameplay/<system>_faults.json)");
+        if (!Keys(*f, "faults", {"random", "maintenance", "since_check_h", "notes"}) ||
+            !OptionalBool(*f, "faults", "random", out.fault_options.random) ||
+            !OptionalString(*f, "faults", "maintenance", out.fault_options.maintenance) ||
+            !OptionalNumber(*f, "faults", "since_check_h", out.fault_options.since_check_h)) {
+            return false;
+        }
+        const std::string& m = out.fault_options.maintenance;
+        if (m != "kept" && m != "due" && m != "overdue") return Fail("faults.maintenance", "\"kept\", \"due\" or \"overdue\"");
+        if (f->Find("since_check_h") != nullptr && out.fault_options.since_check_h < 0.0) return Fail("faults.since_check_h", "must be >= 0");
+        return true;
+    }
+
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
@@ -874,6 +904,16 @@ private:
             if (!LoadVehicleFile(vehicle_file, console, out.vehicle, &error)) return Fail("own_unit", error);
             if (!LoadWalkingFile(data_dir + "/crew/walking.json", out.walking, &error)) return Fail("own_unit", error);
             out.has_vehicle = true;
+        }
+        const std::string systems_file = data_dir + "/vehicles/" + console.system_id + "_systems.json";
+        if (std::ifstream(systems_file).good()) {
+            if (!LoadVehicleSystemsFile(systems_file, out.vehicle_systems, &error)) return Fail("own_unit", error);
+            out.has_vehicle_systems = true;
+        }
+        const std::string faults_file = data_dir + "/gameplay/" + console.system_id + "_faults.json";
+        if (std::ifstream(faults_file).good()) {
+            if (!LoadFaultCatalogueFile(faults_file, console, out.faults, &error)) return Fail("own_unit", error);
+            out.has_faults = true;
         }
         if (!OptionalString(*u, "own_unit", "tuning", out.tuning_file)) return false;
         if (!out.tuning_file.empty()) {
@@ -2083,9 +2123,13 @@ private:
             std::string kind;
             if (!RequireString(a, p, "instructor", kind) || !RequireString(a, p, "target", out.instructor.target)) return false;
             if (!InstructorKindFrom(kind, out.instructor.kind)) {
-                return Fail(Join(p, "instructor"), "unknown order '" + kind + "' (take, release, turn, height, speed, evade, jam)");
+                return Fail(Join(p, "instructor"), "unknown order '" + kind + "' (take, release, turn, height, speed, evade, jam, fault)");
             }
             bool known = false;
+            if (out.instructor.kind == InstructorOrder::Kind::Fault) {  // a fault of the vehicle's catalogue
+                known = def.has_faults && def.faults.Find(out.instructor.target) != nullptr;
+                if (!known) return Fail(Join(p, "target"), "not a fault of the own unit's catalogue: '" + out.instructor.target + "'");
+            }
             for (const ScenarioTarget& t : def.targets) known = known || t.id == out.instructor.target;
             if (!known) return Fail(Join(p, "target"), "unknown target '" + out.instructor.target + "'");
             if (InstructorOrderHasValue(out.instructor.kind)) return RequireNumber(a, p, "to", out.instructor.value);

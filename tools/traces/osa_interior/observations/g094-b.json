@@ -1,0 +1,258 @@
+{
+ "photo": "g094-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "at the rear end of the console, eye height, close",
+  "looks": "forward-left at the console's rear column, obliquely",
+  "covers": [
+   "rack.sl2m",
+   "frame.post_sl2m_sl3m"
+  ],
+  "lens": "normal, close"
+ },
+ "components": [
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "grey frame of the console's rear column",
+   "bbox": [
+    0.14,
+    0.03,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.r_0062_6m",
+   "class": "block",
+   "seen_as": "top block with three meters and black hoods",
+   "bbox": [
+    0.2,
+    0.05,
+    0.86,
+    0.29
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.r_os81_9m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; plate legible"
+  },
+  {
+   "id": "block.r_os81_9m",
+   "class": "block",
+   "seen_as": "square scope in a white bezel",
+   "bbox": [
+    0.2,
+    0.25,
+    0.86,
+    0.53
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.r_ok62_5m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; plate legible"
+  },
+  {
+   "id": "block.r_ok62_5m",
+   "class": "block",
+   "seen_as": "block with a printed table",
+   "bbox": [
+    0.2,
+    0.5,
+    0.86,
+    0.69
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.r_os61_5m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; plate legible"
+  },
+  {
+   "id": "block.r_os61_5m",
+   "class": "block",
+   "seen_as": "block with two knobs, switches and a table",
+   "bbox": [
+    0.2,
+    0.66,
+    0.86,
+    0.8
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.r_os81_18m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; plate legible"
+  },
+  {
+   "id": "block.r_os81_18m",
+   "class": "block",
+   "seen_as": "block with a white hand control",
+   "bbox": [
+    0.2,
+    0.73,
+    0.86,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; plate legible"
+  },
+  {
+   "id": "frame.post_sl2m_sl3m",
+   "class": "frame",
+   "seen_as": "grey sloped panel or post aft of the column, at the image's left",
+   "bbox": [
+    0.0,
+    0.13,
+    0.17,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.fuse_table_post_sl2m_sl3m",
+   "class": "plate",
+   "seen_as": "a column of printed metal plates, one per block, with a small framed plate on top",
+   "bbox": [
+    0.02,
+    0.2,
+    0.14,
+    0.52
+   ],
+   "zone": "compartment.left_wall",
+   "on": "frame.post_sl2m_sl3m",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "about a block's height times 1.5 tall, a third of a block wide",
+   "material": "metal plates",
+   "confidence": "high",
+   "notes": "tables of fuses by block; also in g094-a's left edge and g096-a's right edge"
+  },
+  {
+   "id": "new.unknown.post_sl2m_sl3m_round_holes",
+   "class": "unknown",
+   "seen_as": "two round holes or plugs low on the sloped panel",
+   "bbox": [
+    0.06,
+    0.73,
+    0.13,
+    0.83
+   ],
+   "zone": "compartment.left_wall",
+   "on": "frame.post_sl2m_sl3m",
+   "relations": [
+    [
+     "below",
+     "new.plate.fuse_table_post_sl2m_sl3m"
+    ]
+   ],
+   "size_cue": "each about a knob's size",
+   "material": "grey",
+   "confidence": "low",
+   "notes": "g096-a shows two round holes on the same post"
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "padded grey lining at the top",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.12
+   ],
+   "zone": "compartment.roof",
+   "relations": [
+    [
+     "above",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey padded fabric",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.rod_lower_left",
+   "class": "unknown",
+   "seen_as": "short dark rod or lever at the lower left edge",
+   "bbox": [
+    0.0,
+    0.78,
+    0.04,
+    0.87
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "a column of fuse-table plates on the post aft of SŁ-2M",
+  "two round holes on that post"
+ ],
+ "doubts": [
+  "the plates' surface: taken as the post between SŁ-2M and SŁ-3M; it could be SŁ-3M's side"
+ ]
+}

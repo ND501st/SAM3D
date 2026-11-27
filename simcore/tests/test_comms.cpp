@@ -102,6 +102,10 @@ SC_TEST("comms: the Osa's comms block loads; bad ones are refused with paths") {
     SC_EXPECT(bad("\"shout_noisy_s\": 4.0", "\"shout_noisy_s\": 1.0", "comms.intercom.shout_noisy_s"));
     SC_EXPECT(bad("\"noisy\": [ \"gta\", \"pto_generator\" ]", "\"noisy\": [ \"gta\", \"ghost\" ]", "comms.intercom.noisy[1]"));
     SC_EXPECT(bad("\"antenna\": \"radio.left.antenna\"", "\"antenna\": \"radio.left.power\"", "comms.radios[0].antenna"));
+    // The A-1's ГРОМКОСТЬ is a knob; and a latching mode's release_any only for latching ones.
+    SC_EXPECT(c.has_voice && c.voice.boxes[0].volume == "intercom.a1_volume");
+    SC_EXPECT(bad("\"volume\": \"intercom.a1_volume\"", "\"volume\": \"intercom.a1\"", "voice.boxes[0].volume"));
+    SC_EXPECT(bad("\"latching\": true, \"release\": [ { \"control\": \"ssc.tx\", \"is\": 0 } ], ", "", "release_any: only for latching"));
 }
 
 SC_TEST("comms: the squelch and the antenna become losses from the published ranges (40 log10 of the ratio)") {
@@ -139,9 +143,11 @@ SC_TEST("comms: a set hears only when switched on, warmed up (10 min) and turned
     SC_EXPECT(!comms.Receiving(0, c));
     Steps(*r, 20.0);
     SC_EXPECT(comms.Receiving(0, c));
-    c.panel.Set("radio.left.volume", 0);
+    c.panel.SetValue("radio.left.volume", 0.0);             // ГРОМКОСТЬ right down: nothing heard
     SC_EXPECT(!comms.Receiving(0, c, &why) && Has(why, "volume"));
-    c.panel.Set("radio.left.volume", 1);
+    c.panel.SetValue("radio.left.volume", 0.3);             // a little up: heard, quietly
+    SC_EXPECT(comms.Receiving(0, c) && std::fabs(VolumeLevel(c.panel, "radio.left.volume") - 0.3) < 1e-12);
+    c.panel.SetValue("radio.left.volume", 0.8);
     // Duty reception, then back: the transmitter needs 3 min.
     c.panel.Set("radio.right.mode", 0);
     Steps(*r, 1.0);
@@ -228,12 +234,12 @@ SC_TEST("comms: an order goes by the intercom at once, made with the call to a b
     SC_EXPECT(r->PendingOrders() == 0 && driver->IsBusy());
     driver->CancelOrder();
     c.panel.Set("intercom.pv", 0);
-    c.panel.Set("intercom.a2", 1);  // the deputy on the radio: likewise
+    c.panel.Set("intercom.a2", 2);  // the deputy on the radio: likewise
     Steps(*r, 0.2);
     r->GiveOrder(*r->Crew("Deputy"), *p_deputy, true);
     SC_EXPECT(r->PendingOrders() == 0);
     r->Crew("Deputy")->CancelOrder();
-    c.panel.Set("intercom.a2", 0);
+    c.panel.Set("intercom.a2", 1);
     c.panel.Set("headset.operator", 0);  // no headset: he hears only the cabin, the order is shouted
     Steps(*r, 0.2);
     r->GiveOrder(*op, *p_op, false);
@@ -347,8 +353,7 @@ SC_TEST("comms: the radio-on procedures bring the sets and the commander's box t
     if (!r) return;
     ConsoleData& c = r->Console();
     c.panel.Set("radio.right.power", 0);
-    c.panel.Set("radio.right.volume", 0);
-    c.panel.Set("intercom.a1", 1);
+    c.panel.Set("intercom.a1", 1);                           // ГРОМКОСТЬ, a potentiometer, stays where it was (up)
     Steps(*r, 2.0);
     SC_EXPECT(!r->Comms()->Receiving(1, c));
     CrewMember* cmd = r->Crew("Commander");
@@ -357,7 +362,7 @@ SC_TEST("comms: the radio-on procedures bring the sets and the commander's box t
     if (cmd == nullptr || p == nullptr) return;
     r->GiveOrder(*cmd, *p, false);
     Steps(*r, 30.0);
-    SC_EXPECT(c.panel.Get("radio.right.power") == 1 && c.panel.Get("radio.right.volume") == 1 && c.panel.Get("intercom.a1") == 2);
+    SC_EXPECT(c.panel.Get("radio.right.power") == 1 && VolumeUp(c.panel, "radio.right.volume") && c.panel.Get("intercom.a1") == 2);
     SC_EXPECT(!cmd->IsBusy());  // the drill is done: the set warms up on its own
     SC_EXPECT(!r->Comms()->Receiving(1, c));  // still warming (10 min)
     Steps(*r, 700.0);
@@ -508,7 +513,23 @@ SC_TEST("comms 7.7: the headset hisses with the suppressor off, is quiet with it
     const std::string side = r->C2()->ListeningSet() == 0 ? "left" : "right";
     HeadsetSound h = HeadsetSoundNow(*r, "commander");
     SC_EXPECT(h.on_radio && !h.squelched && !h.carrier);
-    SC_EXPECT_NEAR(h.hiss, 0.35, 1e-12);
+    SC_EXPECT_NEAR(h.volume, 0.8, 1e-12);            // ГРОМКОСТЬ where the set starts
+    SC_EXPECT_NEAR(h.hiss, 0.35 * 0.8, 1e-12);       // the hiss through the volume potentiometer
+    c.panel.SetValue("radio." + side + ".volume", 1.0);
+    SC_EXPECT_NEAR(HeadsetSoundNow(*r).hiss, 0.35, 1e-12);
+    // The A-1's own ГРОМКОСТЬ, full up at the start, sets the level of all he hears in the headset (HeadsetLevel);
+    // with the headset off it is the cabin's air, at full level.
+    SC_EXPECT_NEAR(HeadsetLevel(c, "commander"), 1.0, 1e-12);
+    c.panel.SetValue("intercom.a1_volume", 0.5);
+    SC_EXPECT_NEAR(HeadsetLevel(c, "commander"), 0.5, 1e-12);
+    SC_EXPECT_NEAR(HeadsetSoundNow(*r).box_level, 0.5, 1e-12);
+    SC_EXPECT_NEAR(HeadsetSoundNow(*r).hiss, 0.35 * 0.5, 1e-12);
+    SC_EXPECT_NEAR(HeadsetLevel(c, "operator"), 1.0, 1e-12);  // A-4 has no knob
+    c.panel.Set("headset.commander", 0);
+    SC_EXPECT_NEAR(HeadsetLevel(c, "commander"), 1.0, 1e-12);
+    c.panel.Set("headset.commander", 1);
+    c.panel.SetValue("intercom.a1_volume", 1.0);
+    c.panel.SetValue("radio." + side + ".volume", 0.8);
     c.panel.Set("radio." + side + ".squelch", 1);  // the suppressor: silence between transmissions
     Steps(*r, 0.5);
     h = HeadsetSoundNow(*r, "commander");
@@ -519,7 +540,7 @@ SC_TEST("comms 7.7: the headset hisses with the suppressor off, is quiet with it
     Steps(*r, 1.0);
     h = HeadsetSoundNow(*r, "commander");
     SC_EXPECT(h.carrier);
-    SC_EXPECT_NEAR(h.hiss, 0.05, 1e-12);
+    SC_EXPECT_NEAR(h.hiss, 0.05 * 0.8, 1e-12);
     // The call tone while ТОН. ВЫЗОВ is pressed.
     c.panel.Set("radio." + side + ".tone", 1);
     r->Step(0.5);

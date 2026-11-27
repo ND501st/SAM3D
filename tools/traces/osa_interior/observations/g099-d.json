@@ -1,0 +1,308 @@
+{
+ "photo": "g099-d",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle at the rear, about seated height",
+  "looks": "left at the foot of the left wall under SL-3M; image right is forward",
+  "covers": [
+   "instrument.ga3",
+   "rack.sl3m"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "instrument.ga3",
+   "class": "instrument",
+   "seen_as": "silver domed unit on a bolted ring over a perforated box",
+   "bbox": [
+    0.52,
+    0.39,
+    0.89,
+    0.68
+   ],
+   "zone": "compartment.rear",
+   "on": "new.bracket.ga3_pedestal",
+   "relations": [
+    [
+     "below",
+     "block.p_0092_4m"
+    ],
+    [
+     "in_front_of",
+     "rack.sl3m"
+    ]
+   ],
+   "size_cue": "about 0.3 m wide by eye against the blocks",
+   "material": "silver paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.ga3_pedestal",
+   "class": "bracket",
+   "seen_as": "grey trapezoidal sheet pedestal with large round lightening holes",
+   "bbox": [
+    0.52,
+    0.62,
+    0.9,
+    0.92
+   ],
+   "zone": "compartment.rear",
+   "on": "new.sponson.rear_floor_step",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.rail.ga3_guard",
+   "class": "rail",
+   "seen_as": "bent aluminium tube hoop over the GA-3 with a tube running back to the rack",
+   "bbox": [
+    0.37,
+    0.27,
+    0.9,
+    0.68
+   ],
+   "zone": "compartment.rear",
+   "on": "new.bracket.ga3_pedestal",
+   "relations": [],
+   "size_cue": "about 1.5 times the unit's height",
+   "material": "aluminium tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.rear_floor_step",
+   "class": "sponson",
+   "seen_as": "stepped bolted floor plinth",
+   "bbox": [
+    0.0,
+    0.58,
+    0.75,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rack.sl3m",
+   "class": "rack",
+   "seen_as": "lower blocks of the left-wall rack behind",
+   "bbox": [
+    0.0,
+    0.07,
+    0.72,
+    0.33
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.p_os94_10",
+   "class": "block",
+   "seen_as": "forward column block with five fuse holders",
+   "bbox": [
+    0.32,
+    0.08,
+    0.72,
+    0.2
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0092_4m",
+   "class": "block",
+   "seen_as": "forward column bottom block with 1+1+2 fuse holders",
+   "bbox": [
+    0.33,
+    0.2,
+    0.72,
+    0.3
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0096_10m",
+   "class": "block",
+   "seen_as": "aft column bottom block with the angle plugs at the left",
+   "bbox": [
+    0.0,
+    0.2,
+    0.31,
+    0.3
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0092_10m",
+   "class": "block",
+   "seen_as": "aft column middle block, partly seen at top left",
+   "bbox": [
+    0.0,
+    0.08,
+    0.3,
+    0.19
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.sl3m_plugs",
+   "class": "loom",
+   "seen_as": "two big angle plugs with silver sleeves hanging in loops",
+   "bbox": [
+    0.0,
+    0.21,
+    0.3,
+    0.54
+   ],
+   "zone": "compartment.left_wall",
+   "on": "block.p_0096_10m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.blue_left_wall",
+   "class": "hose",
+   "seen_as": "blue tube along the wall at seat height",
+   "bbox": [
+    0.0,
+    0.48,
+    0.47,
+    0.53
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.white_taped_left_wall",
+   "class": "cable",
+   "seen_as": "white-taped cable in clips along the wall",
+   "bbox": [
+    0.0,
+    0.5,
+    0.45,
+    0.56
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "fan.rear_left",
+   "class": "fan",
+   "seen_as": "circular grille with about 30 radial slots in the ceiling corner above the rack",
+   "bbox": [
+    0.08,
+    0.0,
+    0.5,
+    0.08
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "above",
+     "rack.sl3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "a fan or vent outlet; matched to Fig. 3 rear left ventilator by place only"
+  },
+  {
+   "id": "new.unknown.cylinder_fwd_of_ga3",
+   "class": "unknown",
+   "seen_as": "light grey vertical cylinder and a bolted drum at the right edge",
+   "bbox": [
+    0.88,
+    0.0,
+    1.0,
+    0.86
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "forward_of",
+     "instrument.ga3"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "hull.wall_left",
+   "class": "hull_wall",
+   "seen_as": "grey wall under the rack",
+   "bbox": [
+    0.0,
+    0.3,
+    0.6,
+    0.6
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the GA-3 pedestal and guard hoop",
+  "the ceiling grille above SL-3M"
+ ],
+ "doubts": [
+  "the ceiling grille may be fan.rear_left or a vent of the turret ventilation",
+  "the grey cylinder at the right edge is unidentified",
+  "image right taken as forward from the SL-3M block order"
+ ]
+}

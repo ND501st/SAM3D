@@ -1,0 +1,1317 @@
+{
+  "about": "The fighting compartment's shell above the racks, as sections lofted by tools/blender/build_cabin_interior.py (roadmap I1, docs/OSA_INTERIOR_HOLISTIC.md section 15). Body frame, metres: x right, y forward, z up. Read off the wide photos through their solved cameras (tools/traces/osa_interior/views/): a line along the hull gives one ray in the (x, z) section, a line across it one ray in (y, z). The photos show a 9A33BM3-1 (decision D1: shape from the BM3-1 where the AK shares it). On 11 Nov 2026 everything here that hangs on the right racks was moved 0.302 m outboard with them (the turret's axis stands 0.914 m from SP-2M2's face, not Fig. 3's 0.612), and the plinth under the 0096-9M2 moved with the cabinet; the right post, its shroud and the housing beside the cabinet are superseded by data/cabins/osa_ak_parts.json (docs/research/OSA_REBUILD_C_2026-11.md). The bulkhead's door and fittings, the roof and the floor's middle have not been measured again.",
+  "confidence_scale": "high: measured against a traced face; medium: one ray and a stated constraint; low: read by eye or an estimate kept for closure",
+  "roof_section": {
+    "about": "The lining's underside, half a section from the rack's top in to the centre line, the same on both sides, from the rear bulkhead forward over the cab to the cab's front band (cab_front). The photos see it only from the rack face inwards; outboard of the racks it is hidden and the old flat lining is kept.",
+    "y_from_m": -1.056,
+    "y_to_m": 4.2,
+    "outboard_z_m": 2.1,
+    "left_outboard": {
+      "x_from_m": 0.65,
+      "z_m": 2.18,
+      "what": "On the left the lining stays at the lip's height outboard of it, over SŁ-2M's top rail (and so over SŁ-3M's and SŁ-1M's tops): it does not come down to 2.10 behind the rack",
+      "source": "wwp_gecko g094-a, g094-b, g095-a through their solved cameras: SŁ-2M's top row of blocks reaches 2.13-2.15 m and its top rail about 2.17 (docs/research/OSA_PANEL_REVIEW_2026-11.md section 1), against mon_2112_80 Fig. 3's racks' tops at 2.10. The photo is used; both recorded. The right side keeps 2.10",
+      "confidence": "medium"
+    },
+    "half": [
+      {
+        "x_m": 0.78,
+        "z_m": 2.1,
+        "what": "where the lining comes down behind the rack's top, outboard of the beam's end",
+        "source": "mon_2112_80 Fig. 3 (the racks' tops at 2.10, data/cabins/osa_ak.json); hidden in every photo. Placed outboard of the beam's end (x 0.77), whose lit face wwp_gecko g092-a shows ending in a vertical edge",
+        "confidence": "low"
+      },
+      {
+        "x_m": 0.65,
+        "z_m": 2.18,
+        "what": "the ledge's rolled lip in front of the rack's top rail, a shadow gap under it",
+        "source": "wwp_gecko g092-a (SP-2M2's solved camera): the lip's ray, dz/dx 0.449 from the eye, re-measured by edge profiles (the rail's is 0.416, the crease's 0.51-0.53), meets g094-a d04's lip mirrored, z = 1.82 + 0.33 (x + 0.45), at x 0.65",
+        "confidence": "medium"
+      },
+      {
+        "x_m": 0.5,
+        "z_m": 2.2,
+        "what": "the lining's crease, where the sloping ledge meets the roof panel",
+        "source": "wwp_gecko g092-a's crease ray (2.17 at x 0.5) and g094-a d01's (2.24 mirrored), which disagree by 0.05 m; the plan width of 0.1-0.15 m from g092-a d03",
+        "confidence": "medium"
+      },
+      {
+        "x_m": 0.0,
+        "z_m": 2.25,
+        "what": "the roof panel at the centre line",
+        "source": "wwp_gecko g092-a: the beam's top arris (2.245 at y 0.80), where the panel meets it",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "beam": {
+    "what": "The box beam across the compartment, at the forward edge of the turret's opening; its forward face is the light vertical face g092-a and g096-a show (g092-a d01-d03 first read it as a cornice along the wall). It stops short of the walls",
+    "y_forward_m": 0.66,
+    "y_aft_m": 0.44,
+    "z_bottom_m": 2.18,
+    "source": "wwp_gecko g092-a: both arrises' rays in (y, z) are constant along the beam within 0.004, so it runs square across; the lower ray meets the racks' top height of 2.10 at y 0.80, where the upper ray gives 2.245. The depth fore and aft is unseen (estimate). The end: the lit face's left end in g092-a, cast to the plane y 0.80, x 0.765; the other end by symmetry. CHANGED 9 Nov 2026 by the depth comparison: g092-a's rays fix only a line in (y, z), and 0.80 came from assuming the lower arris meets the racks' top height. tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 33: wwp_gecko g096-a registered on the traced racks: the lower arris at y 0.546, z 2.199, the upper at y 0.565, z 2.288; the fused photos' surfaces show the band at y 0.52-0.62 from x -0.95 to 0.45. Fore and aft depth kept",
+    "confidence": "medium",
+    "half_x_m": 0.77,
+    "centre_x_m": -0.21,
+    "centre_source_nov9": "wwp_gecko g096-a registered, holistic_diff measure on three stretches of the band: a vertical plane at y 0.65-0.74 from x -0.98 to 0.56, bottom z 2.175-2.196 (g096-a's row 0.10 on y 0.66 gives 2.186). It runs wall to wall and is not centred on x 0: nor is the compartment between its racks (-1.10, 0.61)"
+  },
+  "roof_pocket": {
+    "what": "The lining forward of the band stands higher than the roof panel: the band's whole height shows in g096-a, so nothing hangs below the rays that reach its top",
+    "y_from_m": 0.66,
+    "y_to_m": 0.9,
+    "x_from_m": -1.02,
+    "x_to_m": 0.6,
+    "z_m": 2.36,
+    "source": "wwp_gecko g096-a, adjusted solve: the band's top row (0.017 of the frame) is z 2.30 on y 0.66, and that ray passes y 0.8 at z 2.26 and y 1.0 at z 2.19, so the lining between is above them. Its shape is unseen: SAM3D's choice, a plain recess",
+    "confidence": "low"
+  },
+  "turret_opening": {
+    "what": "The turret's base in the roof, drawn as a dark near-circle until I4 builds the skirt and drive: the lining ends at it in a soft ragged roll round a white-painted metal collar",
+    "centre_xy_m": [
+      0.002,
+      0.056
+    ],
+    "half_x_m": 0.78,
+    "half_y_m": 0.55,
+    "source": "wwp_gecko g100-b d02-d04, d12: the casting's rim fits one ellipse across the vehicle, 0.63 wide to long, which is a circle seen about 51 degrees off the axis: an inference, the photo cannot prove it (the even gap to the rotating casting favours it). The forward edge at the beam's aft face (0.65), g096-a d06-d08. Forward edge kept on the beam's aft face, so it moved with the beam (9 Nov 2026) Moved (+0.162, +0.036) on 11 Nov 2026 onto the boot's axis as measured through the certified cameras (see boot).",
+    "confidence": "low",
+    "reread_nov9": "wwp_gecko g096-a (rendered through its registered camera against the photo): the opening spans 720 of the frame's 1000 columns where the model's ring spanned 620, centred 55-60 columns to the left of it, its aft rim at row 0.236 (z about 2.2: y -0.52) and its forward rim behind the band; the boot beside it likewise. half_x 0.78, centre (-0.16, 0.02), half_y 0.55, so its forward rim is behind the band; the lining's padded lip a little over the former roll (holistic_diff render, docs/OSA_INTERIOR_HOLISTIC.md section 33)",
+    "lining_roll_r_m": 0.045,
+    "collar_r_m": 0.012,
+    "boot": {
+      "what": "The grey canvas boot round the turret's central column, hanging from the opening down behind the cabinet, slightly narrower at its foot, the hem laced",
+      "centre_xy_m": [
+      0.002,
+      0.056
+    ],
+      "z_top_m": 2.17,
+      "z_bottom_m": 1.81,
+      "r_top_m": 0.265,
+      "r_bottom_m": 0.234,
+      "hem_r_m": 0.012,
+      "column": {
+        "what": "The turret's central column below the boot, painted grey, a little wider towards its foot, standing on a base ring on the floor. What it carries inside is not in the sources",
+        "z_bottom_m": 0.78,
+        "profile_z_r_m": [[1.81, 0.234], [1.76, 0.234], [1.68, 0.243], [1.6, 0.26], [1.45, 0.267], [1.22, 0.27], [0.86, 0.27]],
+        "base_ring": {"z_m": [0.78, 0.86], "r_m": 0.28},
+        "source": "wwp_gecko g097-b through its certified grade-A camera: the column's outboard silhouette, rows 350-1050, stands 0.234 m from the boot's axis at z 1.76, 0.26 at 1.6, 0.267-0.271 from 1.45 down to 1.22 (a ray's plan distance from the axis, at the height where it passes it); the boot's dark canvas ends at row 285 (z 1.81) under a blue-grey strap (rows 220-250); the base ring at rows 1480-1500 (z 0.85-0.87) on the floor (0.78, floor.spine). Coaxial with the boot (one silhouette cannot place it alone); below z 1.22 the radius is kept (a pipe crosses the silhouette there). It stands 12 mm clear of cabinet 0096 at its nearest (the cabinet mesh's vertex at z 0.96, 0.282 m from the axis). It hides the bulkhead door's dog levers in g097-b, as the photo does",
+        "confidence": "low"
+      },
+      "source": "wwp_gecko g096-a d06-d23 and g100-b: its edges cast through g096-a's solved camera (tools/recon/holistic_sfm.py) to the plane y -0.1, widths 0.48 and 0.38 m across; on the hull's centre line by symmetry; how far down it hangs is hidden behind the cabinet, an estimate; its foot: the depth maps' fused cloud has almost nothing within 0.3 m of the axis below z 1.8, and g100-a, g100-c and g099-d see past where it would hang (docs/OSA_INTERIOR_HOLISTIC.md section 31) Moved (+0.162, +0.036) on 11 Nov 2026 with the opening and the base: the boot's silhouette in g096-a and g100-b cast through their certified grade-A cameras (tools/traces/osa_interior/cameras.json) puts the axis at (0.002, 0.056), radius 0.24 m at mid height and 0.27 near the top; the frame_2026_11 rebuild had found it 1.096 m from SL-2M's face (x -0.008) and left the roof unmoved (docs/research/OSA_REBUILD_C_2026-11.md). Its foot re-read the same day in g097-b (certified camera): the dark canvas ends at z 1.81, radius 0.234, and the turret's grey column carries on below it to the floor (column); the earlier \"nothing within 0.3 m of the axis\" was about the old axis 0.16 m to the left.",
+      "confidence": "low"
+    },
+    "base": {
+      "what": "Above the opening: the turret's olive base casting with its gearbox housing and a tan drum, drawn as a shallow relief on the opening's plane until the drive is modelled",
+      "gearbox_xy_m": [
+        0.382,
+        0.256,
+        0.32,
+        0.2
+      ],
+      "drum_xy_m": [
+        -0.058,
+        0.286
+      ],
+      "drum_r_m": 0.06,
+      "drop_m": 0.05,
+      "source": "wwp_gecko g100-b d-series (session A), g096-a (the same stencilled drum and casting); places by eye in the opening",
+      "confidence": "low"
+    }
+  },
+  "wheel_arch_right": {
+    "what": "The wheel-arch housing at the right wall aft of SP-2M2: a box with a sloped top rising aft, forward face about 0.3 m high, standing inboard of the rack's carcass",
+    "x_from_m": 0.902,
+    "x_to_m": 1.002,
+    "section_yz_m": [
+      [
+        0.4,
+        0.62
+      ],
+      [
+        0.4,
+        0.92
+      ],
+      [
+        0.02,
+        1.02
+      ],
+      [
+        -0.45,
+        0.92
+      ],
+      [
+        -0.45,
+        0.62
+      ]
+    ],
+    "source": "wwp_gecko g092-a d33-d34 cast to the floor at z 0.62 (corners at x 0.53-0.73, y -0.1 to 0.45) and their size cues; g096-a d39 (top at knee height)",
+    "confidence": "low"
+  },
+  "rear_cove": {
+    "what": "The roof's rear lining coming down onto the bulkhead, across the width behind the turret's opening",
+    "y_forward_m": -0.85,
+    "z_at_bulkhead_m": 2.02,
+    "source": "wwp_gecko g096-a d15: the crease stands about 0.09 m above the door's top at the door's scale. The forward edge: the turret opening's aft edge (estimate)",
+    "confidence": "low"
+  },
+  "cab_front": {
+    "what": "The cab's roof ends at a flat front band across the cab: the lining carries on from the compartment, without the step the first pass had at y 3.5, and the band drops to the header over the windscreens, which keeps the old 2.10. A lip over the panes under it",
+    "y_m": 4.2,
+    "depth_m": 0.06,
+    "lip": {
+      "y_from_m": 4.5,
+      "y_to_m": 4.585,
+      "z_from_m": 2.05,
+      "half_x_m": 1.1
+    },
+    "source": "wwp_gecko g082-b and g089-d (no solved camera, read by eye): the lining runs on forward light grey-green to a flat band with the type plate, then a narrow header, a recess and a lip over the panes. The band's place is an estimate ahead of the hatches (their forward edge 4.10). Photos of the 9A33BM3-1 show one large central opening with a deep coaming where voenizdat_osa_1991 p173 and the cabin keep the hatches: I5",
+    "confidence": "low"
+  },
+  "bulkhead": {
+    "about": "The rear bulkhead's face, seen looking aft: +x is on the photo's left. The door sits high, over a low flap, and hinges on its outboard side. g096-a and g100-a are not posed; their scale is the door's, and the door's width is the plan's.",
+    "door": {
+      "what": "The door to the engine compartment, inside its seal, high on the bulkhead",
+      "x_outboard_m": 0.58,
+      "width_m": 0.58,
+      "z_top_m": 1.93,
+      "height_m": 0.79,
+      "corner_r_m": 0.05,
+      "source": "mon_2112_80 Fig. 3 (the opening at x 0 to 0.59); wwp_gecko g100-a (height to width 1.37, corner radius a twelfth of the width); g096-a (the door's top level with the lamp, the top from the aisle's vanishing point, the cabinet's top taken as 1.70)",
+      "confidence": "medium"
+    },
+    "door_frame": {
+      "what": "The pressed convex bead round the opening",
+      "width_m": 0.03,
+      "proud_m": 0.012,
+      "source": "wwp_gecko g100-a: 0.02 to 0.05 m wide round the seal, the wider on the latch side; drawn uniform",
+      "confidence": "low"
+    },
+    "door_fittings": {
+      "what": "On the door: four pressed channels with five screws each, two hinge pads on the outboard side, two dog levers and a strap handle in a pressed pocket on the centre-line side",
+      "channels_from_top_m": [
+        0.069,
+        0.288,
+        0.507,
+        0.714
+      ],
+      "channel_from_edge_m": [
+        0.056,
+        0.524
+      ],
+      "channel_height_m": 0.05,
+      "hinge_pads_from_edge_top_m": [
+        [
+          0.011,
+          0.059,
+          0.109,
+          0.188
+        ],
+        [
+          0.005,
+          0.051,
+          0.593,
+          0.668
+        ]
+      ],
+      "dogs_from_edge_top_m": [
+        [
+          0.558,
+          0.167,
+          0.458,
+          0.288
+        ],
+        [
+          0.575,
+          0.65,
+          0.489,
+          0.478
+        ]
+      ],
+      "strap_from_edge_m": [
+        0.339,
+        0.565
+      ],
+      "strap_from_top_m": 0.397,
+      "pocket_from_edge_top_m": [
+        0.392,
+        0.565,
+        0.34,
+        0.455
+      ],
+      "source": "wwp_gecko g100-a, square to the door: the door's seal 1049 x 1437 px, scaled by its width 0.58 m to 1809 px/m. Distances from the seal's outboard edge and from its top. g096-a confirms the channels' and the handle's places",
+      "confidence": "medium"
+    },
+    "ledge": {
+      "what": "The box ledge over the door, under the lining",
+      "x_from_m": 0.19,
+      "x_to_m": 0.85,
+      "z_bottom_m": 1.96,
+      "z_top_m": 2.045,
+      "proud_m": 0.025,
+      "source": "wwp_gecko g096-a d46 (0.09 m over the door's top at the door's scale; its square lower edge is read level with the door's top, kept here just clear of the frame's bead); it stops at the boot, x 0.19",
+      "confidence": "low"
+    },
+    "rib": {
+      "what": "The vertical raised strip between the corner fairing and the door's frame",
+      "x_m": 0.635,
+      "half_width_m": 0.012,
+      "z_from_m": 0.89,
+      "z_to_m": 1.89,
+      "proud_m": 0.012,
+      "source": "wwp_gecko g096-a d45, at the door's scale",
+      "confidence": "low"
+    },
+    "fairing": {
+      "what": "The rounded vertical fairing in the corner between the bulkhead and the right rack's aft end",
+      "x_inboard_m": 0.73,
+      "x_wall_m": 0.85,
+      "z_to_m": 2.045,
+      "source": "wwp_gecko g096-a d44, at the door's scale. Hidden for now behind SP-3M's carcass, whose face the cabin has at x 0.667 where this photo puts it about 0.85 at the bulkhead: settled with SL-3M's size (roadmap I3)",
+      "confidence": "low"
+    },
+    "lower_step": {
+      "what": "The bulkhead's lower part stepping out under the door, its top a lit lip across the whole width",
+      "z_top_m": 1.025,
+      "proud_m": 0.02,
+      "source": "wwp_gecko g100-a d31: a fifth of the door's width below the door's bottom seal",
+      "confidence": "low"
+    },
+    "flap": {
+      "what": "The low flap in the step under the door, hung on a piano hinge along its top",
+      "x_from_m": 0.214,
+      "x_to_m": 0.514,
+      "z_from_m": 0.76,
+      "z_to_m": 0.973,
+      "proud_m": 0.006,
+      "source": "wwp_gecko g100-a (the hinge and the flap's width, at the door's scale), g096-a (its height, at the door's scale); g100-a d54 (the piano hinge's short knuckles over a brass pin)",
+      "confidence": "low",
+      "hinge_knuckles": 6
+    },
+    "door_detail": {
+      "what": "On the door: the red warning plate, the black lever-positions plate, the hinge pockets' screws, the latches' base plates and keepers, the handle's screws and two lone studs. Legends are not drawn (decals, roadmap I10)",
+      "red_plate_xz_m": [
+        0.123,
+        0.42,
+        1.701,
+        1.81
+      ],
+      "black_plate_xz_m": [
+        0.166,
+        0.264,
+        1.27,
+        1.362
+      ],
+      "latch_plates_xz_m": [
+        [
+          -0.012,
+          0.065,
+          1.71,
+          1.787
+        ],
+        [
+          -0.002,
+          0.085,
+          1.247,
+          1.37
+        ]
+      ],
+      "keepers_xz_m": [
+        [
+          -0.048,
+          0.003,
+          1.716,
+          1.775
+        ],
+        [
+          -0.053,
+          0.003,
+          1.264,
+          1.352
+        ]
+      ],
+      "levers_xz_m": [
+        [
+          [
+            0.121,
+            1.648
+          ],
+          [
+            0.013,
+            1.763
+          ]
+        ],
+        [
+          [
+            0.09,
+            1.446
+          ],
+          [
+            0.029,
+            1.306
+          ]
+        ]
+      ],
+      "screws_xz_m": [
+        [
+          0.548,
+          1.797
+        ],
+        [
+          0.548,
+          1.757
+        ],
+        [
+          0.556,
+          1.317
+        ],
+        [
+          0.556,
+          1.276
+        ],
+        [
+          0.162,
+          1.563
+        ],
+        [
+          0.09,
+          1.563
+        ],
+        [
+          0.162,
+          1.496
+        ],
+        [
+          0.09,
+          1.496
+        ]
+      ],
+      "studs_xz_m": [
+        [
+          0.3,
+          1.552
+        ],
+        [
+          0.305,
+          1.294
+        ]
+      ],
+      "source": "wwp_gecko g100-a (traced in tools/traces/osa_interior/details/g100-a.json), mapped by the door's seal: 0.58 m across its width; session A, the door's width from mon_2112_80 Fig. 3",
+      "confidence": "medium"
+    },
+    "hood": {
+      "what": "The blue-grey sheet hood standing out from the bulkhead above the blower opening, its lower face sloping; a small screwed cover at its top, brass screws, a grey tube across its front",
+      "x_from_m": -0.42,
+      "x_to_m": -0.012,
+      "z_bottom_m": 1.658,
+      "z_top_m": 2.051,
+      "depth_m": 0.14,
+      "front_height_m": 0.12,
+      "cover_xz_m": [
+        -0.151,
+        -0.058,
+        1.939,
+        2.051
+      ],
+      "tube_xz_m": [
+        [
+          -0.017,
+          1.669
+        ],
+        [
+          -0.099,
+          1.716
+        ],
+        [
+          -0.202,
+          1.779
+        ],
+        [
+          -0.304,
+          1.793
+        ]
+      ],
+      "tube_r_m": 0.012,
+      "screws_xz_m": [
+        [
+          -0.099,
+          2.046
+        ],
+        [
+          -0.064,
+          1.998
+        ],
+        [
+          -0.146,
+          1.992
+        ],
+        [
+          -0.099,
+          1.945
+        ],
+        [
+          -0.038,
+          1.959
+        ],
+        [
+          -0.017,
+          1.919
+        ],
+        [
+          -0.064,
+          1.904
+        ],
+        [
+          -0.038,
+          1.871
+        ],
+        [
+          -0.015,
+          1.842
+        ]
+      ],
+      "source": "wwp_gecko g100-a (traced in tools/traces/osa_interior/details/g100-a.json), mapped by the door's seal: 0.58 m across its width; session A, the door's width from mon_2112_80 Fig. 3. Cut by the photo's edge: its far end (x -0.42) and its depth out of the wall are estimates",
+      "confidence": "low"
+    },
+    "blower": {
+      "what": "The blower's tall framed opening in the bulkhead: a light sheet frame, a black ring round a cream hub in its lower half, a plate closing its foot, brass screws round it. Drawn as a dark recess: a true hole would break the wall for Lumen",
+      "x_from_m": -0.38,
+      "x_to_m": -0.197,
+      "z_from_m": 1.041,
+      "z_to_m": 1.564,
+      "frame_m": 0.016,
+      "proud_m": 0.012,
+      "ring_centre_xz_m": [
+        -0.233,
+        1.253
+      ],
+      "ring_r_m": 0.0725,
+      "hub_r_m": 0.045,
+      "foot_plate_xz_m": [
+        -0.279,
+        -0.205,
+        1.047,
+        1.135
+      ],
+      "screws_xz_m": [
+        [
+          -0.187,
+          1.505
+        ],
+        [
+          -0.166,
+          1.229
+        ],
+        [
+          -0.187,
+          1.235
+        ],
+        [
+          -0.176,
+          1.077
+        ],
+        [
+          -0.238,
+          1.566
+        ],
+        [
+          -0.289,
+          1.534
+        ]
+      ],
+      "source": "wwp_gecko g100-a (traced in tools/traces/osa_interior/details/g100-a.json), mapped by the door's seal: 0.58 m across its width; session A, the door's width from mon_2112_80 Fig. 3. Cut by the photo's edge: its far side (x -0.38) is an estimate",
+      "confidence": "low"
+    }
+  },
+  "aft_fittings": {
+    "about": "Fittings at the rear of the compartment that the model lacked (docs/OSA_INTERIOR_HOLISTIC.md section 36)",
+    "hung_motor": {
+      "what": "The round electrical machine hung under the roof left of the centre line: a wide drum, a narrower upper body, a flange and a blue-grey mount up to the lining, a square box beside it. What it is has not been identified",
+      "axis_xy_m": [
+        -0.45,
+        -0.48
+      ],
+      "drum_r_m": 0.155,
+      "drum_z_m": [
+        1.665,
+        1.868
+      ],
+      "upper_r_m": 0.124,
+      "upper_z_m": [
+        1.868,
+        2.03
+      ],
+      "flange_r_m": 0.14,
+      "flange_z_m": [
+        2.03,
+        2.043
+      ],
+      "mount_r_m": 0.08,
+      "mount_z_m": [
+        2.043,
+        2.2
+      ],
+      "box_xyz_m": [
+        [
+          -0.72,
+          -0.62,
+          1.84
+        ],
+        [
+          -0.6,
+          -0.5,
+          2.02
+        ]
+      ],
+      "source": "wwp_gecko g099-a and g100-c, tools/recon/holistic_diff.py: the axis and radius from g099-a's two silhouette rays and five points of g100-c's lower rim, the heights along g099-a's rays at the axis; holistic_diff finding F002 (3 views, the surface 0.28 m in front of the model)",
+      "confidence": "medium"
+    },
+    "dark_box": {
+      "what": "The dark box on the bulkhead under the hung machine",
+      "x_m": [
+        -0.69,
+        -0.46
+      ],
+      "z_m": [
+        1.383,
+        1.626
+      ],
+      "y_front_m": -0.865,
+      "source": "wwp_gecko g099-a, tools/recon/holistic_diff.py: its corners through the depth map (the bulkhead-distance is the network's, not triangulated)",
+      "confidence": "low"
+    },
+    "blower_cover": {
+      "what": "PB-107 (ПБ-107), the TV sight's intermediate block (voenizdat_osa_1991 p101, p103: on the bulkhead between the engine and operators' compartments; p168: its own fan draws the compartment's air in through a slit and blows it back): the grey case standing proud over the outboard part of the blower opening, leaving the slit at the fan's ring. mon_2112_80 Fig. 3 writes PB-55 at this place. No controls",
+      "x_m": [
+        -0.38,
+        -0.25
+      ],
+      "z_m": [
+        1.05,
+        1.555
+      ],
+      "proud_m": 0.06,
+      "source": "wwp_gecko g100-c at the blower frame's scale (its width 0.183 m, bulkhead.blower)",
+      "confidence": "low"
+    },
+    "sloped_box": {
+      "what": "The small sloped-top box low on the bulkhead below the blower",
+      "x_m": [
+        -0.456,
+        -0.298
+      ],
+      "z_m": [
+        0.894,
+        1.0
+      ],
+      "depth_m": 0.1,
+      "front_height_m": 0.05,
+      "source": "wwp_gecko g100-c and g100-d at the blower frame's scale",
+      "confidence": "low"
+    }
+  },
+  "floor": {
+    "plinth_aft_right": {
+      "what": "The stepped plinth at the right, between the wheel arch and the bulkhead: a vertical face and a top sloping down inboard",
+      "y_from_m": -1.035,
+      "y_to_m": -0.25,
+      "section_xz_m": [
+        [
+          0.452,
+          0.62
+        ],
+        [
+          1.082,
+          0.62
+        ],
+        [
+          1.082,
+          1.14
+        ],
+        [
+          0.802,
+          1.13
+        ],
+        [
+          0.702,
+          1.1
+        ],
+        [
+          0.602,
+          0.98
+        ],
+        [
+          0.452,
+          0.9
+        ]
+      ],
+      "source": "wwp_gecko g096-a d40, d113, g098-a, g092-a d34; the depth maps' fused cloud (tools/recon/holistic_depth.py, docs/OSA_INTERIOR_HOLISTIC.md section 31) and the triangulated points: the top rises from 0.9 at x 0.2 to 1.13 at x 0.5",
+      "confidence": "medium"
+    },
+    "step_forward_right": {
+      "what": "The raised step along the right of the aisle under the right R-123M: a dark plate over a light grey aft face",
+      "x_from_m": 0.762,
+      "x_to_m": 0.839,
+      "y_from_m": 2.95,
+      "y_to_m": 3.5,
+      "z_top_m": 0.76,
+      "source": "wwp_gecko g082-b d115 (no camera, read by eye); along the box's length in the cabin, its outboard edge the rack's face (data/cabins/osa_ak.json)",
+      "confidence": "low"
+    },
+    "nosing_cab_right": {
+      "what": "The bright aluminium strip across the floor aft of the commander's mat",
+      "x_from_m": 0.03,
+      "x_to_m": 0.63,
+      "y_from_m": 4.06,
+      "y_to_m": 4.12,
+      "z_top_m": 0.632,
+      "source": "wwp_gecko g082-b d83 (no camera, read by eye); the mat's aft edge from the cabin",
+      "confidence": "low"
+    },
+    "not_built": "The cabinet's plinth (g096-a d86) waits for the 0096-9M's stance, which the game keeps turned as the AK's own drawing has it. The left wheel arch: no photo sees it and the GA-3 stands there in the plan. The sponson under the left rack (g082-b d14): part of the rack's lower carcass, I2. The aft left ledge and its three bosses (g100-d, g099-d) and the plates and mat forward of the bench (g083-b, g088-a, g085-c): their places wait for the cross-aisle decision (docs/OSA_INTERIOR_HOLISTIC.md section 16).",
+    "spine": {
+      "what": "The aisle's pressed floor from the rack side to the bench's base: one sheet, slightly proud, with two long pressed ridges bounding a band of transverse ribs, and a plain strip on the bench's side",
+      "x_from_m": -0.514,
+      "x_to_m": 0.752,
+      "y_from_m": 0.1,
+      "y_to_m": 2.75,
+      "z_top_m": 0.78,
+      "ribbed_from_right": [
+        0.21,
+        0.62
+      ],
+      "rib_y_m": [
+        0.3,
+        0.6,
+        0.9,
+        1.2,
+        1.5,
+        1.8,
+        2.1
+      ],
+      "source": "wwp_gecko g093-c d01-d08, d11 (its edge at x 0.45 cast through the camera from the joint solve of the book's photos (tools/recon/holistic_sfm.py); the ridges' places as fractions of its width, the ribs' pitch from five in view); g095-d (the same ribs). The bench-side edge is the bench's base, the cabin's; its height: the depth maps' fused cloud (tools/recon/holistic_depth.py, docs/OSA_INTERIOR_HOLISTIC.md section 31) and the triangulated points (0.2 m above the hull floor at its aft part; the first reading of 0.632 came from one camera)",
+      "confidence": "medium",
+      "forward_step": {
+        "x_from_m": 0.02,
+        "x_from_source": "wwp_gecko photos through the fused depth maps' floor map (tools/recon/holistic_diff.py surfaces, docs/OSA_INTERIOR_HOLISTIC.md section 34): forward of y 1.45 the walkway reads 0.79-0.80 left of the channel (about 22 000 pixels) and 0.675 right of it",
+        "y_m": 1.45,
+        "z_top_m": 0.69,
+        "source": "wwp_gecko g093-c, g095-d, the depth maps' fused cloud (tools/recon/holistic_depth.py, docs/OSA_INTERIOR_HOLISTIC.md section 31) and the triangulated points: 0.82-0.84 up to y 1.4, 0.72-0.74 forward of it",
+        "confidence": "medium"
+      },
+      "channel": {
+        "x_from_m": 0.02,
+        "x_to_m": 0.15,
+        "drop_m": 0.09,
+        "what": "the pressed channel along the walkway, right of the centre line (the walkway's stepped pressed edges, g093-c)",
+        "source": "wwp_gecko photos through the depth comparison's floor map (tools/recon/holistic_diff.py surfaces, section 33): 0.685-0.700 across x 0.03-0.13 where the walkway reads 0.77-0.79, and 0.625 against 0.65-0.71 forward of the step",
+        "confidence": "medium"
+      },
+      "level_source_nov9": "Re-read with the adjusted cameras (section 33): the floor map reads 0.77-0.79 aft and 0.65-0.71 forward across x 0.18-0.48, and the triangulated points of the walkway 0.77-0.78; section 31's 0.83 and 0.73 came from the unadjusted cameras."
+    },
+    "trough_right": {
+      "what": "The dark strip of floor along the right rack's foot: dark plate with a black gap in it under the rack, earth straps over its plate. Not a pit: the camera stands inboard of the edge (eye x -0.13, edge x 0.45), so the dark line at the edge faces the aisle and this strip cannot lie below the spine, as first read",
+      "x_from_m": 0.752,
+      "x_to_m": 1.022,
+      "y_from_m": 0.6,
+      "y_to_m": 2.5,
+      "z_top_m": 0.634,
+      "gap_y_m": [
+        1.25,
+        1.55
+      ],
+      "source": "wwp_gecko g093-c d03, d12-d17, g095-d; the level from the solved camera's side of the edge (the joint solve of the book's photos (tools/recon/holistic_sfm.py))",
+      "confidence": "medium"
+    },
+    "bench_base_bays": {
+      "what": "The face of the bench's base along the aisle: five boxes with chamfered corners, which the photos read as a raised step",
+      "x_face_m": -0.514,
+      "protrude_m": 0.05,
+      "count": 5,
+      "y_from_m": 0.682,
+      "y_to_m": 2.424,
+      "z_top_m": 0.98,
+      "source": "wwp_gecko g093-c d19-d21, g095-c; raised with the walkway it stands on, up to the bench's top (the depth maps' fused cloud (tools/recon/holistic_depth.py, docs/OSA_INTERIOR_HOLISTIC.md section 31) and the triangulated points)",
+      "confidence": "medium"
+    },
+    "stair_plates_aft": {
+      "what": "The aisle's aft end: two plates in stairs down towards the front",
+      "x_from_m": -0.514,
+      "x_to_m": 0.38,
+      "steps": [
+        {
+          "y_from_m": -0.45,
+          "y_to_m": -0.15,
+          "z_top_m": 0.79
+        },
+        {
+          "y_from_m": -0.15,
+          "y_to_m": 0.1,
+          "z_top_m": 0.66
+        }
+      ],
+      "source": "wwp_gecko g093-c d22-d24 (the stair, seen across the aisle's end); the heights estimated: one step about a hand high",
+      "confidence": "low"
+    },
+    "hatch_round_aft_left": {
+        "z_top_m": 0.735,
+      "what": "A round bolted hatch in the floor by the aft left corner, dished in the middle, eight flange bolts",
+      "centre_xy_m": [
+        -0.39,
+        -0.75
+      ],
+      "r_m": 0.18,
+      "bolts": 8,
+      "rim_m": 0.012,
+      "source": "wwp_gecko g100-d d-series and g099-d (bolts traced in both); placed from its cast through g100-d's solved camera as a fraction of the aisle's width; session A, same type, may differ",
+      "confidence": "low"
+    },
+    "arch_forward_right": {
+      "what": "The forward end of the right wheel-arch housing, reaching into the aisle ahead of the old box: rounded on the aisle side in plan, its top rising aft",
+      "x_from_m": 0.732,
+      "x_to_m": 0.912,
+      "section_yz_m": [
+        [
+          0.85,
+          0.62
+        ],
+        [
+          0.85,
+          0.8
+        ],
+        [
+          0.5,
+          1.05
+        ],
+        [
+          0.3,
+          1.05
+        ],
+        [
+          0.3,
+          0.62
+        ]
+      ],
+      "source": "257 points of the joint solve of the book's photos (tools/recon/holistic_sfm.py) at x 0.32-0.62, y 0.32-0.81, z 0.79-1.09, seen by wwp_gecko g093-c, g092-a, g096-a, g098-a; the plan's curve from its relief map. Replaces the first reading (x 0.6-0.7), which was a guess from the visible corners. The solve reaches x 0.32; the side is held at 0.43, clear of the crew's walk (data/cabins/osa_ak.json, x up to 0.42), until the aisle's width is decided",
+      "confidence": "medium"
+    },
+    "raised": [
+      {
+        "id": "floor_aft_left",
+        "what": "The rear floor left of the plinth, higher than the aisle's base: level round the bolted hatch, rising towards the aisle's stair",
+        "x_from_m": -0.85,
+        "x_to_m": -0.2,
+        "section_yz_m": [
+          [
+            -1.03,
+            0.62
+          ],
+          [
+            -0.25,
+            0.62
+          ],
+          [
+            -0.25,
+            0.79
+          ],
+          [
+            -0.55,
+            0.74
+          ],
+          [
+            -1.03,
+            0.73
+          ]
+        ],
+        "source": "tools/recon/holistic_diff.py cloud (wwp_gecko g099-a, g099-d, g100-a, g100-c, g100-d through their fused depth maps), docs/OSA_INTERIOR_HOLISTIC.md section 37: median z 0.70-0.77 for y -1.0 to -0.5 and 0.79 at y -0.37, x -0.85 to -0.25, where the old floor was 0.62",
+        "confidence": "low",
+        "material": "Floor_Steel"
+      },
+      {
+        "id": "hump_aft",
+        "what": "The raised strip along the inboard side of the rear floor",
+        "x_from_m": -0.2,
+        "x_to_m": -0.1,
+        "section_yz_m": [
+          [
+            -0.85,
+            0.62
+          ],
+          [
+            -0.5,
+            0.62
+          ],
+          [
+            -0.5,
+            0.85
+          ],
+          [
+            -0.85,
+            0.84
+          ]
+        ],
+        "source": "tools/recon/holistic_diff.py cloud (wwp_gecko g099-a, g099-d, g100-a, g100-c, g100-d through their fused depth maps), docs/OSA_INTERIOR_HOLISTIC.md section 37: median z 0.84-0.86 for x -0.25 to -0.1, y -0.85 to -0.5",
+        "confidence": "low",
+        "material": "Paint_Interior"
+      },
+      {
+        "id": "plinth_under_cabinet",
+        "what": "The raised floor directly beneath the 0096-9M2: flat at 0.95, its forward edge sloping down to the walkway; the cabinet's connectors come down on it",
+        "x_from_m": -0.311,
+        "x_to_m": 0.219,
+        "section_yz_m": [
+          [
+            0.379,
+            0.7
+          ],
+          [
+            0.808,
+            0.7
+          ],
+          [
+            0.808,
+            0.78
+          ],
+          [
+            0.738,
+            0.86
+          ],
+          [
+            0.668,
+            0.875
+          ],
+          [
+            0.379,
+            0.88
+          ]
+        ],
+        "source": "tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 33: wwp_gecko g096-a registered on the traced racks: the top at z 0.954 for y 0.53-0.60 (normal within 7 degrees of vertical), the sloped plate with the data plate at y 0.62-0.70, z 0.89-0.95, 41 degrees. Top lowered 7 cm on the fused depth map, docs/OSA_INTERIOR_HOLISTIC.md section 35: z 0.87-0.89 for y 0.40-0.60 (the sloped front at y 0.69-0.73, z 0.81-0.86 as before)",
+        "confidence": "medium",
+        "material": "Paint_Interior"
+      },
+      {
+        "id": "casting_before_housing",
+        "what": "The low casting on the floor before the housing, flat on top, its front falling to the floor plate",
+        "x_from_m": 0.1,
+        "x_to_m": 0.3,
+        "section_yz_m": [
+          [
+            0.45,
+            0.7
+          ],
+          [
+            0.75,
+            0.7
+          ],
+          [
+            0.72,
+            0.8
+          ],
+          [
+            0.65,
+            0.845
+          ],
+          [
+            0.45,
+            0.85
+          ]
+        ],
+        "source": "tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 35: wwp_gecko g096-a through the fused depth map: flat at z 0.84-0.86 for x 0.11-0.28, y 0.43-0.65 (normal within 4 degrees of vertical), its front near (0.11, 0.71, 0.80)",
+        "confidence": "low",
+        "material": "Paint_Interior"
+      },
+      {
+        "id": "housing_beside_cabinet",
+        "what": "The sheet-metal housing on the right of the cabinet's foot, higher towards the wall: its top falling towards the cabinet, the bright sloped panel below that top's edge, the lower housing with a sloped front, a low flat top before it and the floor plate forward. Each section's points match, in order, the other's",
+        "x_from_m": 0.03,
+        "x_to_m": 0.47,
+        "section_at_x_from_yz_m": [
+          [
+            -0.05,
+            0.7
+          ],
+          [
+            0.78,
+            0.7
+          ],
+          [
+            0.78,
+            0.76
+          ],
+          [
+            0.53,
+            0.76
+          ],
+          [
+            0.52,
+            0.845
+          ],
+          [
+            0.44,
+            0.85
+          ],
+          [
+            0.33,
+            0.885
+          ],
+          [
+            0.25,
+            0.9
+          ],
+          [
+            0.23,
+            1.0
+          ],
+          [
+            -0.05,
+            1.0
+          ]
+        ],
+        "section_at_x_to_yz_m": [
+          [
+            -0.05,
+            0.7
+          ],
+          [
+            0.78,
+            0.7
+          ],
+          [
+            0.78,
+            0.76
+          ],
+          [
+            0.53,
+            0.76
+          ],
+          [
+            0.52,
+            0.85
+          ],
+          [
+            0.46,
+            0.855
+          ],
+          [
+            0.4,
+            0.995
+          ],
+          [
+            0.33,
+            1.0
+          ],
+          [
+            0.25,
+            1.14
+          ],
+          [
+            -0.05,
+            1.155
+          ]
+        ],
+        "source": "tools/recon/holistic_diff.py measure and the fused depth maps, docs/OSA_INTERIOR_HOLISTIC.md section 35: wwp_gecko g096-a: the panel's top edge from (0.01, 0.23, 1.00) to (0.42, 0.25, 1.12), its lower edge from (-0.01, 0.23, 0.90) to (0.38, 0.33, 0.98), the top behind it to (0.42, 0.15, 1.13) and (0.09, -0.06, 1.00), the lower housing's front 38 degrees from the floor at y 0.36-0.44, a flat top at z 0.85 for y 0.43-0.52, the floor at 0.76 forward of y 0.5. The section at x 0.47 is the measured slope carried 5 cm on to the corner plate",
+        "confidence": "medium",
+        "material": "Paint_Interior"
+      },
+      {
+        "id": "corner_slope_right",
+        "what": "The sloped filler where the right wall's post meets the floor, forward of the post",
+        "y_from_m": 0.52,
+        "y_to_m": 0.67,
+        "section_xz_m": [
+          [
+            0.772,
+            0.62
+          ],
+          [
+            0.922,
+            0.62
+          ],
+          [
+            0.922,
+            1.16
+          ],
+          [
+            0.872,
+            1.14
+          ],
+          [
+            0.772,
+            0.97
+          ]
+        ],
+        "source": "tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 33: wwp_gecko g096-a registered on the traced racks: a plane at x 0.47-0.57, y 0.52-0.67, z 0.97-1.14, facing the aisle, forward and up (normal -0.58, 0.56, 0.59)",
+        "confidence": "medium",
+        "material": "Paint_Interior"
+      }
+    ]
+  },
+  "roof_details": {
+    "about": "What hangs on the lining and is not its section",
+    "insulators": {
+      "what": "Six white stand-off insulators on short stems along the right lining's lower edge, carrying a grey cable aft to the bulkhead lamp",
+      "line_xyz_m": [
+        [
+          0.902,
+          0.24,
+          2.1
+        ],
+        [
+          1.022,
+          -0.98,
+          2.1
+        ]
+      ],
+      "count": 6,
+      "r_m": 0.012,
+      "stem_m": 0.03,
+      "source": "wwp_gecko g098-a d04, d05 and g098-b d03, cast through g098-a's solved camera to the edge's height 2.10 (the joint solve of the book's photos (tools/recon/holistic_sfm.py)); session A. g096-a (hangar session) reads them as lining studs with no cable: a possible difference between the two photos",
+      "confidence": "medium"
+    },
+    "seams": {
+      "what": "The soft padded lining's pressed-in seams across the compartment forward of the beam, and its welted edge along each side",
+      "y_m": [
+        1.2,
+        1.6,
+        2.0,
+        2.4,
+        2.8
+      ],
+      "half_x_m": 0.62,
+      "r_m": 0.008,
+      "edge_x_m": 0.65,
+      "edge_y_m": [
+        0.8,
+        3.4
+      ],
+      "source": "wwp_gecko g098-a, g098-b (cloth with pleated seams, no stitching), g100-b, g096-a; the seams' pitch is an estimate. The cab's roof forward of them is paint, not cloth (g089-a, g089-c)",
+      "confidence": "low"
+    }
+  },
+  "posts": {
+    "channel_depth_m": 0.045,
+    "gusset_t_m": 0.006,
+    "gusset_set_back_m": 0.06,
+    "channel_source": "wwp_gecko g098-a (and g098-b, g096-a): the post is one pressed channel, upright beside the rack and bending at the knee into the raking leg without a step; its forward face 0.04 m wide (the right leg's two edges cut with y 0.47, docs/OSA_INTERIOR_HOLISTIC.md section 41). Behind the left post's leg a gusset plate, its place and thickness SAM3D's (section 40)",
+    "channel_confidence": "medium",
+    "about": "The bent pressed posts between the racks that the first shell did not have. Each is a channel running floor to lining, its foot flaring, drawn as a closed section between its outline on the rack side and the rack",
+    "right": {
+      "y_m": [
+        0.52,
+        0.64
+      ],
+      "x_z_m": [[0.39, 0.62], [0.43, 0.8], [0.48, 0.96], [0.51, 1.06], [0.54, 1.16], [0.57, 1.25], [0.59, 1.35], [0.61, 1.42], [0.62, 1.55], [0.65, 1.7], [0.625, 1.85], [0.59, 2.0], [0.57, 2.12]],
+      "back_x_m": 0.78,
+      "what": "Right post: upright to about 1.55 m, then a leg raking inboard to the wheel arch, a wide gusset behind it",
+      "source": "The depth maps' fused cloud, points two or more views agree on (tools/recon/holistic_depth.py, docs/OSA_INTERIOR_HOLISTIC.md section 31): the aisle-side edge of the post's forward face, y 0.33-0.55; wwp_gecko g096-a, g098-a. Below 0.96 hidden, SAM3D's",
+      "confidence": "medium",
+      "shape_source_nov10": "wwp_gecko g098-a, the rays of the leg's two edges cut with the plane of its forward face (y 0.47, where the reference depth of tools/recon/holistic_diff.py also puts it, y 0.45-0.50; docs/OSA_INTERIOR_HOLISTIC.md section 41): the aisle edge x 0.63 at z 1.48, 0.61 at 1.42, 0.59 at 1.35, 0.57 at 1.25, 0.54 at 1.16, 0.51 at 1.06, about 15 degrees off the vertical, the face 0.04 m wide. Was 0.51 at 1.36 down to 0.36 at 0.96, 45 degrees. Below 1.06 hidden: the same rake carried to the floor, SAM3D's. Its depth y 0.41-0.47 (was 0.28-0.47): from g098-a its aisle-facing side shows only as a narrow strip with the rack straight beyond; the joint solve's points at y 0.3-0.4 that set the old depth fit the cover behind it (shroud)",
+      "shroud": {
+        "what": "The pressed cover set back behind the right post's leg: its top rounded over into the aisle edge, which runs down beside the leg 0.05 m further into the aisle, a side 0.12 m deep; the latch's bent plate bridges the leg and the cover, a long bracket on the cover's face below it, the hasp's wire loop hanging off the leg",
+        "y_m": 0.39,
+        "depth_m": 0.12,
+        "outline_x_z_m": [
+          [
+            0.78,
+            1.41
+          ],
+          [
+            0.6,
+            1.41
+          ],
+          [
+            0.57,
+            1.405
+          ],
+          [
+            0.55,
+            1.39
+          ],
+          [
+            0.54,
+            1.35
+          ],
+          [
+            0.525,
+            1.276
+          ],
+          [
+            0.509,
+            1.209
+          ],
+          [
+            0.494,
+            1.17
+          ],
+          [
+            0.478,
+            1.108
+          ],
+          [
+            0.44,
+            0.96
+          ],
+          [
+            0.4,
+            0.8
+          ],
+          [
+            0.36,
+            0.62
+          ],
+          [
+            0.78,
+            0.62
+          ]
+        ],
+        "bracket_x_z_m": [
+          [
+            0.49,
+            1.14
+          ],
+          [
+            0.6,
+            1.31
+          ]
+        ],
+        "latch_from_xyz_m": [
+          0.648,
+          0.478,
+          1.33
+        ],
+        "latch_to_xyz_m": [
+          0.543,
+          0.4,
+          1.33
+        ],
+        "latch_h_m": 0.095,
+        "hasp_xyz_m": [
+          [
+            0.59,
+            0.5,
+            1.328
+          ],
+          [
+            0.665,
+            0.5,
+            1.271
+          ],
+          [
+            0.67,
+            0.5,
+            1.25
+          ],
+          [
+            0.643,
+            0.5,
+            1.247
+          ],
+          [
+            0.575,
+            0.5,
+            1.304
+          ],
+          [
+            0.59,
+            0.5,
+            1.328
+          ]
+        ],
+        "source": "wwp_gecko g098-a, the rays of the cover's edges cut with the plane of its face (y 0.39, where tools/recon/holistic_diff.py's reference depth puts it, y 0.38-0.45; docs/OSA_INTERIOR_HOLISTIC.md section 41): the top at z 1.40-1.41 out to x 0.58, rounding over to x 0.54 at z 1.35, the edge 0.525 at 1.28, 0.51 at 1.21, 0.49 at 1.17, 0.48 at 1.11; the band of its side cut with the edge's x gives it about 0.1 m deep (y 0.29), the top at least 0.2. The latch x 0.54-0.65, z 1.28-1.38, from the leg's face to the cover's; the bracket x 0.48-0.60, z 1.13-1.31; the hasp from its rays on y 0.5. Below 1.1 hidden, the edge's slope carried down, SAM3D's",
+        "confidence": "low"
+      },
+      "knee_z_m": 1.55,
+      "leg_y_m": [0.41, 0.47],
+      "leg_source": "The depth check (tools/recon/holistic_depth.py): the leg's points in the joint solve lie at y 0.3-0.47, aft of the upright part",
+      "leg_y_source_nov9": "tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 33: wwp_gecko g096-a registered on the traced racks: the slanted part at y 0.36-0.46, and the leg's points at 0.3-0.47"
+    },
+    "left": {
+      "y_m": [
+        0.2,
+        0.33
+      ],
+      "x_z_m": [
+        [
+          -0.6,
+          0.62
+        ],
+        [
+          -0.62,
+          0.96
+        ],
+        [
+          -0.82,
+          1.2
+        ],
+        [
+          -0.87,
+          1.36
+        ],
+        [
+          -0.97,
+          1.5
+        ],
+        [
+          -0.98,
+          1.7
+        ],
+        [
+          -0.98,
+          1.85
+        ],
+        [
+          -1.0,
+          2.0
+        ],
+        [
+          -1.0,
+          2.12
+        ]
+      ],
+      "back_x_m": -1.04,
+      "what": "Left post: the printed tables on its upright part, the same rake inboard below about 1.55 m (T-handles on the leg)",
+      "source": "The depth maps' fused cloud, points two or more views agree on (tools/recon/holistic_depth.py, docs/OSA_INTERIOR_HOLISTIC.md section 31): the aisle-side edge of the post's forward face, y 0.33-0.55, across the aisle scaled about the right rack by 0.847 as the racks are; wwp_gecko g096-a, g099-b. Below 0.96 hidden, SAM3D's",
+      "confidence": "low",
+      "knee_z_m": 1.55,
+      "leg_y_m": [
+        0.1,
+        0.36
+      ],
+      "y_source_nov9": "tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 33: wwp_gecko g096-a registered on the traced racks: the forward face of the column with the placard at y 0.31-0.345 (x -1.13 to -1.03, z 1.50-2.02); the slanted part at y 0.28-0.36. Was y 0.64"
+    }
+  },
+  "lower_side_wall": {
+    "what": "Below the racks' blocks the side walls rake inboard towards the floor: the wheel boxes' and sponsons' inner plates. The hull's outer sides are upright down to about 0.9 m, so this is the inside of the wheel boxes, not a leaning hull",
+    "rake_x_per_z": 0.35,
+    "forward": {
+      "y_m": [
+        2.505,
+        4.06
+      ],
+      "deck_x_m": 0.66
+    },
+    "aft_right": {
+      "x_foot_m": 0.712
+    },
+    "source": "wwp_gecko g096-a (posts cast through the joint solve: 0.34), g098-a, g098-c (the first-aid box leaning on that wall, triangulated: 0.36), g082-b (the sloping plates under both front racks, down to the deck's side)",
+    "confidence": "medium for the rake, low for where it ends"
+  },
+  "cab_corner_posts": {
+    "what": "The cab's corner posts beside the windscreens: a box section raking forward going down, from the roof to the dash's top, carrying the looms",
+    "top_m": [
+      1.06,
+      4.1,
+      2.05
+    ],
+    "foot_m": [
+      1.02,
+      4.68,
+      1.45
+    ],
+    "section_m": [
+      0.1,
+      0.05
+    ],
+    "source": "wwp_gecko g082-b, its camera on the mat's vanishing point, scaled by the seats' 0.50 m width (docs/OSA_INTERIOR_HOLISTIC.md section 30), g084-a; no camera to scale in the cab group",
+    "confidence": "low"
+  }
+}

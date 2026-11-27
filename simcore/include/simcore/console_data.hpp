@@ -23,6 +23,27 @@
 
 namespace simcore {
 
+// A radar receiver's settings on the console (a sensor's "receiver" block, roadmap C5): every control optional.
+// The MTI's coherence (internal or external), the wind compensation's Doppler offset (a switch and two knobs, coarse and
+// fine, each 0..1 with the middle at none: the offset at a knob's end in m/s), the magnetron's tuning (a switch to manual
+// and the manual trim, 0..1 with the middle on tune: the mistune at its ends in Hz) and the СА blanker.
+struct ReceiverDef {
+    std::string mti_external_control;
+    int mti_external_position = 1;
+    std::string wind_comp_control;
+    int wind_comp_position = 1;
+    std::string wind_coarse_control;
+    double wind_coarse_mps = 0.0;
+    std::string wind_fine_control;
+    double wind_fine_mps = 0.0;
+    std::string afc_control;
+    int afc_manual_position = 1;
+    std::string afc_trim_control;
+    double afc_trim_span_hz = 0.0;
+    std::string sa_control;
+    int sa_position = 1;
+};
+
 // How a console's radars and sight map onto its controls and equipment (the "sensors" block).
 // Used by the gameplay engagement model (engagement.hpp). Ids refer to this console.
 struct SearchSensorDef {
@@ -32,6 +53,7 @@ struct SearchSensorDef {
     std::vector<std::pair<double, double>> range_scales_m;  // [min, max] per position
     std::string mti_control;   // switch: moving-target indicator (1 = on); may be empty
     double mti_max_range_m = 0.0;
+    ReceiverDef receiver;
     // Range rings on the scope, in metres, for each position of range_control (empty = the display's own).
     std::vector<std::vector<double>> range_rings_m;
     // Elevation beams (optional; beam_control empty = none). Each position of `beam_control` selects a programme: the
@@ -42,12 +64,15 @@ struct SearchSensorDef {
     std::vector<std::string> beam_inputs;
     double rotation_period_s = 0.0;
     // IFF interrogator (optional; query empty = none): each press of `query` (or `control_query`) interrogates for
-    // query_time_s; friendly aircraft within max_range_m reply. With `gate_control` at 1 the replies are gated by the
+    // query_time_s; friendly aircraft within max_range_m reply. With `gate_control` at 0 (КЛАПАН, the lower position) the replies are gated by the
     // search radar's echoes (only targets it sees reply on the scope). `interrogating_input` is set while it runs.
     std::string iff_query;
     std::string iff_control_query;
     std::string iff_gate_control;
     std::string iff_ready;           // subsystem the interrogator needs
+    // КОНТР. ИНД. (optional): held, the interrogator's check signal puts marks on the PPI at these ranges on every sweep.
+    std::string iff_check_control;
+    std::vector<double> iff_check_ranges_m;
     std::string iff_interrogating_input;
     double iff_query_time_s = 1.0;
     double iff_max_range_m = 0.0;
@@ -92,9 +117,31 @@ struct OrientationDef {
     // Set while the gyro holds a heading that was set from the crew chief's Qc at this halt (cleared when the gyro
     // stops or the vehicle moves off).
     std::string oriented_input;
+    // The gyro's mode switch (optional; the Osa's МК — ГПК — АК on 0005-8M): the gyro half-compass holds a heading only
+    // with it at `compass_position`; anywhere else its orientation is lost, as without power.
+    std::string compass_control;
+    int compass_position = 0;
+    // The switch that connects the course setter to the gyro (optional; the Osa's ПОТРЕБИТЕЛИ ОСН. — КОНТР. on 0005-8M):
+    // the gyro is slaved to the setter only with it at `consumers_position`.
+    std::string consumers_control;
+    int consumers_position = 0;
+    // The follow-up systems' switch (optional; the Osa's СС — ОТКЛ. on OR-31M): away from `follow_up_position` the
+    // follow-ups stop and the crew's frame holds the Qc it had, no longer turning with the hull.
+    std::string qc_fault_input;  // a phase of the gyro unit's supply lost (ОТКАЗ Qc): the Qc follow-up stops, as with СС off
+    std::string follow_up_control;
+    int follow_up_position = 1;
+    // The latitude correction's switch (optional; the Osa's φ АВТ. — РУЧН. on 0005-8M): the latitude scale's correction
+    // reaches the gyro only at `latitude_switch_position`.
+    std::string latitude_switch;
+    int latitude_switch_position = 0;
 };
 
 struct TrackSensorDef {
+    ReceiverDef receiver;
+    // The TV's light filter (optional): a position per filter, each with the factor it puts on the visibility the TV
+    // sees through (haze scatters short wavelengths more: an orange filter sees further, a blue one less).
+    std::string filter_control;
+    std::vector<double> filter_visibility;
     std::string transmitter;     // subsystem: tracking radar radiating
     std::string slew;            // subsystem: antenna free to turn
     std::string radar_mode;      // subsystem: radar acquisition mode engaged (e.g. ЦУ АЗ)
@@ -105,6 +152,23 @@ struct TrackSensorDef {
     std::string el_wheel;
     std::string range_wheel;
     std::string lock_control;    // lock that must be open before the aiming crew can turn the azimuth wheel
+    // The fast slew lever (optional; the Osa's ВЛЕВО — 0 — ВПРАВО on OS52-12M1): three positions; off its middle it turns
+    // the antenna, the azimuth wheel's reading, left (position 0, anticlockwise) or right at slew_rate_deg_s while the
+    // antenna is free to turn, its wheel unlocked and no target held.
+    std::string slew_control;
+    double slew_rate_deg_s = 0.0;
+    // Aided tracking (optional; the Osa's ПА, pa_gain_per_s 0 = absent): while `tv_mode` is ready an integrator holds a
+    // rate per wheel, fed by the wheels' turns (gain per second per degree turned) and turning the antenna on at it, up to
+    // the drives' limits; `pa_balance_az`/`_el` (buttons) clear its rate. Taken over at the target's rate from a radar track.
+    double pa_gain_per_s = 0.0;
+    double pa_max_az_deg_s = 30.0;
+    double pa_max_el_deg_s = 15.0;
+    std::string pa_balance_az;
+    std::string pa_balance_el;
+    // The range automaton's balance (optional; the Osa's БАЛАНС АВТОМАТА): off its middle the radar's range gate sits
+    // off the echo by up to range_balance_m at either end of the knob.
+    std::string range_balance_control;
+    double range_balance_m = 0.0;
     std::string fov_control;     // TV lens selector: 0 wide, 1 narrow (may be empty)
     std::string mti_control;     // tracking radar СДЦ / ШТ.: 1 = moving-target indication (may be empty)
     // Counter-jamming (roadmap 9.4): the switch of the circuit against a range-gate pull-off that walks the gate out
@@ -120,6 +184,12 @@ struct TrackSensorDef {
     std::string captured_input;   // inputs the model sets (may be empty)
     std::string tv_track_input;   // the TV channel holds the target (manual TV tracking)
     std::string too_low_input;
+    std::string slow_input;       // Vц ≤ 100: the radar holds a target no faster than slow_mps (the lamp of that name)
+    double slow_mps = 100.0;
+    // The small-target mode (МЦ, later ПКР): switched on once the target is judged a small slow one (voenizdat_osa_1991
+    // p265); the engagement model's outcome reads it (EngagementTuning::small_target_*).
+    std::string small_target_control;
+    int small_target_on_position = 1;
     std::string near_zone_input;
     std::string in_zone_input;
     std::string crosshair_input;  // the TV-tracked target fills the narrow-lens crosshair (its range judged by its size)
@@ -226,6 +296,7 @@ struct VoiceBoxDef {
     std::string circular;              // the circular call button (ЦИРКУЛЯР)
     std::string power;                 // a subsystem this box needs besides the network's ("" : none)
     bool keeps_intercom = false;       // on a set it still hears and talks on the intercom (the commander's A-1, the RTK-1)
+    std::string volume;                // the box's ГРОМКОСТЬ, a knob (the A-1's): the headset's level (crew_audio.hpp)
     std::string second_station;        // a second headset on this box, hearing and talking as the first (the PU-12M's plotter
                                        // on PVS-1: SAM3D's choice, no source gives him a box)
     std::string second_headset;        // its control: СНЯТ / НАДЕТ
@@ -265,6 +336,7 @@ struct LauncherChannelDef {
     std::string medium_input;       // СР.Л
     std::string narrow_input;       // УЗКИЙ ЛУЧ
     std::string fuse_input;         // К3
+    std::string return_control;     // ВОЗВРАТ (optional): resets the channel's missile range finder; a missile in flight is lost
 };
 
 // The command transmitter's frequency letter (roadmap 6.3, optional): moving `control` to `change_position` changes the
@@ -286,6 +358,17 @@ struct LauncherEmergencyDef {
     std::string fire_control;
     std::string ready_input;
     double flight_s = 0.0;
+};
+
+// The forced refusal of the missile standing on preparation (optional; voenizdat_osa_1991 p151, p156): `select_control`
+// (the indication panel's selector) names a container per position (an empty id is ОТКЛ.); `button` (ОТКАЗ) drops that
+// container's missile if it is a channel's prepared one: it rests like an overheated one and the pair is prepared again
+// with the next. `refused_input` is set while a refused missile rests.
+struct LauncherRefuseDef {
+    std::string select_control;
+    std::vector<std::string> select_containers;
+    std::string button;
+    std::string refused_input;
 };
 
 // How long a prepared missile may be held (roadmap 6.3, optional): after `hold_s` ready with a missile selected its gyro
@@ -330,6 +413,8 @@ struct LauncherDef {
     LauncherLetterDef letter;
     bool has_emergency = false;
     LauncherEmergencyDef emergency;
+    bool has_refuse = false;
+    LauncherRefuseDef refuse;
 };
 
 // The vehicle's fuel (optional; roadmap 7.4, simcore/fuel.hpp): one tank, the power sources burning it, a reserve kept
@@ -350,6 +435,65 @@ struct FuelDef {
     double refuel_lpm = 0.0;
     std::string power_cut_input;
     double refuel_hysteresis_l = 5.0;  // the crew asks again once refuelled this far above the reserve
+};
+
+// The BM's own checks (the console's "checks" block, simcore/checks.hpp, roadmap C4): what the function-check set's
+// meters and the receivers' noise meter read from the console, and which faults they find.
+// 0004-12M1 (voenizdat_osa_1991 p159-162): КОНТРОЛЬ СИСТЕМ picks the check; ИП1 and ИП2 read the commands K1 and K2.
+struct CommandCheckDef {
+    std::string anode_subsystem;     // АНОД ВКЛ.: the set powered
+    std::string computer_subsystem;  // the СРП, which solves the static task and carries the commands
+    std::string systems_control;     // КОНТРОЛЬ СИСТЕМ
+    int static_position = 0;         // the СРП's static task (with ПУСК — ИСХ. ПОЛОЖ.)
+    int commands_position = 1;       // the passage of the commands (УРОВНИ КОМАНД, СМЕНА ЗНАКА, ПРОВЕРКА СМЕНЫ ЛИТЕРА)
+    int transients_position = 2;     // the СВК's transients (ПРОВЕРКА ПЕРЕХОДНЫХ ХАРАКТЕРИСТИК)
+    std::string launch_control;      // ПУСК — ИСХ. ПОЛОЖ.
+    int launch_on_position = 1;
+    std::string levels_control;      // УРОВНИ КОМАНД (a button)
+    std::string letter_control;      // ПРОВЕРКА СМЕНЫ ЛИТЕРА (a button)
+    std::string sign_control;        // СМЕНА ЗНАКА
+    int sign_on_position = 1;
+    std::string transients_control;  // ПРОВЕРКА ПЕРЕХОДНЫХ ХАРАКТЕРИСТИК: 0 K1, 1 K2, 2 both
+    std::string fault_input;         // the commands K1, K2 do not pass
+    double level = 0.8;              // the standard level of K1, K2, of the meter's swing
+    double static_k1 = 0.6, static_k2 = -0.4;  // the static task's commands
+    double transient = 0.5;          // a channel's settled transient
+};
+// 0004-14M (p157-162): РЕЖИМЫ picks the error signals checked, ВЫВОД — НАВЕДЕНИЕ the missile channel's scale, ЧАСТОТА
+// tunes the target channel's quartz oscillator; the four meters КАНАЛ Ц and КАНАЛ Р.
+struct ErrorCheckDef {
+    std::string check_subsystem;     // ФК running
+    std::string tracking_subsystem;  // ТСЦ: the meters at zero
+    std::string mode_control;
+    std::vector<double> target_by_mode, missile_by_mode;  // the reading per РЕЖИМЫ position, of the swing (-1..1)
+    std::string output_control;      // ВЫВОД — НАВЕДЕНИЕ
+    int gathering_position = 0;      // ВЫВОД: the wide beam's scale
+    double gathering_factor = 1.0;
+    std::string freq_control;        // ЧАСТОТА
+    double freq_tuned = 0.5, freq_band = 0.2;  // the knob's value where the oscillator is on tune, and the reading's fall to 0
+    std::string target_fault_input, missile_fault_input;
+};
+// 0062-6M1 (p98-99, p161): the noise generators fired by ПОДЖИГ ГШ through a receiver's channel chosen by РЕЖИМЫ; КОНТРОЛЬ
+// reads the noise, its level set by the channel's РРУ КШ knob. A receiver whose noise figure is worse reads less rise.
+struct NoiseCheckChannel {
+    std::string radar;         // "search" (ГШ-2, СОЦ) or "track" (ГШ-5, ССЦ); empty: nothing modelled on this position
+    std::string gain_control;  // РРУ КШ ОСН. or ДОП.
+};
+struct NoiseCheckDef {
+    std::string ready_subsystem;  // the receivers' input stages powered
+    std::string fire_control;     // ПОДЖИГ ГШ (a button)
+    std::string channel_control;  // РЕЖИМЫ
+    std::vector<NoiseCheckChannel> channels;  // per position of channel_control
+    std::string search_degraded_input, track_degraded_input;
+    double noise_per_gain = 0.6;  // the receiver's own noise on КОНТРОЛЬ per unit of its knob, of the swing
+    double generator_y = 2.0;     // the rise the generator gives a sound receiver (noise with it over noise without)
+    double degraded_db = 6.0;     // a degraded receiver's noise figure over its norm
+};
+struct ChecksDef {
+    bool has_commands = false, has_errors = false, has_noise = false;
+    CommandCheckDef commands;
+    ErrorCheckDef errors;
+    NoiseCheckDef noise;
 };
 
 // A state a session can start in instead of cold (roadmap 6.2): controls already set, inputs, subsystems already
@@ -388,6 +532,35 @@ private:
     }
 };
 
+// What a receiver's controls say now: the coherence, the wind compensation's offset, the magnetron's mistune, СА.
+struct ReceiverReading {
+    bool external = false;
+    double comp_mps = 0.0;
+    double mistune_hz = 0.0;
+    bool manual_afc = false;  // the frequency control on manual: the magnetron's own drift is not followed
+    bool sa = false;
+};
+inline ReceiverReading ReadReceiver(const ReceiverDef& d, const ControlPanel& panel) {
+    ReceiverReading out;
+    // A knob 0..1 with its middle at none, to -1..+1.
+    auto centred = [&panel](const std::string& id) {
+        const ControlDef* c = panel.Find(id);
+        if (c == nullptr || !(c->max_value > c->min_value)) return 0.0;
+        return (panel.GetValue(id) - 0.5 * (c->min_value + c->max_value)) / (0.5 * (c->max_value - c->min_value));
+    };
+    out.external = !d.mti_external_control.empty() && panel.Get(d.mti_external_control) == d.mti_external_position;
+    if (!d.wind_comp_control.empty() && panel.Get(d.wind_comp_control) == d.wind_comp_position) {
+        if (!d.wind_coarse_control.empty()) out.comp_mps += centred(d.wind_coarse_control) * d.wind_coarse_mps;
+        if (!d.wind_fine_control.empty()) out.comp_mps += centred(d.wind_fine_control) * d.wind_fine_mps;
+    }
+    if (!d.afc_control.empty() && panel.Get(d.afc_control) == d.afc_manual_position && !d.afc_trim_control.empty()) {
+        out.mistune_hz = centred(d.afc_trim_control) * d.afc_trim_span_hz;
+    }
+    out.manual_afc = !d.afc_control.empty() && panel.Get(d.afc_control) == d.afc_manual_position;
+    out.sa = !d.sa_control.empty() && panel.Get(d.sa_control) == d.sa_position;
+    return out;
+}
+
 struct ConsoleData {
     std::string system_id;
     std::string display_name;
@@ -411,6 +584,8 @@ struct ConsoleData {
     VoiceDef voice;
     bool has_fuel = false;
     FuelDef fuel;
+    bool has_checks = false;
+    ChecksDef checks;
     // A command post's own information chain ("post", simcore/command_post.hpp): the subsystems that show the regiment's
     // telecode picture and a cabled radar's primary picture, the input the sim sets while the regiment's telecode is
     // within reach, the plotter's station, and the subsystem that says the post is oriented.
@@ -481,7 +656,7 @@ public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
                              "controls", "subsystems", "procedures", "launch", "launcher", "comms", "fuel", "readiness", "sensors", "post",
-                             "radios", "voice"})) {
+                             "radios", "voice", "checks"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -495,6 +670,7 @@ public:
         if (!LoadLaunch(root, out)) return false;
         if (!LoadLauncher(root, out) || !LoadComms(root, out)) return false;
         if (!LoadFuel(root, out)) return false;
+        if (!LoadChecks(root, out)) return false;
         if (!LoadPost(root, out)) return false;
         if (!LoadRadios(root, out)) return false;
         if (!LoadVoice(root, out)) return false;
@@ -646,7 +822,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string path = Index("controls", i);
             const json::Value& c = arr->items[i];
             if (!Keys(c, path, {"id", "label", "station", "kind", "positions", "position_labels", "initial", "guard",
-                                "min", "max", "initial_value", "wraps", "unit", "source", "confidence", "notes"})) {
+                                "min", "max", "initial_value", "wraps", "springs_back", "cycles", "unit", "source", "confidence", "notes"})) {
                 return false;
             }
             ControlDef def;
@@ -681,6 +857,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (kind == "switch" || kind == "key") {
                 def.kind = ControlKind::Discrete;
                 def.stepwise = kind == "key";
+                if (!OptionalBool(c, path, "springs_back", def.springs_back) || !OptionalBool(c, path, "cycles", def.cycles)) return false;
+                if (def.springs_back && def.stepwise) return Fail(Join(path, "springs_back"), "for switches only");
+                if (def.cycles && (def.stepwise || def.springs_back)) return Fail(Join(path, "cycles"), "for switches that do not spring back");
             } else if (kind == "button") {
                 def.kind = ControlKind::Momentary;
             } else if (kind == "wheel") {
@@ -700,6 +879,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                  c.Find("wraps") != nullptr)) {
                 return Fail(path, "min, max, initial_value and wraps are for wheels only");
             }
+            if (def.kind != ControlKind::Discrete && c.Find("springs_back") != nullptr) {
+                return Fail(Join(path, "springs_back"), "for switches only");
+            }
+            if (def.kind != ControlKind::Discrete && c.Find("cycles") != nullptr) return Fail(Join(path, "cycles"), "for switches only");
             if (!def.guard_id.empty() && !panel.Has(def.guard_id)) {
                 return Fail(Join(path, "guard"), "unknown control '" + def.guard_id + "' (define the guard first)");
             }
@@ -934,7 +1117,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string sp = Index(Join(fp, "sources"), i);
             const json::Value& v = srcs->items[i];
             FuelSource s;
-            if (!Keys(v, sp, {"subsystem", "stationary_lph", "moving_lph"}) ||
+            if (!Keys(v, sp, {"subsystem", "stationary_lph", "moving_lph", "source", "confidence", "notes"}) ||
                 !RefSubsystem(v, sp, "subsystem", eq, true, s.subsystem) || !NumberOf(v, sp, "stationary_lph", s.stationary_lph) ||
                 !NumberOf(v, sp, "moving_lph", s.moving_lph)) {
                 return false;
@@ -943,6 +1126,120 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             d.sources.push_back(s);
         }
         out.has_fuel = true;
+        return true;
+    }
+
+    bool NumberList(const json::Value& obj, const std::string& path, const char* key, std::vector<double>& out) {
+        const json::Value* a = OptionalArray(obj, path, key);
+        if (a == nullptr) return message_.empty();
+        out.clear();
+        for (std::size_t i = 0; i < a->items.size(); ++i) {
+            if (!a->items[i].Is(json::Type::Number)) return Fail(Index(Join(path, key), i), "expected a number");
+            out.push_back(a->items[i].number);
+        }
+        return true;
+    }
+
+    // The BM's checks ("checks": { "commands", "errors", "noise" }, simcore/checks.hpp).
+    bool LoadChecks(const json::Value& root, ConsoleData& out) {
+        const json::Value* c = root.Find("checks");
+        if (c == nullptr) return true;
+        const std::string cp = "checks";
+        const Equipment& eq = out.equipment;
+        const ControlPanel& panel = out.panel;
+        if (!Keys(*c, cp, {"commands", "errors", "noise", "source", "confidence", "notes"}) || !Provenance(*c, cp)) return false;
+        ChecksDef& d = out.checks;
+        if (const json::Value* v = c->Find("commands")) {
+            const std::string p = Join(cp, "commands");
+            CommandCheckDef& k = d.commands;
+            if (!Keys(*v, p, {"anode_subsystem", "computer_subsystem", "systems_control", "static_position", "commands_position",
+                              "transients_position", "launch_control", "launch_on_position", "levels_control", "letter_control",
+                              "sign_control", "sign_on_position", "transients_control", "fault_input", "level", "static_k1",
+                              "static_k2", "transient", "notes"}) ||
+                !RefSubsystem(*v, p, "anode_subsystem", eq, true, k.anode_subsystem) ||
+                !RefSubsystem(*v, p, "computer_subsystem", eq, false, k.computer_subsystem) ||
+                !RefControl(*v, p, "systems_control", panel, ControlKind::Discrete, true, k.systems_control) ||
+                !OptionalInt(*v, p, "static_position", k.static_position) || !OptionalInt(*v, p, "commands_position", k.commands_position) ||
+                !OptionalInt(*v, p, "transients_position", k.transients_position) ||
+                !RefControl(*v, p, "launch_control", panel, ControlKind::Discrete, false, k.launch_control) ||
+                !OptionalInt(*v, p, "launch_on_position", k.launch_on_position) ||
+                !RefControl(*v, p, "levels_control", panel, ControlKind::Momentary, false, k.levels_control) ||
+                !RefControl(*v, p, "letter_control", panel, ControlKind::Momentary, false, k.letter_control) ||
+                !RefControl(*v, p, "sign_control", panel, ControlKind::Discrete, false, k.sign_control) ||
+                !OptionalInt(*v, p, "sign_on_position", k.sign_on_position) ||
+                !RefControl(*v, p, "transients_control", panel, ControlKind::Discrete, false, k.transients_control) ||
+                !RefInput(*v, p, "fault_input", eq, k.fault_input) || !OptionalNumber(*v, p, "level", k.level) ||
+                !OptionalNumber(*v, p, "static_k1", k.static_k1) || !OptionalNumber(*v, p, "static_k2", k.static_k2) ||
+                !OptionalNumber(*v, p, "transient", k.transient)) {
+                return false;
+            }
+            for (double x : {k.level, k.static_k1, k.static_k2, k.transient}) {
+                if (x < -1.0 || x > 1.0) return Fail(p, "the readings are of the meter's swing, -1 to 1");
+            }
+            d.has_commands = true;
+        }
+        if (const json::Value* v = c->Find("errors")) {
+            const std::string p = Join(cp, "errors");
+            ErrorCheckDef& k = d.errors;
+            if (!Keys(*v, p, {"check_subsystem", "tracking_subsystem", "mode_control", "target_by_mode", "missile_by_mode",
+                              "output_control", "gathering_position", "gathering_factor", "freq_control", "freq_tuned", "freq_band",
+                              "target_fault_input", "missile_fault_input", "notes"}) ||
+                !RefSubsystem(*v, p, "check_subsystem", eq, true, k.check_subsystem) ||
+                !RefSubsystem(*v, p, "tracking_subsystem", eq, false, k.tracking_subsystem) ||
+                !RefControl(*v, p, "mode_control", panel, ControlKind::Discrete, true, k.mode_control) ||
+                !NumberList(*v, p, "target_by_mode", k.target_by_mode) || !NumberList(*v, p, "missile_by_mode", k.missile_by_mode) ||
+                !RefControl(*v, p, "output_control", panel, ControlKind::Discrete, false, k.output_control) ||
+                !OptionalInt(*v, p, "gathering_position", k.gathering_position) ||
+                !OptionalNumber(*v, p, "gathering_factor", k.gathering_factor) ||
+                !RefControl(*v, p, "freq_control", panel, ControlKind::Continuous, false, k.freq_control) ||
+                !OptionalNumber(*v, p, "freq_tuned", k.freq_tuned) || !OptionalNumber(*v, p, "freq_band", k.freq_band) ||
+                !RefInput(*v, p, "target_fault_input", eq, k.target_fault_input) ||
+                !RefInput(*v, p, "missile_fault_input", eq, k.missile_fault_input)) {
+                return false;
+            }
+            const int modes = panel.Find(k.mode_control)->positions;
+            if (static_cast<int>(k.target_by_mode.size()) != modes || static_cast<int>(k.missile_by_mode.size()) != modes) {
+                return Fail(p, "target_by_mode and missile_by_mode need one reading per position of mode_control");
+            }
+            if (!(k.freq_band > 0.0)) return Fail(Join(p, "freq_band"), "must be > 0");
+            if (!(k.gathering_factor > 0.0)) return Fail(Join(p, "gathering_factor"), "must be > 0");
+            d.has_errors = true;
+        }
+        if (const json::Value* v = c->Find("noise")) {
+            const std::string p = Join(cp, "noise");
+            NoiseCheckDef& k = d.noise;
+            if (!Keys(*v, p, {"ready_subsystem", "fire_control", "channel_control", "channels", "search_degraded_input",
+                              "track_degraded_input", "noise_per_gain", "generator_y", "degraded_db", "notes"}) ||
+                !RefSubsystem(*v, p, "ready_subsystem", eq, true, k.ready_subsystem) ||
+                !RefControl(*v, p, "fire_control", panel, ControlKind::Momentary, true, k.fire_control) ||
+                !RefControl(*v, p, "channel_control", panel, ControlKind::Discrete, true, k.channel_control) ||
+                !RefInput(*v, p, "search_degraded_input", eq, k.search_degraded_input) ||
+                !RefInput(*v, p, "track_degraded_input", eq, k.track_degraded_input) ||
+                !OptionalNumber(*v, p, "noise_per_gain", k.noise_per_gain) || !OptionalNumber(*v, p, "generator_y", k.generator_y) ||
+                !OptionalNumber(*v, p, "degraded_db", k.degraded_db)) {
+                return false;
+            }
+            const json::Value* ch = OptionalArray(*v, p, "channels");
+            if (ch == nullptr) return message_.empty() ? Fail(Join(p, "channels"), "required") : false;
+            for (std::size_t i = 0; i < ch->items.size(); ++i) {
+                const std::string q = Index(Join(p, "channels"), i);
+                NoiseCheckChannel n;
+                if (!Keys(ch->items[i], q, {"radar", "gain_control", "notes"}) || !OptionalString(ch->items[i], q, "radar", n.radar) ||
+                    !RefControl(ch->items[i], q, "gain_control", panel, ControlKind::Continuous, false, n.gain_control)) {
+                    return false;
+                }
+                if (!n.radar.empty() && n.radar != "search" && n.radar != "track") return Fail(Join(q, "radar"), "search, track or empty");
+                if (!n.radar.empty() && n.gain_control.empty()) return Fail(Join(q, "gain_control"), "required for a radar's channel");
+                k.channels.push_back(n);
+            }
+            if (static_cast<int>(k.channels.size()) > panel.Find(k.channel_control)->positions) {
+                return Fail(Join(p, "channels"), "more channels than channel_control has positions");
+            }
+            if (!(k.generator_y >= 1.0)) return Fail(Join(p, "generator_y"), "must be >= 1");
+            if (k.degraded_db < 0.0) return Fail(Join(p, "degraded_db"), "must be >= 0");
+            d.has_noise = true;
+        }
+        out.has_checks = true;
         return true;
     }
 
@@ -1089,7 +1386,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !RefControl(e, rp, "power", out.panel, ControlKind::Discrete, true, r.power) ||
                 !RefControl(e, rp, "mode", out.panel, ControlKind::Discrete, true, r.mode) ||
                 !RefControl(e, rp, "squelch", out.panel, ControlKind::Discrete, true, r.squelch) ||
-                !RefControl(e, rp, "volume", out.panel, ControlKind::Discrete, true, r.volume) ||
+                !RefControl(e, rp, "volume", out.panel, ControlKind::Continuous, true, r.volume) ||
                 !RefControl(e, rp, "antenna", out.panel, ControlKind::Discrete, true, r.antenna) ||
                 !RefSubsystem(e, rp, "warm", eq, true, r.warm) || !RefSubsystem(e, rp, "transmit", eq, true, r.transmit) ||
                 !RefControl(e, rp, "tone", out.panel, ControlKind::Momentary, false, r.tone) ||
@@ -1258,7 +1555,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (!RefControl(e, sp, "power", out.panel, ControlKind::Discrete, r123, s.power) ||
                 !RefControl(e, sp, "mode", out.panel, ControlKind::Discrete, r123, s.mode) ||
                 !RefControl(e, sp, "preset", out.panel, ControlKind::Discrete, r123, s.preset) ||
-                !RefControl(e, sp, "volume", out.panel, ControlKind::Discrete, false, s.volume) ||
+                !RefControl(e, sp, "volume", out.panel, ControlKind::Continuous, false, s.volume) ||
                 !RefControl(e, sp, "squelch", out.panel, ControlKind::Discrete, false, s.squelch)) {
                 return false;
             }
@@ -1302,7 +1599,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const json::Value& e = boxes->items[i];
             VoiceBoxDef b;
             if (!Keys(e, bp, {"id", "name", "station", "headset", "selector", "positions", "radio", "radio_select", "radio_select_sets",
-                              "monitor", "monitor_positions", "lines", "circular", "power", "keeps_intercom", "second_station",
+                              "monitor", "monitor_positions", "lines", "circular", "power", "keeps_intercom", "volume", "second_station",
                               "second_headset", "notes"}) ||
                 !RequireString(e, bp, "id", b.id) || !RequireString(e, bp, "name", b.name) || !RequireString(e, bp, "station", b.station) ||
                 !RefControl(e, bp, "headset", out.panel, ControlKind::Discrete, true, b.headset) ||
@@ -1312,6 +1609,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !RefControl(e, bp, "monitor", out.panel, ControlKind::Discrete, false, b.monitor) ||
                 !RefControl(e, bp, "circular", out.panel, ControlKind::Momentary, false, b.circular) ||
                 !RefSubsystem(e, bp, "power", eq, false, b.power) || !OptionalBool(e, bp, "keeps_intercom", b.keeps_intercom) ||
+                !RefControl(e, bp, "volume", out.panel, ControlKind::Continuous, false, b.volume) ||
                 !OptionalString(e, bp, "second_station", b.second_station) ||
                 !RefControl(e, bp, "second_headset", out.panel, ControlKind::Discrete, !b.second_station.empty(), b.second_headset)) {
                 return false;
@@ -1391,7 +1689,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(*l, lp, {"containers", "channels", "channel_control", "channel_positions", "attention_input",
                            "jam_control", "pair_preparation", "capture_s", "medium_s", "narrow_s", "fuse_range_m",
                            "nominal_flight_s", "min_interval_s", "hold_input", "reload_input", "stopped_input",
-                           "reload_s_per_missile", "reload_traverse", "letter", "emergency", "range_sweep", "prep_hold", "source",
+                           "reload_s_per_missile", "reload_traverse", "letter", "emergency", "refuse", "range_sweep", "prep_hold", "source",
                            "confidence", "notes"}) ||
             !Provenance(*l, lp) ||
             !RefControl(*l, lp, "channel_control", out.panel, ControlKind::Discrete, true, d.channel_control) ||
@@ -1428,7 +1726,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string cp = Index(Join(lp, "channels"), i);
             const json::Value& c = chans->items[i];
             LauncherChannelDef ch;
-            if (!Keys(c, cp, {"transmitter", "away", "captured", "medium", "narrow", "fuse"}) ||
+            if (!Keys(c, cp, {"transmitter", "away", "captured", "medium", "narrow", "fuse", "return"}) ||
+                !RefControl(c, cp, "return", out.panel, ControlKind::Momentary, false, ch.return_control) ||
                 !RefInput(c, cp, "transmitter", eq, ch.transmitter_input) || !RefInput(c, cp, "away", eq, ch.away_input) ||
                 !RefInput(c, cp, "captured", eq, ch.captured_input) || !RefInput(c, cp, "medium", eq, ch.medium_input) ||
                 !RefInput(c, cp, "narrow", eq, ch.narrow_input) || !RefInput(c, cp, "fuse", eq, ch.fuse_input)) {
@@ -1471,7 +1770,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (static_cast<int>(d.channel_positions.size()) != out.panel.Find(d.channel_control)->positions) {
             return Fail(Join(lp, "channel_positions"), "needs one entry per position of " + d.channel_control);
         }
-        if (!LoadLauncherLetter(*l, lp, out, d) || !LoadLauncherEmergency(*l, lp, out, d) ||
+        if (!LoadLauncherLetter(*l, lp, out, d) || !LoadLauncherEmergency(*l, lp, out, d) || !LoadLauncherRefuse(*l, lp, out, d) ||
             !LoadLauncherRangeSweep(*l, lp, out, d) || !LoadLauncherPrepHold(*l, lp, d)) {
             return false;
         }
@@ -1551,6 +1850,36 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         return true;
     }
 
+    bool LoadLauncherRefuse(const json::Value& l, const std::string& lp, const ConsoleData& out, LauncherDef& d) {
+        const json::Value* v = l.Find("refuse");
+        if (v == nullptr) return true;
+        const std::string p = Join(lp, "refuse");
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        LauncherRefuseDef& e = d.refuse;
+        if (!Keys(*v, p, {"select_control", "select_containers", "button", "refused_input", "source", "confidence", "notes"}) ||
+            !Provenance(*v, p) ||
+            !RefControl(*v, p, "select_control", out.panel, ControlKind::Discrete, true, e.select_control) ||
+            !RefControl(*v, p, "button", out.panel, ControlKind::Momentary, true, e.button) ||
+            !RefInput(*v, p, "refused_input", out.equipment, e.refused_input)) {
+            return false;
+        }
+        const json::Value* list = OptionalArray(*v, p, "select_containers");
+        if (list == nullptr) return message_.empty() ? Fail(Join(p, "select_containers"), "required") : false;
+        if (static_cast<int>(list->items.size()) != out.panel.Find(e.select_control)->positions) {
+            return Fail(Join(p, "select_containers"), "needs one entry per position of " + e.select_control);
+        }
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const json::Value& c = list->items[i];
+            if (!c.Is(json::Type::String)) return Fail(Index(Join(p, "select_containers"), i), "expected a container id or \"\"");
+            bool known = c.string.empty();
+            for (const LauncherContainerDef& con : d.containers) known = known || con.id == c.string;
+            if (!known) return Fail(Index(Join(p, "select_containers"), i), "unknown container '" + c.string + "'");
+            e.select_containers.push_back(c.string);
+        }
+        d.has_refuse = true;
+        return true;
+    }
+
     bool LoadLauncherEmergency(const json::Value& l, const std::string& lp, const ConsoleData& out, LauncherDef& d) {
         const json::Value* v = l.Find("emergency");
         if (v == nullptr) return true;
@@ -1607,6 +1936,45 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         return true;
     }
 
+    bool LoadReceiver(const json::Value& v, const std::string& p, const ControlPanel& panel, ReceiverDef& d) {
+        if (!Keys(v, p, {"mti_external_control", "mti_external_position", "wind_comp_control", "wind_comp_position",
+                         "wind_coarse_control", "wind_coarse_mps", "wind_fine_control", "wind_fine_mps", "afc_control",
+                         "afc_manual_position", "afc_trim_control", "afc_trim_span_hz", "sa_control", "sa_position", "notes"}) ||
+            !RefControl(v, p, "mti_external_control", panel, ControlKind::Discrete, false, d.mti_external_control) ||
+            !OptionalInt(v, p, "mti_external_position", d.mti_external_position) ||
+            !RefControl(v, p, "wind_comp_control", panel, ControlKind::Discrete, false, d.wind_comp_control) ||
+            !OptionalInt(v, p, "wind_comp_position", d.wind_comp_position) ||
+            !RefControl(v, p, "wind_coarse_control", panel, ControlKind::Continuous, false, d.wind_coarse_control) ||
+            !OptionalNumber(v, p, "wind_coarse_mps", d.wind_coarse_mps) ||
+            !RefControl(v, p, "wind_fine_control", panel, ControlKind::Continuous, false, d.wind_fine_control) ||
+            !OptionalNumber(v, p, "wind_fine_mps", d.wind_fine_mps) ||
+            !RefControl(v, p, "afc_control", panel, ControlKind::Discrete, false, d.afc_control) ||
+            !OptionalInt(v, p, "afc_manual_position", d.afc_manual_position) ||
+            !RefControl(v, p, "afc_trim_control", panel, ControlKind::Continuous, false, d.afc_trim_control) ||
+            !OptionalNumber(v, p, "afc_trim_span_hz", d.afc_trim_span_hz) ||
+            !RefControl(v, p, "sa_control", panel, ControlKind::Discrete, false, d.sa_control) ||
+            !OptionalInt(v, p, "sa_position", d.sa_position)) {
+            return false;
+        }
+        struct Pos { const char* key; const std::string* control; int value; };
+        for (const Pos& pos : {Pos{"mti_external_position", &d.mti_external_control, d.mti_external_position},
+                               Pos{"wind_comp_position", &d.wind_comp_control, d.wind_comp_position},
+                               Pos{"afc_manual_position", &d.afc_control, d.afc_manual_position},
+                               Pos{"sa_position", &d.sa_control, d.sa_position}}) {
+            if (!pos.control->empty() && (pos.value < 0 || pos.value >= panel.Find(*pos.control)->positions)) {
+                return Fail(Join(p, pos.key), "not a position of " + *pos.control);
+            }
+        }
+        if (d.wind_coarse_mps < 0.0 || d.wind_fine_mps < 0.0 || d.afc_trim_span_hz < 0.0) {
+            return Fail(p, "the knobs' spans must be >= 0");
+        }
+        if ((!d.wind_coarse_control.empty() || !d.wind_fine_control.empty()) && d.wind_comp_control.empty()) {
+            return Fail(Join(p, "wind_comp_control"), "the wind compensation's knobs need its switch");
+        }
+        if (!d.afc_trim_control.empty() && d.afc_control.empty()) return Fail(Join(p, "afc_control"), "the trim needs the switch");
+        return true;
+    }
+
     bool LoadSensors(const json::Value& root, ConsoleData& out) {
         const json::Value* s = root.Find("sensors");
         if (s == nullptr) return true;
@@ -1622,13 +1990,16 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string sp = "sensors.search";
         SearchSensorDef& search = out.search;
         if (!Keys(*se, sp, {"antenna", "transmitter", "range_control", "range_scales_m", "range_rings_m", "mti_control",
-                            "mti_max_range_m", "beams", "iff", "notes"}) ||
+                            "mti_max_range_m", "beams", "iff", "receiver", "notes"}) ||
             !RefSubsystem(*se, sp, "antenna", eq, true, search.antenna) ||
             !RefSubsystem(*se, sp, "transmitter", eq, true, search.transmitter) ||
             !RefControl(*se, sp, "range_control", panel, ControlKind::Discrete, true, search.range_control) ||
             !RefControl(*se, sp, "mti_control", panel, ControlKind::Discrete, false, search.mti_control) ||
             !OptionalNumber(*se, sp, "mti_max_range_m", search.mti_max_range_m)) {
             return false;
+        }
+        if (const json::Value* rx = se->Find("receiver")) {
+            if (!LoadReceiver(*rx, Join(sp, "receiver"), panel, search.receiver)) return false;
         }
         const json::Value* scales = OptionalArray(*se, sp, "range_scales_m");
         if (scales == nullptr) return message_.empty() ? Fail(Join(sp, "range_scales_m"), "required") : false;
@@ -1712,7 +2083,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (const json::Value* iff = se->Find("iff")) {
             const std::string ip = Join(sp, "iff");
             if (!Keys(*iff, ip, {"query", "control_query", "gate_control", "ready", "interrogating_input",
-                                 "query_time_s", "max_range_m", "source", "confidence", "notes"}) ||
+                                 "query_time_s", "max_range_m", "check_control", "check_ranges_m", "source", "confidence", "notes"}) ||
                 !Provenance(*iff, ip) ||
                 !RefControl(*iff, ip, "query", panel, ControlKind::Momentary, true, search.iff_query) ||
                 !RefControl(*iff, ip, "control_query", panel, ControlKind::Momentary, false, search.iff_control_query) ||
@@ -1723,6 +2094,18 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !OptionalNumber(*iff, ip, "max_range_m", search.iff_max_range_m)) {
                 return false;
             }
+            if (!RefControl(*iff, ip, "check_control", panel, ControlKind::Momentary, false, search.iff_check_control)) return false;
+            if (const json::Value* cr = OptionalArray(*iff, ip, "check_ranges_m")) {
+                for (const json::Value& r : cr->items) {
+                    if (!r.Is(json::Type::Number) || !(r.number > 0.0)) return Fail(Join(ip, "check_ranges_m"), "ranges must be > 0");
+                    search.iff_check_ranges_m.push_back(r.number);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (!search.iff_check_control.empty() && search.iff_check_ranges_m.empty()) {
+                return Fail(Join(ip, "check_ranges_m"), "the check control needs its marks' ranges");
+            }
             if (!(search.iff_query_time_s > 0.0)) return Fail(Join(ip, "query_time_s"), "must be > 0");
             if (!(search.iff_max_range_m > 0.0)) return Fail(Join(ip, "max_range_m"), "required, > 0");
         }
@@ -1730,9 +2113,12 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string tp = "sensors.track";
         TrackSensorDef& track = out.track;
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
-                            "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "rgpo_control", "fov_deg", "fov_height_ratio",
+                            "el_wheel", "range_wheel", "lock_control", "slew_control", "slew_rate_deg_s", "pa_gain_per_s", "pa_max_az_deg_s",
+                            "pa_max_el_deg_s", "pa_balance_az", "pa_balance_el", "range_balance_control", "range_balance_m", "fov_control", "mti_control", "rgpo_control", "fov_deg", "fov_height_ratio",
                             "max_range_m", "az_limit_deg", "captured_input", "range_pulled_input", "tv_track_input", "too_low_input", "near_zone_input",
-                            "in_zone_input", "crosshair_input", "elevation_search", "notes"}) ||
+                            "in_zone_input", "crosshair_input", "slow_input", "slow_mps", "small_target_control", "small_target_on_position",
+                            "elevation_search", "receiver", "filter_control",
+                            "filter_visibility", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
             !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
             !RefSubsystem(*tr, tp, "radar_mode", eq, true, track.radar_mode) ||
@@ -1743,6 +2129,15 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefControl(*tr, tp, "el_wheel", panel, ControlKind::Continuous, true, track.el_wheel) ||
             !RefControl(*tr, tp, "range_wheel", panel, ControlKind::Continuous, true, track.range_wheel) ||
             !RefControl(*tr, tp, "lock_control", panel, ControlKind::Discrete, false, track.lock_control) ||
+            !RefControl(*tr, tp, "slew_control", panel, ControlKind::Discrete, false, track.slew_control) ||
+            !OptionalNumber(*tr, tp, "slew_rate_deg_s", track.slew_rate_deg_s) ||
+            !OptionalNumber(*tr, tp, "pa_gain_per_s", track.pa_gain_per_s) ||
+            !OptionalNumber(*tr, tp, "pa_max_az_deg_s", track.pa_max_az_deg_s) ||
+            !OptionalNumber(*tr, tp, "pa_max_el_deg_s", track.pa_max_el_deg_s) ||
+            !RefControl(*tr, tp, "pa_balance_az", panel, ControlKind::Momentary, false, track.pa_balance_az) ||
+            !RefControl(*tr, tp, "pa_balance_el", panel, ControlKind::Momentary, false, track.pa_balance_el) ||
+            !RefControl(*tr, tp, "range_balance_control", panel, ControlKind::Continuous, false, track.range_balance_control) ||
+            !OptionalNumber(*tr, tp, "range_balance_m", track.range_balance_m) ||
             !RefControl(*tr, tp, "fov_control", panel, ControlKind::Discrete, false, track.fov_control) ||
             !RefControl(*tr, tp, "mti_control", panel, ControlKind::Discrete, false, track.mti_control) ||
             !RefControl(*tr, tp, "rgpo_control", panel, ControlKind::Discrete, false, track.rgpo_control) ||
@@ -1752,12 +2147,44 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefInput(*tr, tp, "captured_input", eq, track.captured_input) ||
             !RefInput(*tr, tp, "tv_track_input", eq, track.tv_track_input) ||
             !RefInput(*tr, tp, "too_low_input", eq, track.too_low_input) ||
+            !RefInput(*tr, tp, "slow_input", eq, track.slow_input) || !OptionalNumber(*tr, tp, "slow_mps", track.slow_mps) ||
+            !RefControl(*tr, tp, "small_target_control", out.panel, ControlKind::Discrete, false, track.small_target_control) ||
+            !OptionalInt(*tr, tp, "small_target_on_position", track.small_target_on_position) ||
             !RefInput(*tr, tp, "near_zone_input", eq, track.near_zone_input) ||
             !RefInput(*tr, tp, "in_zone_input", eq, track.in_zone_input) ||
             !RefInput(*tr, tp, "crosshair_input", eq, track.crosshair_input)) {
             return false;
         }
         if (track.max_range_m <= 0.0) return Fail(Join(tp, "max_range_m"), "must be > 0");
+        if (const json::Value* rx = tr->Find("receiver")) {
+            if (!LoadReceiver(*rx, Join(tp, "receiver"), panel, track.receiver)) return false;
+        }
+        if (!RefControl(*tr, tp, "filter_control", panel, ControlKind::Discrete, false, track.filter_control)) return false;
+        if (const json::Value* fv = OptionalArray(*tr, tp, "filter_visibility")) {
+            for (const json::Value& f : fv->items) {
+                if (!f.Is(json::Type::Number) || !(f.number > 0.0)) return Fail(Join(tp, "filter_visibility"), "factors must be > 0");
+                track.filter_visibility.push_back(f.number);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (!track.filter_control.empty() &&
+            static_cast<int>(track.filter_visibility.size()) != panel.Find(track.filter_control)->positions) {
+            return Fail(Join(tp, "filter_visibility"), "needs one factor per position of " + track.filter_control);
+        }
+        if (track.pa_gain_per_s < 0.0 || track.pa_max_az_deg_s <= 0.0 || track.pa_max_el_deg_s <= 0.0) {
+            return Fail(Join(tp, "pa_gain_per_s"), "the gain must be >= 0 and the limits > 0");
+        }
+        if (track.pa_gain_per_s > 0.0 && track.tv_mode.empty()) return Fail(Join(tp, "pa_gain_per_s"), "needs a tv_mode");
+        if (track.range_balance_m < 0.0) return Fail(Join(tp, "range_balance_m"), "must be >= 0");
+        if (!track.slew_control.empty()) {
+            if (track.slew_rate_deg_s <= 0.0) return Fail(Join(tp, "slew_rate_deg_s"), "must be > 0 with a slew_control");
+            for (const ControlDef& c : panel.Controls()) {
+                if (c.id == track.slew_control && c.positions != 3) {
+                    return Fail(Join(tp, "slew_control"), "needs three positions: left, middle, right");
+                }
+            }
+        }
         if (const json::Value* fov = tr->Find("fov_deg")) {
             if (!fov->Is(json::Type::Array) || fov->items.size() != 2 || !fov->items[0].Is(json::Type::Number) ||
                 !fov->items[1].Is(json::Type::Number) || fov->items[0].number <= 0.0 || fov->items[1].number <= 0.0) {
@@ -1789,8 +2216,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(o, op, {"gyro", "setter", "mode_control", "set_position", "relay_control", "relay_position",
                           "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "latitude_control",
                           "earth_rate_deg_h", "own_drift_deg_h", "survey_s", "survey_sigma_deg", "qc_known_input",
-                          "oriented_input", "survey_procedure", "survey_subsystem", "survey_break_procedure", "source",
-                          "confidence", "notes"}) ||
+                          "oriented_input", "compass_control", "compass_position", "consumers_control", "consumers_position",
+                          "follow_up_control", "follow_up_position", "latitude_switch", "latitude_switch_position", "qc_fault_input",
+                          "survey_procedure", "survey_subsystem", "survey_break_procedure", "source", "confidence", "notes"}) ||
             !Provenance(o, op) || !RefSubsystem(o, op, "gyro", eq, true, def.gyro) ||
             !RefControl(o, op, "setter", panel, ControlKind::Continuous, true, def.setter) ||
             !RefControl(o, op, "mode_control", panel, ControlKind::Discrete, true, def.mode_control) ||
@@ -1808,10 +2236,35 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalNumber(o, op, "survey_sigma_deg", def.survey_sigma_deg) ||
             !RefInput(o, op, "qc_known_input", eq, def.qc_known_input) ||
             !RefInput(o, op, "oriented_input", eq, def.oriented_input) ||
+            !RefInput(o, op, "qc_fault_input", eq, def.qc_fault_input) ||
+            !RefControl(o, op, "compass_control", panel, ControlKind::Discrete, false, def.compass_control) ||
+            !OptionalInt(o, op, "compass_position", def.compass_position) ||
+            !RefControl(o, op, "consumers_control", panel, ControlKind::Discrete, false, def.consumers_control) ||
+            !OptionalInt(o, op, "consumers_position", def.consumers_position) ||
+            !RefControl(o, op, "follow_up_control", panel, ControlKind::Discrete, false, def.follow_up_control) ||
+            !OptionalInt(o, op, "follow_up_position", def.follow_up_position) ||
+            !RefControl(o, op, "latitude_switch", panel, ControlKind::Discrete, false, def.latitude_switch) ||
+            !OptionalInt(o, op, "latitude_switch_position", def.latitude_switch_position) ||
             !OptionalString(o, op, "survey_procedure", def.survey_procedure) ||
             !RefSubsystem(o, op, "survey_subsystem", eq, false, def.survey_subsystem) ||
             !OptionalString(o, op, "survey_break_procedure", def.survey_break_procedure)) {
             return false;
+        }
+        if (!def.follow_up_control.empty() &&
+            (def.follow_up_position < 0 || def.follow_up_position >= panel.Find(def.follow_up_control)->positions)) {
+            return Fail(Join(op, "follow_up_position"), "not a position of " + def.follow_up_control);
+        }
+        if (!def.latitude_switch.empty() &&
+            (def.latitude_switch_position < 0 || def.latitude_switch_position >= panel.Find(def.latitude_switch)->positions)) {
+            return Fail(Join(op, "latitude_switch_position"), "not a position of " + def.latitude_switch);
+        }
+        if (!def.consumers_control.empty() &&
+            (def.consumers_position < 0 || def.consumers_position >= panel.Find(def.consumers_control)->positions)) {
+            return Fail(Join(op, "consumers_position"), "not a position of " + def.consumers_control);
+        }
+        if (!def.compass_control.empty() &&
+            (def.compass_position < 0 || def.compass_position >= panel.Find(def.compass_control)->positions)) {
+            return Fail(Join(op, "compass_position"), "not a position of " + def.compass_control);
         }
         if (!def.survey_procedure.empty()) {
             const auto find = [&procedures](const std::string& id) -> const Procedure* {
@@ -1908,7 +2361,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string path = Index("subsystems", i);
             const json::Value& s = arr->items[i];
             if (!Keys(s, path, {"id", "name", "enable", "enable_any", "prerequisites", "latching", "release",
-                                "start_ready", "start_time_s", "stop_time_s", "source", "confidence", "notes"})) {
+                                "release_any", "start_ready", "start_time_s", "stop_time_s", "source", "confidence", "notes"})) {
                 return false;
             }
             SubsystemDef def;
@@ -1919,12 +2372,16 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !LoadConditions(s, path, "enable_any", panel, eq, def.enable_any) ||
                 !LoadConditions(s, path, "prerequisites", panel, eq, def.prerequisites) ||
                 !LoadConditions(s, path, "release", panel, eq, def.release) ||
+                !LoadConditions(s, path, "release_any", panel, eq, def.release_any) ||
                 !LoadTime(s, path, "start_time_s", def.start_time_s) || !LoadTime(s, path, "stop_time_s", def.stop_time_s)) {
                 return false;
             }
             if (eq.Has(def.id)) return Fail(Join(path, "id"), "duplicate subsystem '" + def.id + "'");
-            if (def.latching && def.release.empty()) return Fail(path, "a latching subsystem needs release conditions");
+            if (def.latching && def.release.empty() && def.release_any.empty()) {
+                return Fail(path, "a latching subsystem needs release conditions");
+            }
             if (!def.latching && !def.release.empty()) return Fail(Join(path, "release"), "only for latching subsystems");
+            if (!def.latching && !def.release_any.empty()) return Fail(Join(path, "release_any"), "only for latching subsystems");
             if (!eq.AddSubsystem(def, panel)) return Fail(path, "invalid subsystem");
         }
         return true;

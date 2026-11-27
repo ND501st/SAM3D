@@ -1,0 +1,409 @@
+{
+ "photo": "g100-b",
+ "vehicle": "9A33BM3-1 ex-NVA (book's interior session of g097-g100; cabinet labelled 0096-9M2)",
+ "camera": {
+  "stands": "in the compartment's rear, low, beside the 0096-9M2 cabinet",
+  "looks": "up through the turret's opening in the compartment roof (vehicle sides not determinable)",
+  "covers": [
+   "pylon.turret",
+   "hull.roof",
+   "rack.0096_9m"
+  ],
+  "lens": "wide, flash"
+ },
+ "components": [
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "off-white quilted rubberised fabric lining round the turret opening",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.75
+   ],
+   "zone": "compartment.roof",
+   "relations": [
+    [
+     "beside",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "",
+   "material": "rubberised quilted fabric",
+   "confidence": "high",
+   "notes": "the book calls it a grey rubberised cover"
+  },
+  {
+   "id": "new.lining.turret_ring_seal_strip",
+   "class": "lining",
+   "seen_as": "black rubber strip along the opening's rim",
+   "bbox": [
+    0.6,
+    0.11,
+    0.93,
+    0.29
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "on",
+     "hull.roof"
+    ]
+   ],
+   "size_cue": "a finger wide",
+   "material": "black rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "pylon.turret",
+   "class": "pylon",
+   "seen_as": "underside of the turret's base casting in bright olive green, radial ribs and a large lobed arm",
+   "bbox": [
+    0.05,
+    0.17,
+    0.97,
+    0.88
+   ],
+   "zone": "compartment.roof",
+   "relations": [
+    [
+     "above",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "spans nearly the whole opening, far wider than the cabinet below",
+   "material": "cast steel, olive green",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.turret_column_skirt",
+   "class": "cover",
+   "seen_as": "grey rubberised fabric skirt wrapped round the central column, tied with white cord",
+   "bbox": [
+    0.37,
+    0.58,
+    0.67,
+    0.88
+   ],
+   "zone": "compartment.rear",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ],
+    [
+     "above",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "about as wide as the cabinet's top lid",
+   "material": "grey rubberised fabric",
+   "confidence": "high",
+   "notes": "the register's pylon.turret includes the skirt; listed separately so it can be placed"
+  },
+  {
+   "id": "new.unknown.turret_tan_cylinder",
+   "class": "unknown",
+   "seen_as": "tan cylindrical unit with an octagonal-ringed head angled down out of the casting",
+   "bbox": [
+    0.53,
+    0.2,
+    0.78,
+    0.6
+   ],
+   "zone": "compartment.roof",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "",
+   "material": "tan/cadmium-coloured metal",
+   "confidence": "medium",
+   "notes": "a motor or sensor; printed number illegible"
+  },
+  {
+   "id": "new.unknown.turret_brass_port",
+   "class": "unknown",
+   "seen_as": "round brass/tan flanged port with four screws on the lobed arm",
+   "bbox": [
+    0.53,
+    0.4,
+    0.64,
+    0.52
+   ],
+   "zone": "compartment.roof",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "",
+   "material": "brass",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.turret_inspection_round",
+   "class": "cover",
+   "seen_as": "round inspection cover with screws on the casting",
+   "bbox": [
+    0.73,
+    0.42,
+    0.84,
+    0.56
+   ],
+   "zone": "compartment.roof",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "about the size of the brass port's flange",
+   "material": "painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.turret_underside_switchbox",
+   "class": "box",
+   "seen_as": "small grey box with two toggles/knobs and a lamp, labelled, on the casting",
+   "bbox": [
+    0.31,
+    0.52,
+    0.42,
+    0.63
+   ],
+   "zone": "compartment.roof",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "grey painted box",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.turret_manual_rod",
+   "class": "control",
+   "seen_as": "long rod with a handle/latch head, running from the casting's rim inward",
+   "bbox": [
+    0.12,
+    0.15,
+    0.38,
+    0.6
+   ],
+   "zone": "compartment.roof",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "about a third of the opening's width",
+   "material": "steel rod",
+   "confidence": "medium",
+   "notes": "a manual lock or stop, purpose not seen"
+  },
+  {
+   "id": "new.cable.turret_underside_blue",
+   "class": "cable",
+   "seen_as": "blue cable with white ties along the casting's ribs",
+   "bbox": [
+    0.1,
+    0.28,
+    0.53,
+    0.73
+   ],
+   "zone": "compartment.roof",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "pencil-thin",
+   "material": "blue sheath",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.mount.turret_bump_stops",
+   "class": "mount",
+   "seen_as": "two black rubber bump-stops with a stencilled number beside them",
+   "bbox": [
+    0.78,
+    0.6,
+    0.88,
+    0.66
+   ],
+   "zone": "compartment.roof",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "each thumb-sized",
+   "material": "black rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.motor.turret_drive_lower",
+   "class": "motor",
+   "seen_as": "blue-grey motor or gearbox casting at the column's foot, a white cable to it",
+   "bbox": [
+    0.65,
+    0.78,
+    0.86,
+    0.97
+   ],
+   "zone": "compartment.rear",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "beside",
+     "new.cover.turret_column_skirt"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted cast metal",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.turret_round_cap_left",
+   "class": "cover",
+   "seen_as": "green round cap on a flange at the casting's edge",
+   "bbox": [
+    0.04,
+    0.54,
+    0.14,
+    0.66
+   ],
+   "zone": "compartment.roof",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.turret_underside_left",
+   "class": "connector",
+   "seen_as": "grey plug with a cable at the casting's lower edge",
+   "bbox": [
+    0.15,
+    0.62,
+    0.22,
+    0.72
+   ],
+   "zone": "compartment.roof",
+   "on": "pylon.turret",
+   "relations": [
+    [
+     "on",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.turret_white_left",
+   "class": "cable",
+   "seen_as": "thin white cable hanging at the lower left",
+   "bbox": [
+    0.0,
+    0.66,
+    0.2,
+    0.98
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "pencil-thin",
+   "material": "white sheath",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.turret_white_right",
+   "class": "cable",
+   "seen_as": "thin white cable from the cabinet's side to the drive casting",
+   "bbox": [
+    0.68,
+    0.88,
+    0.87,
+    1.0
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "connects",
+     "new.motor.turret_drive_lower"
+    ]
+   ],
+   "size_cue": "pencil-thin",
+   "material": "white sheath",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "rack.0096_9m",
+   "class": "rack",
+   "seen_as": "top of the distribution cabinet, plate for the repair toggles, label 0096-9M2, lid on top",
+   "bbox": [
+    0.15,
+    0.8,
+    0.7,
+    1.0
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "below",
+     "pylon.turret"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey enamel",
+   "confidence": "high",
+   "notes": "this vehicle's cabinet is labelled 0096-9M2 (register name 0096-9M); face details are the trace's job"
+  }
+ ],
+ "not_in_register": [
+  "the turret casting's parts seen from below: tan cylinder, brass port, round cover, switch box, rod, bump-stops, drive casting",
+  "the black seal strip along the opening's rim"
+ ],
+ "doubts": [
+  "the camera's heading is unknown, so no left/right relations are given",
+  "the cabinet's suffix 0096-9M2 against the register's 0096-9M"
+ ]
+}

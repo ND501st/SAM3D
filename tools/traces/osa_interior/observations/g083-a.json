@@ -1,0 +1,704 @@
+{
+ "photo": "g083-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "standing behind the front seats, raised",
+  "looks": "forward and down at the dash and the folded seats",
+  "covers": [
+   "cab.dash",
+   "cab.floor",
+   "seat.driver",
+   "seat.commander"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "black three-spoke wheel with emblem hub, steep column",
+   "bbox": [
+    0.06,
+    0.0,
+    0.42,
+    0.55
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "about 0.5 m across",
+   "material": "black plastic",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "dash housing under the windscreen frame with three bolted panels",
+   "bbox": [
+    0.0,
+    0.05,
+    0.8,
+    0.36
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.driver_dash",
+   "class": "console",
+   "seen_as": "driver panel: tachometer, gate lever, toggles, speedometer",
+   "bbox": [
+    0.12,
+    0.12,
+    0.32,
+    0.33
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "gauges ~80-100 mm",
+   "material": "light grey hammer finish",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.console.centre_dash",
+   "class": "console",
+   "seen_as": "centre panel: water and oil temperature, tachometer 0-40, pressure, ammeter, lamps, socket",
+   "bbox": [
+    0.32,
+    0.12,
+    0.58,
+    0.33
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "console.driver_dash"
+    ],
+    [
+     "left_of",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "about 0.45 m wide",
+   "material": "light grey hammer finish",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.commander_dash",
+   "class": "console",
+   "seen_as": "commander panel: nine-toggle strip, buttons, blue-grey inset",
+   "bbox": [
+    0.59,
+    0.11,
+    0.78,
+    0.33
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "about 0.45 m wide",
+   "material": "light grey hammer finish",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "plate.lowering_board",
+   "class": "plate",
+   "seen_as": "blue-grey inset plate with two lamps and five round buttons on the commander panel",
+   "bbox": [
+    0.68,
+    0.2,
+    0.73,
+    0.32
+   ],
+   "zone": "cab.dash",
+   "on": "console.commander_dash",
+   "relations": [
+    [
+     "in",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "hand-wide",
+   "material": "blue-grey painted plate",
+   "confidence": "high",
+   "notes": "Read on g085-a as ПРОХОД ПОД МОСТОМ."
+  },
+  {
+   "id": "instrument.dp3b",
+   "class": "instrument",
+   "seen_as": "grey cast box with meter, lamps, rotary switch and instruction plate right of the commander panel",
+   "bbox": [
+    0.79,
+    0.13,
+    0.89,
+    0.27
+   ],
+   "zone": "cab.dash",
+   "on": "new.bracket.dp3b_stud",
+   "relations": [
+    [
+     "right_of",
+     "console.commander_dash"
+    ],
+    [
+     "above",
+     "new.box.dp3b_junction"
+    ]
+   ],
+   "size_cue": "about 0.25 m wide",
+   "material": "grey cast metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.dp3b_junction",
+   "class": "box",
+   "seen_as": "fuse/junction box with connectors under the DP-3B",
+   "bbox": [
+    0.79,
+    0.26,
+    0.88,
+    0.31
+   ],
+   "zone": "cab.dash",
+   "on": "instrument.dp3b",
+   "relations": [
+    [
+     "below",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "as wide as the DP-3B, shallow",
+   "material": "grey cast metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.dash_right",
+   "class": "handle",
+   "seen_as": "large tubular grab handle between the commander panel and the DP-3B",
+   "bbox": [
+    0.77,
+    0.17,
+    0.79,
+    0.33
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "instrument.dp3b"
+    ]
+   ],
+   "size_cue": "hand-length",
+   "material": "grey tube",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.dash",
+   "class": "handle",
+   "seen_as": "small tubular handles at the panels' edges",
+   "bbox": [
+    0.1,
+    0.15,
+    0.76,
+    0.3
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [],
+   "size_cue": "palm-length",
+   "material": "chromed/grey tube",
+   "confidence": "high",
+   "notes": "Several; one entry."
+  },
+  {
+   "id": "new.plate.gear_positions",
+   "class": "plate",
+   "seen_as": "black plate with the gear-shift diagram above the driver panel",
+   "bbox": [
+    0.26,
+    0.09,
+    0.31,
+    0.15
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "above",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.driver_instructions",
+   "class": "plate",
+   "seen_as": "black plate headed ВОДИТЕЛЬ with several lines on the sloped left of the driver panel",
+   "bbox": [
+    0.04,
+    0.17,
+    0.09,
+    0.22
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "console.pu303",
+   "class": "console",
+   "seen_as": "edge of a black panel with a red lamp and labels on the left cheek",
+   "bbox": [
+    0.0,
+    0.13,
+    0.07,
+    0.4
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black face, grey frame",
+   "confidence": "medium",
+   "notes": "Identified by g084-a/b."
+  },
+  {
+   "id": "new.clamp.windscreen_centre",
+   "class": "clamp",
+   "seen_as": "hinged clamp at the bottom of the windscreen centre post",
+   "bbox": [
+    0.46,
+    0.0,
+    0.5,
+    0.07
+   ],
+   "zone": "cab.dash",
+   "on": "new.frame.windscreen_centre_post",
+   "relations": [
+    [
+     "above",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_left",
+   "class": "window",
+   "seen_as": "lower frame of the left windscreen",
+   "bbox": [
+    0.0,
+    0.0,
+    0.46,
+    0.06
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "painted steel frame",
+   "confidence": "low",
+   "notes": "Only the frame bottom is in frame."
+  },
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "lower frame of the right windscreen",
+   "bbox": [
+    0.5,
+    0.0,
+    1.0,
+    0.07
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "painted steel frame",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "control.pedals",
+   "class": "control",
+   "seen_as": "three pedals: clutch pad, brake pad, long flat accelerator",
+   "bbox": [
+    0.26,
+    0.35,
+    0.49,
+    0.47
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "pads ~0.1 m",
+   "material": "rubber pads, steel arms",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "control.gear_lever",
+   "class": "control",
+   "seen_as": "floor gear lever with black ball knob and rubber boot",
+   "bbox": [
+    0.47,
+    0.41,
+    0.52,
+    0.66
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "right_of",
+     "seat.driver"
+    ],
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "knob fist-sized",
+   "material": "black knob, rubber boot",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.lever_left_of_column",
+   "class": "control",
+   "seen_as": "small lever with a black ball knob left of the steering column",
+   "bbox": [
+    0.15,
+    0.4,
+    0.19,
+    0.46
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "left_of",
+     "control.steering_wheel"
+    ]
+   ],
+   "size_cue": "knob walnut-sized",
+   "material": "black knob",
+   "confidence": "low",
+   "notes": "Purpose unknown (hand throttle or valve?)."
+  },
+  {
+   "id": "cushion.floor_mat",
+   "class": "cushion",
+   "seen_as": "ribbed black rubber mat ahead of the seats, ribs across",
+   "bbox": [
+    0.26,
+    0.36,
+    0.75,
+    0.66
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "ribbed rubber",
+   "confidence": "high",
+   "notes": "Possibly a separate mat from the aisle mat; one id used."
+  },
+  {
+   "id": "seat.driver",
+   "class": "seat",
+   "seen_as": "driver seat: square olive cushion, backrest folded down rearward with nail-head rolled edge",
+   "bbox": [
+    0.03,
+    0.6,
+    0.44,
+    1.0
+   ],
+   "zone": "cab",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "cushion about 0.45 m square",
+   "material": "olive vinyl",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "seat.commander",
+   "class": "seat",
+   "seen_as": "commander seat: square cushion, backrest folded rearward",
+   "bbox": [
+    0.51,
+    0.63,
+    0.96,
+    1.0
+   ],
+   "zone": "cab",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "right_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "as the driver seat",
+   "material": "olive vinyl",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.seat_t_rod",
+   "class": "frame",
+   "seen_as": "T-topped vertical rod and orange-brown channel between the seats",
+   "bbox": [
+    0.43,
+    0.66,
+    0.49,
+    1.0
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "right_of",
+     "seat.driver"
+    ],
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "about knee height",
+   "material": "grey steel rod, orange-brown channel",
+   "confidence": "medium",
+   "notes": "Purpose unknown."
+  },
+  {
+   "id": "new.duct.heater_commander_footwell",
+   "class": "duct",
+   "seen_as": "flat grey sheet-metal box sloping into the commander footwell",
+   "bbox": [
+    0.53,
+    0.36,
+    0.73,
+    0.48
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey sheet steel",
+   "confidence": "low",
+   "notes": "Taken to be the heater duct of g085-d."
+  },
+  {
+   "id": "new.pipe.green_white_banded",
+   "class": "pipe",
+   "seen_as": "pipe with green and white bands on the right wall",
+   "bbox": [
+    0.75,
+    0.4,
+    0.89,
+    0.48
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "right_of",
+     "new.duct.heater_commander_footwell"
+    ]
+   ],
+   "size_cue": "thumb-to-wrist thick",
+   "material": "painted tube",
+   "confidence": "high",
+   "notes": "Colour bands suggest a fluid marking."
+  },
+  {
+   "id": "new.hull_wall.cab_right",
+   "class": "hull_wall",
+   "seen_as": "right cab wall and its curved lower panel beside the commander seat",
+   "bbox": [
+    0.7,
+    0.3,
+    1.0,
+    1.0
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.heater_lever",
+   "class": "plate",
+   "seen_as": "black plate with a diagram on the right wall",
+   "bbox": [
+    0.94,
+    0.32,
+    0.99,
+    0.42
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "low",
+   "notes": "Notes: heater lever plate."
+  },
+  {
+   "id": "intercom.a1",
+   "class": "intercom",
+   "seen_as": "small grey box with a knob and connectors on the right wall low, cable from it",
+   "bbox": [
+    0.86,
+    0.75,
+    0.93,
+    0.86
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [
+    [
+     "right_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "fist-to-shoebox",
+   "material": "grey cast metal",
+   "confidence": "low",
+   "notes": "Notes read its plate as А-2 elsewhere; register gives the commander A-1."
+  },
+  {
+   "id": "new.loom.cab_right_wall",
+   "class": "loom",
+   "seen_as": "black and blue cables along the right wall",
+   "bbox": [
+    0.73,
+    0.33,
+    0.98,
+    0.95
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [],
+   "size_cue": "",
+   "material": "PVC",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_left_floor",
+   "class": "loom",
+   "seen_as": "white, blue-marked and black cables low on the left by the driver seat",
+   "bbox": [
+    0.0,
+    0.55,
+    0.15,
+    0.9
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "",
+   "material": "PVC",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.red_cap_fitting_left",
+   "class": "unknown",
+   "seen_as": "round fitting with a red cap low on the left",
+   "bbox": [
+    0.08,
+    0.45,
+    0.13,
+    0.52
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "left_of",
+     "control.steering_wheel"
+    ]
+   ],
+   "size_cue": "fist-sized",
+   "material": "grey metal, red cap",
+   "confidence": "low",
+   "notes": "Notes: valve or filter."
+  }
+ ],
+ "not_in_register": [
+  "T-rod between the seats",
+  "gear-position and ВОДИТЕЛЬ plates",
+  "green-white banded pipe",
+  "large grab handle by DP-3B"
+ ],
+ "doubts": [
+  "The intercom box on the right wall: A-1 (register) or the А-2 the notes read on other photos.",
+  "The grey sloping box in the commander footwell is assumed to be the heater duct."
+ ]
+}

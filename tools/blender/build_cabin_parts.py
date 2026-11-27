@@ -7,6 +7,7 @@ Moving parts are separate meshes: toggle levers, knob bodies, button caps, lamp 
 
     "C:/Program Files/Blender Foundation/Blender 4.2/blender.exe" --background --python tools/blender/build_cabin_parts.py
     ... -- --preview out/parts_preview.png      # also render a contact sheet
+    ... -- --only SM_WheelDome                 # export only these parts (the .blend is saved whole)
 
 Writes art/cabin_parts/<Part>.fbx (one mesh each) and art/cabin_parts/cabin_parts.blend (Git LFS).
 """
@@ -103,9 +104,11 @@ def part(name, build, bevel=0.015):
 # ---------------------------------------------------------------------------------------------- the parts
 
 def knob(bm):
-    # Bakelite knob: a ribbed skirt, a slightly tapered ribbed body, a rounded top.
-    lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.12), (0.43, 0.15), (0.42, 0.52), (0.36, 0.6), (0.0, 0.62)],
-          ribs=36, rib_depth=0.04, rib_rows=(1, 2, 3, 4))
+    # SŁ-2M's potentiometer knob (samsim_panels, SAM Simulator's AK photo at 8x: ЯРКОСТЬ, КОНТРАСТ., ФОКУС): black
+    # bakelite, a near-cylinder as tall as 0.7 of its width (17 mm on a 24 mm knob, 21 on a 30), a little wider at its
+    # foot, a flat top rounded at the edge, and eight shallow flutes down its side.
+    lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.05), (0.475, 0.09), (0.46, 0.6), (0.445, 0.665), (0.4, 0.695), (0.33, 0.7),
+               (0.0, 0.7)], seg=64, ribs=8, rib_depth=0.035, rib_rows=(2, 3, 4))
 
 
 def knob_pointer(bm):
@@ -144,6 +147,26 @@ def trim(bm):
     box(bm, 0.0, 0.0, 0.27, 0.62, 0.1, 0.06)       # the slot's raised lips stand in for the cut
 
 
+def pot_cup(bm):
+    # A slotted potentiometer in a black cup, SŁ-2M's ВЕРТ. СМЕЩ. and ГОРИЗ. СМЕЩ. (samsim_panels at 10x: a black cup
+    # 27.6 mm across round a cream knurled bushing 19.6 mm across, the slotted shaft 8 mm across in it). The cup: its rim
+    # 3.3 mm proud of the plate, its floor 0.8 mm up (1 = the cup's diameter).
+    lathe(bm, [(0.0, 0.03), (0.42, 0.03), (0.42, 0.11), (0.46, 0.125), (0.5, 0.11), (0.5, 0.0), (0.0, 0.0)])
+
+
+def pot_bushing(bm):
+    # The cream knurled bushing on the cup's floor, a ring round the shaft.
+    lathe(bm, [(0.16, 0.03), (0.355, 0.03), (0.355, 0.15), (0.33, 0.165), (0.16, 0.165), (0.16, 0.03)], ribs=14,
+          rib_depth=0.08, rib_rows=(1, 2), cap=False)
+
+
+def pot_shaft(bm):
+    # The steel shaft, turned with the control, its screwdriver slot across +X (two lips with a gap between).
+    lathe(bm, [(0.0, 0.03), (0.145, 0.03), (0.145, 0.17), (0.0, 0.17)])
+    for y in (-0.065, 0.065):
+        box(bm, 0.0, y, 0.18, 0.2, 0.1, 0.02)
+
+
 def toggle_base(bm):
     # Hex nut on a threaded bushing.
     m = Matrix.Translation((0, 0, 0.08))
@@ -160,14 +183,54 @@ def toggle_lever(bm):
 
 
 def lamp_bezel(bm):
-    # Chrome bezel ring around the lens.
-    lathe(bm, [(0.34, 0.0), (0.5, 0.0), (0.5, 0.12), (0.46, 0.2), (0.36, 0.2), (0.34, 0.14)])
+    # The signal lamp's fitting (SL-2M's ПА, ТСЦ, НЛЦ, РУ, ЦУ, АЗ and the like; samsim_panels at 12x, 14 Nov 2026): a
+    # chrome flange on the plate, a knurled barrel standing about 12 mm out (0.8 of the fitting's width), and a plain
+    # cap at its end round the glass. No source names its type; its shape is read off the photo.
+    lathe(bm, [(0.33, 0.0), (0.5, 0.0), (0.5, 0.07), (0.45, 0.10), (0.40, 0.12), (0.40, 0.64), (0.43, 0.67),
+               (0.43, 0.76), (0.39, 0.80), (0.335, 0.80), (0.335, 0.70)], seg=96, ribs=30, rib_depth=0.07,
+          rib_rows=(4, 5))
 
 
 def lamp_lens(bm):
-    # The glass dome (tinted and lit by the cabin).
+    # The glass at the barrel's end (tinted and lit by the cabin), about 10 mm across.
     # Faceted: the signal lamps' glass is cut in flats (usaf_shaw_2017 -024), so few segments, not a smooth dome.
-    lathe(bm, [(0.0, 0.0), (0.36, 0.0), (0.36, 0.14), (0.3, 0.26), (0.17, 0.32), (0.0, 0.34)], seg=10)
+    lathe(bm, [(0.0, 0.70), (0.335, 0.70), (0.335, 0.80), (0.29, 0.88), (0.17, 0.93), (0.0, 0.945)], seg=10)
+
+
+# The signal lamp armature (СЛЦ-51 family of airframe signal armatures by its form and size, 22.5 mm across
+# (zapadpribor_slc51); the type is not named for the Osa, medium confidence). Seen on the SŁ-2M (ПА, ТСЦ, НЛЦ, ЦУ, АЗ, РУ,
+# АВТОМАТ...; samsim_panels at 12x) and side on in the driver's PU-303 (wwp_gecko g084-b): a thin rubber washer on the
+# panel (the project owner's reading, 14 Nov 2026: nearly invisible), a cap with straight flutes along it standing out
+# about 0.7 of its unit, dark metal or black paint, and the coloured lens at its end inside a thin lip. Unit: the
+# lamp's look size times 1.4.
+def signal_base(bm):
+    lathe(bm, [(0.30, 0.0), (0.39, 0.0), (0.39, 0.012), (0.38, 0.02), (0.365, 0.022)], seg=64)
+
+
+def signal_cap(bm):
+    lathe(bm, [(0.36, 0.05), (0.37, 0.065), (0.37, 0.64), (0.37, 0.655), (0.355, 0.685), (0.33, 0.70), (0.275, 0.70),
+               (0.255, 0.685), (0.255, 0.665)], seg=96, ribs=16, rib_depth=0.07, rib_rows=(1, 2, 3))
+
+
+def signal_lens(bm):
+    # The coloured glass at the cap's end, a shallow dome just inside the lip (tinted and lit by the cabin).
+    lathe(bm, [(0.0, 0.66), (0.255, 0.66), (0.255, 0.68), (0.21, 0.692), (0.12, 0.698), (0.0, 0.70)], seg=32)
+
+
+# The hex-nut push-button (ВЫСОКОЕ and ПОИСК ВКЛ. / ВЫКЛ., the ЛУЧ buttons, ЗАПРОС, ЗАПРОС К, ПЕЛЕНГ I / II; also the lamp
+# ЗАХ. АПЧ I's fitting): a steel hex nut on the bushing and a domed red pusher standing out of it (samsim_panels at
+# 14x on a millimetre grid: the nut about 14 mm across its flats, ПЕЛЕНГ's 11.5, the pusher two thirds of that). The
+# manual names them buttons (OSA_MANUALS_2026-10: ВЫСОКОЕ and ПОИСК ВКЛ. / ВЫКЛ. button pairs, ЛУЧ buttons; ПЕЛЕНГ two
+# push-buttons, OSA_CONSOLE_MAP_2026-10). Unit: the item's footprint (its look size), the nut 0.58 of it across its
+# flats (ПОИСК's 24 mm: a 14 mm nut), standing 0.29 out (a millimetre or two proud of a 5 mm mount), the pusher's crown
+# 0.54 out, its dome 0.38 across.
+def hex_nut(bm):
+    lathe(bm, [(0.0, 0.0), (0.335, 0.0), (0.335, 0.26), (0.305, 0.29), (0.0, 0.29)], seg=6)
+    lathe(bm, [(0.0, 0.285), (0.235, 0.285), (0.235, 0.315), (0.215, 0.325), (0.0, 0.325)], seg=48)
+
+
+def hex_pusher(bm):
+    lathe(bm, [(0.0, 0.29), (0.19, 0.29), (0.19, 0.465), (0.18, 0.50), (0.145, 0.525), (0.075, 0.537), (0.0, 0.54)], seg=48)
 
 
 def gauge_bezel(bm):
@@ -200,31 +263,145 @@ def socket(bm):
                (0.06, 0.55), (0.0, 0.55)], ribs=30, rib_depth=0.05, rib_rows=(1, 2))
 
 
-def latch(bm):
-    # Block lock: a stadium-shaped plate and the slotted barrel (ОТКР. / ЗАКР.).
-    seg = 24
-    pts = []
-    for k in range(seg + 1):
-        a = math.pi * k / seg
-        pts.append((0.32 * math.cos(a), 0.38 + 0.32 * math.sin(a)))
-    for k in range(seg + 1):
-        a = math.pi + math.pi * k / seg
-        pts.append((0.32 * math.cos(a), -0.38 + 0.32 * math.sin(a)))
+def _latch_outline(seg=6):
+    """The latch plate's outline, in units of the lock's size: an upright hexagon with straight sides and chamfered ends,
+    its corners barely rounded (SAM Simulator's AK photo at 3x: the plate 30 x 46 mm round a 20 mm barrel on a 22 mm
+    latch, the ends' flats a half of its width)."""
+    hw, hs, he, hf, r = 0.68, 0.42, 1.05, 0.34, 0.07
+    corners = [(-hf, -he), (hf, -he), (hw, -hs), (hw, hs), (hf, he), (-hf, he), (-hw, hs), (-hw, -hs)]
+    out = []
+    n = len(corners)
+    for k, (x, y) in enumerate(corners):
+        px, py = corners[k - 1]
+        nx, ny = corners[(k + 1) % n]
+        a = (px - x, py - y)
+        b = (nx - x, ny - y)
+        la, lb = math.hypot(*a), math.hypot(*b)
+        a, b = (a[0] / la, a[1] / la), (b[0] / lb, b[1] / lb)
+        half = math.acos(max(-1.0, min(1.0, a[0] * b[0] + a[1] * b[1]))) / 2
+        t = r / math.tan(half)
+        bis = (a[0] + b[0], a[1] + b[1])
+        lbis = math.hypot(*bis)
+        c = (x + bis[0] / lbis * r / math.sin(half), y + bis[1] / lbis * r / math.sin(half))
+        a0 = math.atan2(y + a[1] * t - c[1], x + a[0] * t - c[0])
+        a1 = math.atan2(y + b[1] * t - c[1], x + b[0] * t - c[0])
+        d = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi      # the short way round the fillet
+        for j in range(seg + 1):
+            aa = a0 + d * j / seg
+            out.append((c[0] + r * math.cos(aa), c[1] + r * math.sin(aa)))
+    return out
+
+
+LATCH_SCREW_Y = 0.74     # the plate's two screws, above and below the barrel (SAM's AK photo: 16 mm on a 22 mm latch)
+
+
+def latch_plate(bm):
+    # Block lock's plate, painted with the block (SAM Simulator's AK photo), 0.06 thick.
+    pts = _latch_outline()
     bottom = [bm.verts.new((x, y, 0.0)) for x, y in pts]
-    top = [bm.verts.new((x, y, 0.08)) for x, y in pts]
+    top = [bm.verts.new((x, y, 0.06)) for x, y in pts]
     bm.faces.new(list(reversed(bottom)))
     bm.faces.new(top)
     n = len(pts)
     for k in range(n):
         bm.faces.new((bottom[k], bottom[(k + 1) % n], top[(k + 1) % n], top[k]))
-    lathe(bm, [(0.0, 0.08), (0.24, 0.08), (0.24, 0.42), (0.2, 0.46), (0.0, 0.46)])
-    box(bm, 0.0, 0.0, 0.47, 0.06, 0.34, 0.04)
+
+
+def latch(bm):
+    # Block lock (ОТКР. / ЗАКР.): a matt nickel barrel 0.9 across standing 0.4 out of its plate, its face a ring round a
+    # recess the black core sits in, the plug's bit across it (SAM Simulator's AK photo).
+    lathe(bm, [(0.0, 0.06), (0.45, 0.06), (0.45, 0.38), (0.42, 0.42), (0.31, 0.42), (0.30, 0.40), (0.30, 0.30), (0.0, 0.30)])
+    box(bm, 0.0, 0.0, 0.405, 0.08, 0.44, 0.03)
+
+
+def latch_core(bm):
+    # The lock's black core in the barrel's face, and the slots of the plate's two screws.
+    lathe(bm, [(0.0, 0.31), (0.295, 0.31), (0.295, 0.395), (0.0, 0.395)])
+    for y in (LATCH_SCREW_Y, -LATCH_SCREW_Y):
+        box(bm, 0.0, y, 0.1125, 0.3, 0.055, 0.013)
+
+
+def latch_screws(bm):
+    # The plate's two cheese-head screws, steel.
+    for y in (LATCH_SCREW_Y, -LATCH_SCREW_Y):
+        res = bmesh.ops.create_cone(bm, cap_ends=True, segments=20, radius1=0.17, radius2=0.15, depth=0.05)
+        bmesh.ops.translate(bm, verts=res['verts'], vec=(0.0, y, 0.085))
+
+
+# СМЕНА ЛИТ.'s locking bar (0004-11M1; samsim_panels, SAM Simulator's AK photo read at 8x, about 1.05 mm a pixel; its
+# open state from SAM Simulator's sprites osa050-052: the bar swings out to the left on a hinge standing up the face, like a
+# gate, and shows its back). Modelled at 1 = the bar's length (46 mm), the hinge's axis along +Y at X = 0. The bar
+# (SM_LetterBar) has its origin on the axis, LETTER_BAR_AXIS_Z out of the panel, so the game turns it about there; the
+# bracket (SM_LetterBarHinge) stands on the panel. Measured: the bar 46 mm long, 14 mm tall at the hinge, its lower edge
+# rising from 15 mm out to the tip (7 mm tall there), lying just above the knob's pointer at НОРМ.; a round boss 14 mm
+# across 22 mm along it; the bracket 9 mm wide, its foot running up the face to a screw 18 mm above the axis.
+LETTER_BAR_MM = 46.0
+LETTER_BAR_AXIS_Z = 16.0 / LETTER_BAR_MM
+
+
+def _mm(*v):
+    return tuple(x / LETTER_BAR_MM for x in v)
+
+
+def _prism(bm, outline, z0, z1):
+    low = [bm.verts.new((x, y, z0)) for x, y in outline]
+    top = [bm.verts.new((x, y, z1)) for x, y in outline]
+    bm.faces.new(list(reversed(low)))
+    bm.faces.new(top)
+    n = len(outline)
+    for k in range(n):
+        bm.faces.new((low[k], low[(k + 1) % n], top[(k + 1) % n], top[k]))
+
+
+def _cyl_y(bm, r, y0, y1, x, z, seg=20):
+    m = Matrix.Translation((x, (y0 + y1) / 2, z)) @ Matrix.Rotation(math.radians(90), 4, 'X')
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=seg, radius1=r, radius2=r, depth=y1 - y0, matrix=m)
+
+
+def letter_bar(bm):
+    # The pressed bar, 2 mm thick, its knuckle round the pin, and the boss on its face (origin on the hinge's axis).
+    outline = [_mm(x, y) for x, y in ((2.5, -7.0), (15.0, -7.0), (42.0, 0.0), (44.0, 3.0), (43.0, 7.0), (2.5, 7.0))]
+    _prism(bm, outline, *_mm(-1.0, 1.0))
+    _cyl_y(bm, 3.0 / LETTER_BAR_MM, *_mm(-6.5, 6.5), 0.0, 0.0)
+    lathe_at = [(r / LETTER_BAR_MM, z / LETTER_BAR_MM) for r, z in ((0.0, 0.8), (7.0, 0.8), (7.0, 3.6), (6.0, 4.6), (0.0, 5.0))]
+    rows = lathe(bm, lathe_at, seg=32)
+    for row in rows:
+        for vtx in row:
+            vtx.co.x += 21.6 / LETTER_BAR_MM
+            vtx.co.y += -1.3 / LETTER_BAR_MM
+
+
+def letter_bar_hinge(bm):
+    # The bracket on the panel: a foot plate from under the hinge up to its screw, the block the pin stands in, the pin's
+    # two heads above and below the bar's knuckle, and the cheese-head screw.
+    box(bm, *_mm(0.5, 6.5, 0.75), *_mm(7.0, 27.0, 1.5))
+    box(bm, *_mm(0.0, 0.0, 6.5), *_mm(8.0, 14.0, 10.0))
+    _cyl_y(bm, 3.0 / LETTER_BAR_MM, *_mm(-9.0, -6.6), 0.0, LETTER_BAR_AXIS_Z)
+    _cyl_y(bm, 3.0 / LETTER_BAR_MM, *_mm(6.6, 9.0), 0.0, LETTER_BAR_AXIS_Z)
+    box(bm, *_mm(0.0, -7.8, (11.5 + 16.0) / 2), *_mm(6.0, 2.4, 16.0 - 11.5))
+    box(bm, *_mm(0.0, 7.8, (11.5 + 16.0) / 2), *_mm(6.0, 2.4, 16.0 - 11.5))
+    res = bmesh.ops.create_cone(bm, cap_ends=True, segments=20, radius1=3.5 / LETTER_BAR_MM, radius2=3.1 / LETTER_BAR_MM,
+                                depth=2.0 / LETTER_BAR_MM)
+    bmesh.ops.translate(bm, verts=res['verts'], vec=_mm(2.6, 17.7, 2.5))
 
 
 def wheel_dish(bm):
     # The hand wheel: a shallow dish with a rounded rim, on a hub.
     lathe(bm, [(0.0, 0.0), (0.12, 0.0), (0.12, 0.06), (0.4, 0.1), (0.47, 0.16), (0.5, 0.22), (0.48, 0.26),
                (0.44, 0.24), (0.38, 0.17), (0.12, 0.13), (0.0, 0.13)])
+
+
+def wheel_dome(bm):
+    # The domed hand wheel (SL-2M's range wheel): a white drum with a flat face, six screws round it, and a dome in its
+    # middle (samsim_panels, the AK photo at 4x: the face 132 px across, the screws 62 px out, the dome 71 px across:
+    # 0.47 and 0.27 of the width; heights by eye from its shading, about +-5 mm). The face 0.22 high where the crank
+    # stands (0.4 of the width out, SimCabinComponent::AnimatePart), the dome's crown 0.41.
+    lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.185), (0.49, 0.21), (0.47, 0.22), (0.30, 0.22), (0.28, 0.225),
+               (0.265, 0.245), (0.25, 0.30), (0.21, 0.35), (0.15, 0.385), (0.08, 0.403), (0.0, 0.408)])
+    for k in range(6):
+        a = math.radians(90 + 60 * k + 15)
+        res = bmesh.ops.create_cone(bm, cap_ends=True, segments=16, radius1=0.022, radius2=0.018, depth=0.012)
+        bmesh.ops.translate(bm, verts=res['verts'], vec=(0.47 * math.cos(a), 0.47 * math.sin(a), 0.226))
 
 
 def wheel_handle(bm):
@@ -238,16 +415,61 @@ def screw(bm):
     box(bm, 0.0, 0.0, 0.31, 0.8, 0.12, 0.03)
 
 
+def key_barrel(bm):
+    # ЗАПРЕТ ПУСКА's lock (samsim_panels at 12x, the project owner's reading): a grey metal barrel, its side rounding over
+    # into a narrow flat rim, its face sloping in from the rim like a shallow cone down to the key cylinder (19 mm across)
+    # at its middle; the cylinder's keyhole is SM_Keyhole, the key is drawn by the control. Unit diameter, 0.40 tall (41 mm
+    # across, 16 mm out at the rim).
+    lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.30), (0.49, 0.36), (0.465, 0.39), (0.43, 0.40), (0.40, 0.395),
+               (0.30, 0.32), (0.235, 0.27), (0.22, 0.265), (0.0, 0.265)], seg=96)
+
+
+def key_plug(bm):
+    # The key cylinder standing in SM_KeyBarrel's dish: its flat face round the keyway, a duller steel than the polished
+    # barrel (samsim_panels at 10x, the project owner's reading, 14 Nov 2026). Same unit as SM_KeyBarrel.
+    lathe(bm, [(0.0, 0.25), (0.218, 0.25), (0.218, 0.265), (0.21, 0.28), (0.20, 0.295), (0.0, 0.295)], seg=64)
+
+
+def keyhole(bm):
+    # The key cylinder's keyway as the project owner asked (14 Nov 2026): a round head over a slot widening downwards, the
+    # classic keyhole, about 4 mm across the head and 7 mm tall on the 8 mm cylinder of SM_KeyBarrel, a dark insert
+    # just proud of the cylinder's face. Same unit as SM_KeyBarrel (its diameter), +Y up the panel.
+    import bmesh
+    cy, r, w0, w1, y1 = 0.045, 0.05, 0.02, 0.034, -0.125
+    a0 = math.atan2(-math.sqrt(r * r - w0 * w0), w0)
+    outline = [(-w1, y1), (w1, y1), (w0, cy + r * math.sin(a0))]
+    n = 28
+    for k in range(1, n):
+        a = a0 + (math.pi - 2 * a0) * k / n
+        outline.append((r * math.cos(a), cy + r * math.sin(a)))
+    outline.append((-w0, cy + r * math.sin(a0)))
+    _prism(bm, outline, 0.289, 0.2965)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+
+
 PARTS = [
+    ('SM_KeyBarrel', key_barrel, 0.006), ('SM_KeyPlug', key_plug, 0.0), ('SM_Keyhole', keyhole, 0.0),
+    ('SM_SignalBase', signal_base, 0.006), ('SM_SignalCap', signal_cap, 0.006), ('SM_SignalLens', signal_lens, 0.0),
+    ('SM_HexNut', hex_nut, 0.0), ('SM_HexPusher', hex_pusher, 0.01),
     ('SM_Knob', knob, 0.012), ('SM_KnobPointer', knob_pointer, 0.012), ('SM_KnobBar', knob_bar, 0.012),
     ('SM_Trim', trim, 0.01),
+    ('SM_PotCup', pot_cup, 0.01), ('SM_PotBushing', pot_bushing, 0.006), ('SM_PotShaft', pot_shaft, 0.0),
     ('SM_ToggleBase', toggle_base, 0.015), ('SM_ToggleLever', toggle_lever, 0.0), ('SM_LampBezel', lamp_bezel, 0.01),
     ('SM_LampLens', lamp_lens, 0.0), ('SM_ButtonRing', button_ring, 0.01), ('SM_ButtonCap', button_cap, 0.0),
-    ('SM_Jack', jack, 0.01), ('SM_Socket', socket, 0.01), ('SM_Latch', latch, 0.01), ('SM_WheelDish', wheel_dish, 0.0),
-    ('SM_WheelHandle', wheel_handle, 0.0), ('SM_Screw', screw, 0.0),
+    ('SM_Jack', jack, 0.01), ('SM_Socket', socket, 0.01), ('SM_Latch', latch, 0.01), ('SM_LatchPlate', latch_plate, 0.006), ('SM_LatchCore', latch_core, 0.0),
+    ('SM_LatchScrews', latch_screws, 0.006), ('SM_LetterBar', letter_bar, 0.004), ('SM_LetterBarHinge', letter_bar_hinge, 0.004),
+    ('SM_WheelDish', wheel_dish, 0.0),
+    ('SM_WheelDome', wheel_dome, 0.0), ('SM_WheelHandle', wheel_handle, 0.0), ('SM_Screw', screw, 0.0),
     ('SM_GaugeBezel', gauge_bezel, 0.006),
     ('SM_MeterHousing', meter_housing, 0.006),
 ]
+
+# SŁ-2M's hinged covers and levers (sl2m_covers.py) are modelled full size in metres, their hinge at the origin; the
+# cabin places them at scale 1 (simcore::CabinFlap). Their bevel is in metres too.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sl2m_covers  # noqa: E402
+
+PARTS += [(name, build, 0.0 if name.endswith('Text') else 0.0004) for name, build in sl2m_covers.PARTS]
 
 
 def export(obj):
@@ -304,8 +526,10 @@ def main():
     clear()
     os.makedirs(OUT, exist_ok=True)
     objs = [part(name, build, bev) for name, build, bev in PARTS]
+    only = set(argv[argv.index('--only') + 1].split(',')) if '--only' in argv else None   # the others' FBX stay as they are
     for obj in objs:
-        export(obj)
+        if only is None or obj.name in only:
+            export(obj)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'cabin_parts.blend'))
     print('exported', len(objs), 'parts to', OUT)
     if preview_path:

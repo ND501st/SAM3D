@@ -1,0 +1,1134 @@
+{
+ "photo": "g100-b",
+ "image": "raw",
+ "observer": "Claude (Opus 5.5), 9 Nov 2026: the raw scan (2926 x 2083) blurred 3x3, in overview and six tiles with a 0.02 grid; the casting's rim read by eye at 31 points from the tiles and an ellipse fitted to them with OpenCV",
+ "covers": "the turret's underside seen from below, the camera low and looking up and aft through the roof's opening over the top of the 0096-9M2: the whole opening's outline except where the cabinet and the grey casing hide its aft end, the roof lining round it with its ragged edge, the white collar and black layer where the cloth is gone, the olive casting with its ribs, gearbox arm, covers and switchbox, the boot's top, the grey casing behind the cabinet",
+ "notes": "VEHICLE: interior session A (g097-g100, a 9A33BM2/BM3, not identified further: the catalogue's 'session A'), NOT the ex-NVA 9A33BM3-1 of the hangar session (g082-g096). Everything matched to g096-a below is a cross-session match: same type, may differ on the individual vehicle. Orientation: image bottom is aft (the cabinet), image top is forward and overhead, image left is the vehicle's right (the same as g096-a, which looks aft). THE OPENING'S OUTLINE: a smooth closed curve with no straight run and no corner; 31 rim points read by eye fit a single ellipse to 8.6 px rms (largest 24 px) on a major axis of 2696 px, residuals with no pattern. Centre (0.527, 0.581), major axis within about 2 degrees of image-horizontal, so across the vehicle. Minor/major 0.63 in the image; if the rim is a circle the camera looks about 51 degrees off its axis, which is plausible for a camera low in the aisle looking up and aft. The photo alone cannot tell a circle from a plan ellipse: any ellipse is a view of a circle. Two things argue for a circle: the casting is the rotating part and turns inside a fixed lining with a thin even gap, and the boot's top sits at the fit's centre. The aft end of the rim (y over 0.88) is behind the cabinet and casing and was not seen. g096-a's 'wide ellipse' is this rim seen much flatter. Against g096-a: the switchbox, its chain, the tan cylinder, the grey plate and the casing are all at the same side of the boot in both sessions; the white cord differs (here on the boot's right-hand edge in the image, tied to the hem; in g096-a a loose loop hangs left of the boot beside a cable), and the lining here is pale where g096-a's is dark grey-green (flash and grime may explain that). The catalogue's 'quilted rim' is not stitched quilting: no stitch line or regular grid is visible anywhere, only puckers and folds in a padded cloth.",
+ "details": [
+  {
+   "id": "d01",
+   "on": "pylon.turret",
+   "kind": "opening",
+   "what": "the true outline of the roof's opening as seen here, the casting's outer rim where it meets the lining's edge across a thin dark gap: a smooth closed curve, no straight run, no corner (ellipse fit in notes); lower-left arc, then up the image-left side, over the top, down the image-right side; the aft arc between the two ends is hidden by the cabinet and casing",
+   "line": [
+    [
+     0.207,
+     0.878
+    ],
+    [
+     0.187,
+     0.845
+    ],
+    [
+     0.157,
+     0.798
+    ],
+    [
+     0.133,
+     0.761
+    ],
+    [
+     0.102,
+     0.719
+    ],
+    [
+     0.063,
+     0.594
+    ],
+    [
+     0.072,
+     0.537
+    ],
+    [
+     0.083,
+     0.467
+    ],
+    [
+     0.113,
+     0.4
+    ],
+    [
+     0.147,
+     0.328
+    ],
+    [
+     0.2,
+     0.281
+    ],
+    [
+     0.233,
+     0.253
+    ],
+    [
+     0.288,
+     0.225
+    ],
+    [
+     0.36,
+     0.203
+    ],
+    [
+     0.421,
+     0.188
+    ],
+    [
+     0.478,
+     0.178
+    ],
+    [
+     0.534,
+     0.18
+    ],
+    [
+     0.59,
+     0.181
+    ],
+    [
+     0.65,
+     0.192
+    ],
+    [
+     0.713,
+     0.215
+    ],
+    [
+     0.785,
+     0.249
+    ],
+    [
+     0.857,
+     0.309
+    ],
+    [
+     0.925,
+     0.397
+    ],
+    [
+     0.96,
+     0.444
+    ],
+    [
+     0.98,
+     0.505
+    ],
+    [
+     0.987,
+     0.575
+    ],
+    [
+     0.985,
+     0.63
+    ],
+    [
+     0.973,
+     0.69
+    ],
+    [
+     0.947,
+     0.756
+    ],
+    [
+     0.917,
+     0.812
+    ],
+    [
+     0.9,
+     0.83
+    ]
+   ],
+   "relief": "through",
+   "size_cue": "across the image about three times the boot's top width",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "blocked",
+   "note": "same physical thing as g096-a d06-d08 (cross-session match); the model's stand-in is a dark ellipse"
+  },
+  {
+   "id": "d02",
+   "on": "hull.roof",
+   "kind": "edge",
+   "what": "the lining's inner edge along the top of the opening: the cloth comes down in a soft thick roll and ends in a ragged, slightly curling edge a hand's width from the first fold, a thin black gap between it and the casting",
+   "line": [
+    [
+     0.14,
+     0.325
+    ],
+    [
+     0.2,
+     0.265
+    ],
+    [
+     0.28,
+     0.215
+    ],
+    [
+     0.36,
+     0.19
+    ],
+    [
+     0.45,
+     0.172
+    ],
+    [
+     0.5,
+     0.163
+    ]
+   ],
+   "relief": "recessed",
+   "size_cue": "the gap about as wide as the blue cable",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d03",
+   "on": "hull.roof",
+   "kind": "edge",
+   "what": "the lining's inner edge down the image-right side below the torn part: thick, soft, brown-stained where it meets the rim, a gap showing a dull brown edge",
+   "line": [
+    [
+     0.945,
+     0.4
+    ],
+    [
+     0.965,
+     0.46
+    ],
+    [
+     0.98,
+     0.52
+    ],
+    [
+     0.99,
+     0.58
+    ],
+    [
+     0.988,
+     0.65
+    ],
+    [
+     0.975,
+     0.7
+    ],
+    [
+     0.95,
+     0.76
+    ],
+    [
+     0.92,
+     0.82
+    ]
+   ],
+   "relief": "recessed",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d04",
+   "on": "hull.roof",
+   "kind": "edge",
+   "what": "the lining's inner edge down the image-left side and under the flange, a soft dark band of grime against the rim",
+   "line": [
+    [
+     0.11,
+     0.4
+    ],
+    [
+     0.08,
+     0.47
+    ],
+    [
+     0.065,
+     0.54
+    ],
+    [
+     0.06,
+     0.6
+    ],
+    [
+     0.1,
+     0.72
+    ],
+    [
+     0.135,
+     0.765
+    ],
+    [
+     0.16,
+     0.8
+    ],
+    [
+     0.2,
+     0.87
+    ]
+   ],
+   "relief": "recessed",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d05",
+   "on": "new.roof.turret_opening_collar",
+   "kind": "edge",
+   "what": "where the cloth is torn away at the top right, a white-painted metal collar round the opening is bare: a smooth band following the rim, between the casting's gap and the black layer, ending in a pointed corner at its right end",
+   "line": [
+    [
+     0.6,
+     0.145
+    ],
+    [
+     0.65,
+     0.165
+    ],
+    [
+     0.72,
+     0.195
+    ],
+    [
+     0.8,
+     0.235
+    ],
+    [
+     0.86,
+     0.272
+    ],
+    [
+     0.93,
+     0.285
+    ]
+   ],
+   "relief": "raised",
+   "size_cue": "about as wide as the blue-grey switchbox's end",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "the collar is what the lining's edge is fixed round; it would be under the cloth elsewhere"
+  },
+  {
+   "id": "d06",
+   "on": "new.roof.turret_opening_collar",
+   "kind": "fastener",
+   "what": "two rust-haloed round screw heads in the bare collar",
+   "points": [
+    [
+     0.745,
+     0.195
+    ],
+    [
+     0.838,
+     0.256
+    ]
+   ],
+   "pattern": {
+    "count": 2,
+    "note": "spacing about a tenth of the rim's visible top arc; more are likely under the cloth"
+   },
+   "relief": "raised",
+   "size_cue": "each about the size of the switchbox's knob",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d07",
+   "on": "lining.turret_ring_seal_strip",
+   "kind": "gasket",
+   "what": "a black band of woven or felt layer exposed where the cloth has gone, running with the collar above it: under-layer of the lining (register calls it a rubber strip along the rim; the weave and the way the cloth has pulled off it read more as felt than rubber)",
+   "line": [
+    [
+     0.6,
+     0.122
+    ],
+    [
+     0.68,
+     0.145
+    ],
+    [
+     0.75,
+     0.17
+    ],
+    [
+     0.82,
+     0.21
+    ],
+    [
+     0.88,
+     0.245
+    ],
+    [
+     0.93,
+     0.28
+    ]
+   ],
+   "relief": "recessed",
+   "size_cue": "about as wide as the collar",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent",
+   "note": "the register's lining.turret_ring_seal_strip; black layer visible only where the cloth is missing. Rubber or felt not resolved"
+  },
+  {
+   "id": "d08",
+   "on": "hull.roof",
+   "kind": "edge",
+   "what": "the torn left end of the bare stretch: the cloth's cut edge drawn back in a raised lip, with a small tear and a lifted flap at about the middle of the top rim",
+   "bbox": [
+    0.42,
+    0.095,
+    0.6,
+    0.17
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d09",
+   "on": "hull.roof",
+   "kind": "surface",
+   "what": "the roof's lining round the opening: a pale, matt, soft cloth, off-white to pale grey-green, a thick soft body to it",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.29
+   ],
+   "relief": "flush",
+   "build": "texture",
+   "confidence": "high",
+   "status": "blocked",
+   "note": "g096-a d09's lining is the same thing (cross-session match) though much darker there; the model's roof is a flat colour"
+  },
+  {
+   "id": "d10",
+   "on": "hull.roof",
+   "kind": "pattern",
+   "what": "the padding's relief: soft puckers and small rounded dimples in a broken row drawn in towards the rim, and long soft folds; no stitch lines, no regular quilting grid",
+   "bbox": [
+    0.26,
+    0.09,
+    0.5,
+    0.17
+   ],
+   "pattern": {
+    "count": 8,
+    "note": "about eight dimples visible along this arc"
+   },
+   "relief": "raised",
+   "size_cue": "a dimple about as wide as the switchbox's knob",
+   "build": "normal",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d11",
+   "on": "hull.roof",
+   "kind": "pattern",
+   "what": "longer soft diagonal folds in the lining at the image-left side, running out from the rim towards the wall",
+   "line": [
+    [
+     0.02,
+     0.45
+    ],
+    [
+     0.06,
+     0.42
+    ],
+    [
+     0.1,
+     0.39
+    ]
+   ],
+   "relief": "raised",
+   "build": "normal",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d12",
+   "on": "hull.roof",
+   "kind": "surface",
+   "what": "the grime band round the rim: the lining darkens to a sooty grey for about the last hand's width to its edge, all round the visible rim",
+   "bbox": [
+    0.0,
+    0.08,
+    1.0,
+    0.36
+   ],
+   "relief": "flush",
+   "build": "texture",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d13",
+   "on": "hull.roof",
+   "kind": "seam",
+   "what": "a welted seam in the lining at the upper left, a raised pale strip curving from the top edge inward",
+   "line": [
+    [
+     0.12,
+     0.03
+    ],
+    [
+     0.14,
+     0.1
+    ],
+    [
+     0.17,
+     0.15
+    ],
+    [
+     0.2,
+     0.2
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d14",
+   "on": "hull.roof",
+   "kind": "seam",
+   "what": "a dark straight crease with a light strip beside it across the top-left corner of the frame: a seam or the lining's join to the upper side wall, not a transverse beam (the beam in g096-a d01 is out of frame here)",
+   "line": [
+    [
+     0.0,
+     0.14
+    ],
+    [
+     0.05,
+     0.095
+    ],
+    [
+     0.1,
+     0.055
+    ],
+    [
+     0.145,
+     0.0
+    ]
+   ],
+   "relief": "recessed",
+   "build": "normal",
+   "confidence": "low",
+   "status": "absent"
+  },
+  {
+   "id": "d15",
+   "on": "hull.roof",
+   "kind": "clip",
+   "what": "a small bright tie or tag standing out of the lining's edge at the rim",
+   "bbox": [
+    0.2,
+    0.228,
+    0.214,
+    0.262
+   ],
+   "relief": "raised",
+   "size_cue": "about twice as long as a collar screw's head is wide",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d16",
+   "on": "pylon.turret",
+   "kind": "surface",
+   "what": "the casting's paint: bright yellow-olive, glossy, pale chalk lines on the raised edges and the ribs",
+   "bbox": [
+    0.1,
+    0.2,
+    0.97,
+    0.82
+   ],
+   "relief": "flush",
+   "build": "texture",
+   "confidence": "high",
+   "status": "absent",
+   "note": "much greener and brighter than g096-a's dark ring; flash and session both differ"
+  },
+  {
+   "id": "d17",
+   "on": "pylon.turret",
+   "kind": "profile",
+   "what": "the casting's outer rim: a raised rounded band following the opening's edge, an inner dark arc of shadow on the far side of it round the image-left",
+   "line": [
+    [
+     0.13,
+     0.5
+    ],
+    [
+     0.14,
+     0.45
+    ],
+    [
+     0.17,
+     0.38
+    ],
+    [
+     0.21,
+     0.32
+    ],
+    [
+     0.25,
+     0.27
+    ]
+   ],
+   "relief": "raised",
+   "size_cue": "the band about as wide as the flange's cap",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d18",
+   "on": "pylon.turret",
+   "kind": "rib",
+   "what": "a main rib of the casting running from the flange across to the boot, a raised bar with a chalked edge and a deep shadow on its far side",
+   "line": [
+    [
+     0.14,
+     0.63
+    ],
+    [
+     0.22,
+     0.65
+    ],
+    [
+     0.3,
+     0.67
+    ],
+    [
+     0.385,
+     0.685
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d19",
+   "on": "pylon.turret",
+   "kind": "rib",
+   "what": "a transverse rib from the casting's top edge toward the boot, two close parallel ridges forming a shallow groove down the middle of the casting",
+   "line": [
+    [
+     0.465,
+     0.18
+    ],
+    [
+     0.475,
+     0.3
+    ],
+    [
+     0.49,
+     0.4
+    ],
+    [
+     0.5,
+     0.5
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d20",
+   "on": "pylon.turret",
+   "kind": "rib",
+   "what": "a long diagonal rib or web edge below the rod, running down and right towards the switchbox, its shadow a thin black line",
+   "line": [
+    [
+     0.31,
+     0.38
+    ],
+    [
+     0.36,
+     0.47
+    ],
+    [
+     0.42,
+     0.55
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d21",
+   "on": "cover.turret_round_cap_left",
+   "kind": "part",
+   "what": "a green round cap on a heavy bolted flange at the casting's rim at the image-left, standing proud down into the compartment, about six hex bolts round it",
+   "bbox": [
+    0.045,
+    0.6,
+    0.14,
+    0.73
+   ],
+   "pattern": {
+    "count": 6
+   },
+   "relief": "raised",
+   "size_cue": "the flange's diameter about the width of the switchbox",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "probably g096-a d18, its olive drum with three studs (cross-session match; g096-a sees it from the side)"
+  },
+  {
+   "id": "d22",
+   "on": "control.turret_manual_rod",
+   "kind": "part",
+   "what": "a long plain pale rod from a socket in the casting beside the flange up to the handle block, straight, about a third of the opening's width",
+   "line": [
+    [
+     0.125,
+     0.595
+    ],
+    [
+     0.2,
+     0.5
+    ],
+    [
+     0.3,
+     0.365
+    ]
+   ],
+   "relief": "raised",
+   "size_cue": "about three times as thick as the blue cable, and about a quarter of the opening's width long",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d23",
+   "on": "control.turret_manual_rod",
+   "kind": "part",
+   "what": "the lever's head: an olive arm from a chrome-capped end at the rim down to a small cast block with three pale buttons and a slot, on a chalk-outlined plate",
+   "bbox": [
+    0.22,
+    0.235,
+    0.4,
+    0.39
+   ],
+   "relief": "raised",
+   "size_cue": "the block about two knob-widths across, the arm about a third of the rod's length",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d24",
+   "on": "box.turret_underside_switchbox",
+   "kind": "part",
+   "what": "the small blue-grey switchbox on the casting left of the boot, sloped face, rounded plan, a plain lower side with white stencil; a chain hangs from a tab at its lower left",
+   "bbox": [
+    0.31,
+    0.525,
+    0.425,
+    0.65
+   ],
+   "relief": "raised",
+   "size_cue": "about a third of the boot's top width",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "same as g096-a's blue-grey bar with a white label and chain (d20, d22), there seen edge-on (cross-session match; g096-a shows a brass pin on the chain not visible here)"
+  },
+  {
+   "id": "d25",
+   "on": "cable.turret_underside_blue",
+   "kind": "clip",
+   "what": "blue cable run with white ties across the casting: from the flange up to the lever head, and branching across to the switchbox and on over the boot to the arm",
+   "line": [
+    [
+     0.13,
+     0.7
+    ],
+    [
+     0.15,
+     0.62
+    ],
+    [
+     0.19,
+     0.57
+    ],
+    [
+     0.22,
+     0.58
+    ],
+    [
+     0.3,
+     0.61
+    ],
+    [
+     0.32,
+     0.6
+    ]
+   ],
+   "pattern": {
+    "count": 8,
+    "note": "white ties along both the runs"
+   },
+   "relief": "raised",
+   "size_cue": "tie about twice the cable's width",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d26",
+   "on": "cable.turret_underside_blue",
+   "kind": "clip",
+   "what": "the same blue cable going on: from the switchbox's side round the corner by the boot to the arm's plate",
+   "line": [
+    [
+     0.425,
+     0.565
+    ],
+    [
+     0.44,
+     0.5
+    ],
+    [
+     0.48,
+     0.495
+    ],
+    [
+     0.5,
+     0.53
+    ],
+    [
+     0.525,
+     0.545
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d27",
+   "on": "pylon.turret",
+   "kind": "part",
+   "what": "the gearbox arm: a heavy olive casting from the brass port across to the disc housing, one long box-section lobe with chalked ribs, and an outer lobe wrapped round beside the opening's edge",
+   "bbox": [
+    0.525,
+    0.37,
+    0.95,
+    0.65
+   ],
+   "relief": "raised",
+   "size_cue": "about one and a half times the boot's top width",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "motor.turret_azimuth_drive may be this; g096-a sees it edge-on, in yellow and green, as an arm with a green disc under it"
+  },
+  {
+   "id": "d28",
+   "on": "unknown.turret_brass_port",
+   "kind": "part",
+   "what": "the round brass port on the arm: a flange with screws and a recessed cupped centre",
+   "bbox": [
+    0.535,
+    0.42,
+    0.645,
+    0.515
+   ],
+   "relief": "recessed",
+   "size_cue": "about the width of the switchbox",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d29",
+   "on": "unknown.turret_tan_cylinder",
+   "kind": "part",
+   "what": "the tan cast unit: a large cylinder angled down out of the casting, ending in a brass head with an octagonal ring and a hinged loop, its domed glass or end cap dull",
+   "bbox": [
+    0.565,
+    0.22,
+    0.78,
+    0.4
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d30",
+   "on": "unknown.turret_tan_cylinder",
+   "kind": "part",
+   "what": "a second tan drum under the arm's root, stencilled in two lines, a grey plate on its side, standing proud over the boot",
+   "bbox": [
+    0.5,
+    0.5,
+    0.63,
+    0.635
+   ],
+   "relief": "raised",
+   "size_cue": "as wide as the arm is thick",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "same as the stencilled yellow drum and grey plate at g096-a's image right of the boot (cross-session match)"
+  },
+  {
+   "id": "d31",
+   "on": "cover.turret_inspection_round",
+   "kind": "part",
+   "what": "the round cover on the arm, six slotted screws round its edge, a bright chalked rim",
+   "bbox": [
+    0.73,
+    0.46,
+    0.84,
+    0.6
+   ],
+   "pattern": {
+    "count": 6
+   },
+   "relief": "raised",
+   "size_cue": "about the brass port's size",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d32",
+   "on": "pylon.turret",
+   "kind": "label",
+   "what": "a small rectangular plate on the arm beside the round cover, chalk outlined, with a short stencil",
+   "bbox": [
+    0.675,
+    0.505,
+    0.745,
+    0.565
+   ],
+   "relief": "flush",
+   "build": "decal",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d33",
+   "on": "pylon.turret",
+   "kind": "part",
+   "what": "a shallow crescent-shaped recess of the casting beyond the arm's lobe, a dark curved slot with a loop of thin wire and a bolt in it",
+   "bbox": [
+    0.83,
+    0.46,
+    0.965,
+    0.62
+   ],
+   "relief": "recessed",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d34",
+   "on": "mount.turret_bump_stops",
+   "kind": "part",
+   "what": "two black rubber blocks side by side on the casting's lower right, a stencilled number between them",
+   "points": [
+    [
+     0.8,
+     0.69
+    ],
+    [
+     0.86,
+     0.68
+    ]
+   ],
+   "pattern": {
+    "count": 2
+   },
+   "relief": "raised",
+   "size_cue": "each about a third as wide as the switchbox",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d35",
+   "on": "cover.turret_column_skirt",
+   "kind": "pattern",
+   "what": "the boot: grey rubberised fabric over the central column, seen from under its top, large soft folds, a darker grey-blue hem band round its top",
+   "bbox": [
+    0.37,
+    0.57,
+    0.665,
+    0.88
+   ],
+   "relief": "raised",
+   "size_cue": "top about a third of the opening's width across",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "same as g096-a d17 (cross-session match)"
+  },
+  {
+   "id": "d36",
+   "on": "cover.turret_column_skirt",
+   "kind": "edge",
+   "what": "the boot's hem at its top: a grey-blue fabric band, its ends lapped and laced together at the image-left of the boot",
+   "line": [
+    [
+     0.375,
+     0.71
+    ],
+    [
+     0.4,
+     0.635
+    ],
+    [
+     0.46,
+     0.6
+    ],
+    [
+     0.53,
+     0.575
+    ],
+    [
+     0.6,
+     0.61
+    ],
+    [
+     0.65,
+     0.645
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g096-a calls its blue-grey band the ring's flange (d16); here it reads as the boot's fabric hem"
+  },
+  {
+   "id": "d37",
+   "on": "cover.turret_column_skirt",
+   "kind": "clip",
+   "what": "a white cord loop hanging down at the boot's image-right edge, tied at the hem",
+   "bbox": [
+    0.643,
+    0.645,
+    0.668,
+    0.735
+   ],
+   "relief": "raised",
+   "size_cue": "about as long as the bump-stop pair is wide",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "differs from g096-a, whose white cord is a loose loop at the boot's image-left, by a thin cable"
+  },
+  {
+   "id": "d38",
+   "on": "unknown.pylon_hanging_drum",
+   "kind": "part",
+   "what": "a blue-grey casing behind the cabinet at the boot's right, a broad drum-shaped hood with a flat flange at each end and a bolted foot at the image-right end, a round connector and a white cable on its front",
+   "bbox": [
+    0.665,
+    0.78,
+    0.89,
+    1.0
+   ],
+   "relief": "raised",
+   "size_cue": "a little narrower than the boot's top",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent",
+   "note": "probably the drum register unknown.pylon_hanging_drum (g096-a, g097-b, g099-a)"
+  },
+  {
+   "id": "d39",
+   "on": "pylon.turret",
+   "kind": "part",
+   "what": "a lower band of the casting at the image-left, a darker green shelf beyond the main rib: a shallow scribed circle, a screwed connector with a tan cable running up and off to the image-left, small chalk-marked clips, a stencil",
+   "bbox": [
+    0.15,
+    0.72,
+    0.36,
+    0.86
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent",
+   "note": "the tan cable matches the thin tan cable along g096-a d19's disc housing (cross-session match)"
+  },
+  {
+   "id": "d40",
+   "on": "cable.roof_right_rear",
+   "kind": "clip",
+   "what": "a tan/cream cable from the connector on the casting's shelf down and off along the lining to the lower left corner of the frame",
+   "line": [
+    [
+     0.195,
+     0.755
+    ],
+    [
+     0.17,
+     0.785
+    ],
+    [
+     0.125,
+     0.83
+    ],
+    [
+     0.08,
+     0.875
+    ],
+    [
+     0.03,
+     0.895
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g096-a d25's white cable probably, running to the caged lamp (cross-session match)"
+  },
+  {
+   "id": "d41",
+   "on": "hull.wall_right",
+   "kind": "clip",
+   "what": "a thin blue-grey cable along a bracket at the bottom left of the frame, clipped by stud heads, below the tan cable",
+   "line": [
+    [
+     0.05,
+     0.895
+    ],
+    [
+     0.12,
+     0.945
+    ],
+    [
+     0.145,
+     0.985
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "low",
+   "status": "absent"
+  }
+ ]
+}

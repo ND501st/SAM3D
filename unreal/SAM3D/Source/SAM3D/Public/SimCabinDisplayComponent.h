@@ -72,7 +72,7 @@ private:
 	void DrawElevationScope(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
 		simcore::ScenarioRunner& Runner, bool bOn);
 	void DrawDial(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn, bool bLit);
-	void DrawMeter(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn);
+	void DrawMeter(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn, bool bLit);
 	void DrawCounters(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, simcore::ScenarioRunner& Runner, bool bOn);
 	void DrawAspdScope(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::PostFeed& Post, bool bOn);
 	void DrawStatusBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn, float DeltaTime);
@@ -101,6 +101,13 @@ private:
 	bool ContentKey(const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn, uint32& Key) const;
 	uint32 DrawnKey = 0;
 	bool bDrawnKeyValid = false;
+	/** The picture as its knobs set it this frame (simcore::ScopePictureOf), and the tube's gain and halo as built, which
+	 *  the brightness and the focus scale (ApplyPicture). */
+	simcore::ScopePicture Picture;
+	FLinearColor BaseTint = FLinearColor::White;
+	float BaseGlow = 0.0f;
+	float BaseGlowR = 0.0f;
+	void ApplyPicture(const simcore::CabinDisplay& Display, bool bOn);
 	/** The search scope's fixed face (the azimuth scale and its numbers), drawn once and stamped under each picture. */
 	void DrawPpiFace(const FVector2D& Size);
 	bool bTvWasOn = false;

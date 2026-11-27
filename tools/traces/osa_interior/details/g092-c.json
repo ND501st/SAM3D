@@ -1,0 +1,15 @@
+{
+ "photo": "g092-c",
+ "image": "raw",
+ "observer": "Claude (Opus 5.5), 9 Nov 2026: the raw scan (1955 x 1393) blurred 3x3, overview at 0.05 grid",
+ "covers": "the operators' bench looked down on from above: the cushion, its straps, and the folded seat frames at its left; the floor at the right. Included only because it was grouped with the roof's panels; no roof or lining is in frame",
+ "notes": "VEHICLE: the catalogue gives no vehicle note for this photo; it shares page 92 with the hangar session's g092-a, and nothing suggests otherwise. This is a bench seat, not a roof panel. It shows what padding looks like here, against the roof's: an olive vinyl cushion with a plain smooth top, a welt along its edge and rivets at the welt, which is not the roof lining's soft pale cloth. It is not g092-b's panel: that one is rigid sheet with a rib grid.",
+ "details": [
+  {"id": "d01", "on": "new.post.operators_bench", "kind": "surface", "what": "the cushion's top: smooth olive vinyl, matt, a little sag down the middle", "bbox": [0.31, 0.03, 0.85, 1.0], "relief": "flush", "build": "texture", "confidence": "high", "status": "absent"},
+  {"id": "d02", "on": "new.post.operators_bench", "kind": "edge", "what": "the cushion's right-hand edge: a thin raised welt, with a row of small round rivets or studs on the skirt below it", "line": [[0.78, 0.05], [0.80, 0.3], [0.84, 0.6], [0.87, 0.9], [0.88, 1.0]], "pattern": {"count": 8, "note": "rivets along the welt"}, "relief": "raised", "size_cue": "rivet about the buckle's bar wide", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d03", "on": "new.post.operators_bench", "kind": "clip", "what": "a canvas strap with a steel buckle lying across the cushion's left half, frayed end hanging at its buckle", "line": [[0.22, 0.93], [0.28, 0.78], [0.36, 0.67], [0.46, 0.585], [0.51, 0.565]], "relief": "raised", "size_cue": "strap about a palm wide", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d04", "on": "frame.seat_cross_frame", "kind": "part", "what": "the folded seat frame at the left: a grey crossed lattice of pressed members with pins, a tube, and tan straps with buckles, down the left edge of the cushion", "bbox": [0.0, 0.0, 0.45, 1.0], "relief": "raised", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d05", "on": "cushion.cab_floor_mat", "kind": "pattern", "what": "ribbed dark mat at the bottom right below the bench's edge", "bbox": [0.83, 0.41, 1.0, 1.0], "relief": "raised", "build": "normal", "confidence": "high", "status": "absent"},
+  {"id": "d06", "on": "new.post.operators_bench", "kind": "surface", "what": "scuffed dirty grey sheet behind the mat to the right of the bench, a gouge or scratches", "bbox": [0.78, 0.0, 1.0, 0.40], "relief": "flush", "build": "texture", "confidence": "medium", "status": "absent"}
+ ]
+}

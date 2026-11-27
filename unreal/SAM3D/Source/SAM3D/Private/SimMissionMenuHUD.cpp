@@ -190,6 +190,13 @@ void ASimMissionMenuHUD::CycleHelper()
 	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: the helper %s"), *Next);
 }
 
+void ASimMissionMenuHUD::ToggleFaults()
+{
+	const bool bOn = !USimWorldSubsystem::GetFaultsPreference();
+	USimWorldSubsystem::SetFaultsPreference(bOn);
+	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: faults %s"), bOn ? TEXT("on") : TEXT("off"));
+}
+
 void ASimMissionMenuHUD::MoveSelection(int32 Step)
 {
 	if (Missions.Num() == 0)
@@ -289,6 +296,10 @@ void ASimMissionMenuHUD::HandleInput()
 	{
 		CycleHelper();
 	}
+	if (Pc->WasInputKeyJustPressed(EKeys::F))
+	{
+		ToggleFaults();
+	}
 	if (Pc->WasInputKeyJustPressed(EKeys::T))
 	{
 		CycleTime(Pc->IsInputKeyDown(EKeys::LeftShift) || Pc->IsInputKeyDown(EKeys::RightShift) ? -1 : 1);
@@ -335,6 +346,11 @@ void ASimMissionMenuHUD::HandleInput()
 			if (HelperBox.bIsValid && HelperBox.IsInside(At))
 			{
 				CycleHelper();
+				return;
+			}
+			if (FaultsBox.bIsValid && FaultsBox.IsInside(At))
+			{
+				ToggleFaults();
 				return;
 			}
 			if (TimeBox.bIsValid && TimeBox.IsInside(At))
@@ -650,6 +666,18 @@ void ASimMissionMenuHUD::DrawHUD()
 	DrawText(HelperLine, Paper, X, Y, Medium);
 	Y += 26.0f;
 	DrawText(TEXT("H turns it: the switch, wheel, order or report your seat's crewman would take next, lit in the cabin"), Dim, X, Y, Small);
+	Y += 30.0f;
+	// Faults that come about by themselves (docs/FAULTS.md): on unless turned off here.
+	DrawText(TEXT("Faults"), Amber, X, Y, Medium);
+	Y += 26.0f;
+	const FString FaultsLine = FString::Printf(TEXT("<  %s  >"), USimWorldSubsystem::GetFaultsPreference() ? TEXT("On") : TEXT("Off"));
+	float Fw = 0.0f;
+	float Fh = 0.0f;
+	GetTextSize(FaultsLine, Fw, Fh, Medium);
+	FaultsBox = FBox2D(FVector2D(X, Y - 2.0f), FVector2D(X + Fw, Y + Fh + 2.0f));
+	DrawText(FaultsLine, Paper, X, Y, Medium);
+	Y += 26.0f;
+	DrawText(TEXT("F turns it: the vehicle's blocks fail by chance, by their hours, heat and maintenance; the crew finds them by its checks"), Dim, X, Y, Small);
 	Y += 30.0f;
 	// The time of day (roadmap R7): by the scenario's own sun at its place and date.
 	DrawText(TEXT("Time of day"), Amber, X, Y, Medium);
