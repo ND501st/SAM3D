@@ -3,7 +3,8 @@ import os
 import sys
 import unittest
 
-import numpy as np
+import pytest
+np = pytest.importorskip("numpy")  # the tool's own dependencies, as test_photo_trace.py
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'recon'))
 import holistic_metric as M  # noqa: E402

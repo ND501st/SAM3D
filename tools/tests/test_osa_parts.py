@@ -7,8 +7,9 @@ and no GPU is needed. A part whose outline error in a view grows past what it wa
 import os
 import sys
 
-import numpy as np
 import pytest
+np = pytest.importorskip("numpy")  # the tool's own dependencies, as test_photo_trace.py
+pytest.importorskip("cv2")
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, 'tools', 'recon', 'osa'))
