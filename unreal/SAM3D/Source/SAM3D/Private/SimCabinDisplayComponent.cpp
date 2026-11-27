@@ -1141,9 +1141,52 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	const double ElLow = Console.track.beams_deg[ElevRaster].first;
 	const double ElHigh = Console.track.beams_deg[ElevRaster].second;
 	const double Half = 0.66 * R;  // the square fits inside the round screen
-	const double Left = C.X - Half;
-	const double Right = C.X + Half;
-	auto YOfScreen = [&](double Fraction) { return C.Y + Half - 2.0 * Half * Fraction; };  // 0 bottom, 1 top
+	// ГОРИЗ. СМЕЩ. and ВЕРТ. СМЕЩ. (OS81-10M's slotted potentiometers) move the picture the tube writes; the graticule on
+	// the filter and the tube's face stay where they are.
+	const FVector2D S = C + FVector2D(Picture.shift_x * Size.X, -Picture.shift_y * Size.Y);
+	const double Left = S.X - Half;
+	const double Right = S.X + Half;
+	// АМПЛ. РАЗВ. ε (the third slotted potentiometer) sets the elevation sweep's amplitude: the picture stands taller or
+	// shorter about its middle, the raster's lines with it, and so reads high or low against the filter's marks.
+	auto YOfScreen = [&](double Fraction) { return S.Y + Picture.sweep * (Half - 2.0 * Half * Fraction); };  // 0 bottom, 1 top
+	// What the tube writes stays on its round face, however far the potentiometers move or stretch the picture.
+	auto OnTube = [&](FVector2D& A, FVector2D& B)
+	{
+		const FVector2D D = B - A;
+		const FVector2D F = A - C;
+		const double Qa = D.SizeSquared();
+		const double Qb = 2.0 * FVector2D::DotProduct(F, D);
+		const double Qc = F.SizeSquared() - R * R;
+		const double Disc = Qb * Qb - 4.0 * Qa * Qc;
+		if (Qa <= 0.0 || Disc <= 0.0)
+		{
+			return false;
+		}
+		const double T0 = FMath::Max(0.0, (-Qb - FMath::Sqrt(Disc)) / (2.0 * Qa));
+		const double T1 = FMath::Min(1.0, (-Qb + FMath::Sqrt(Disc)) / (2.0 * Qa));
+		if (T0 >= T1)
+		{
+			return false;
+		}
+		const FVector2D A0 = A;
+		A = A0 + D * T0;
+		B = A0 + D * T1;
+		return true;
+	};
+	auto TubeLine = [&](FVector2D A, FVector2D B, float Thickness, const FLinearColor& Ink)
+	{
+		if (OnTube(A, B))
+		{
+			Line(Canvas, A, B, Thickness, Ink);
+		}
+	};
+	auto TubeGlow = [&](FVector2D A, FVector2D B, float Thickness, const FLinearColor& Ink)
+	{
+		if (OnTube(A, B))
+		{
+			Glow(Canvas, A, B, Thickness, Ink);
+		}
+	};
 	const double Top = YOfScreen(Raster.screen_high);
 	const double Bottom = YOfScreen(Raster.screen_low);
 	auto YOfEl = [&](double El)
@@ -1151,7 +1194,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 		const double F = (El - ElLow) / (ElHigh - ElLow);
 		return Bottom + (Top - Bottom) * FMath::Clamp(F, 0.0, 1.0);
 	};
-	auto XOfOffset = [&](double OffsetM) { return C.X + OffsetM / (0.5 * Display.range_window_m) * Half; };
+	auto XOfOffset = [&](double OffsetM) { return S.X + OffsetM / (0.5 * Display.range_window_m) * Half; };
 
 	// The tube's face lit faintly from behind the amber filter, darker to the rim (the dead tube's filter, lit).
 	for (int32 I = 0; I < 6; ++I)
@@ -1165,10 +1208,11 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	// flecks that change every picture (the same "grass" as the range sweep's, drawn as the raster writes it).
 	FRandomStream Grass((ElevFrames / 2) * 4099 + LayoutIndex);
 	int32 Row = 0;
-	for (double Y = Top; Y <= Bottom; Y += 4.0, ++Row)
+	const double Pitch = 4.0 * FMath::Max(0.5, Picture.sweep);  // the raster's lines are as many, spread with the sweep
+	for (double Y = Top; Y <= Bottom; Y += Pitch, ++Row)
 	{
 		const float Even = 0.07f + 0.04f * static_cast<float>((Row * 37) % 5) / 4.0f;
-		Line(Canvas, FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * Even);
+		TubeLine(FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * Even);
 		if (!bRadiating)
 		{
 			continue;
@@ -1178,32 +1222,32 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 		{
 			const double X = Grass.FRandRange(Left, Right - 6.0);
 			const double W = Grass.FRandRange(2.0, 7.0);
-			Line(Canvas, FVector2D(X, Y), FVector2D(X + W, Y), 1.2f, SearchGlow(Grass.FRandRange(0.15, 0.4)));
+			TubeLine(FVector2D(X, Y), FVector2D(X + W, Y), 1.2f, SearchGlow(Grass.FRandRange(0.15, 0.4)));
 		}
 	}
 	// The band's edges and the range marks: engraved on the filter, so seen in the tube's own light only faintly.
-	Line(Canvas, FVector2D(Left, Top), FVector2D(Right, Top), 1.5f, Phosphor * 0.28f);
-	Line(Canvas, FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
-	Line(Canvas, FVector2D(Left, Top), FVector2D(Left, Bottom), 1.5f, Phosphor * 0.28f);
-	Line(Canvas, FVector2D(Right, Top), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
+	TubeLine(FVector2D(Left, Top), FVector2D(Right, Top), 1.5f, Phosphor * 0.28f);
+	TubeLine(FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
+	TubeLine(FVector2D(Left, Top), FVector2D(Left, Bottom), 1.5f, Phosphor * 0.28f);
+	TubeLine(FVector2D(Right, Top), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
 	for (int32 I = -2; I <= 2; ++I)
 	{
-		const double X = C.X + I * 0.5 * Half;
-		Line(Canvas, FVector2D(X, Bottom + 2.0), FVector2D(X, Bottom + (I == 0 ? 9.0 : 5.0)), 1.0f, Phosphor * 0.3f);
+		const double X = S.X + I * 0.5 * Half;
+		TubeLine(FVector2D(X, Bottom + 2.0), FVector2D(X, Bottom + (I == 0 ? 9.0 : 5.0)), 1.0f, Phosphor * 0.3f);
 	}
 	// The range gate sits in the middle of the range window.
-	Line(Canvas, FVector2D(C.X, Bottom), FVector2D(C.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
+	TubeLine(FVector2D(S.X, Bottom), FVector2D(S.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
 
 	// Where the antenna points now: the raster's brightest line, with the phosphor's bloom round it, while the tracking
 	// radar radiates; a dim line otherwise.
 	const double AntennaY = YOfEl(Feed.antenna_el_deg);
 	if (bRadiating)
 	{
-		Glow(Canvas, FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.4f, SearchGlow(0.85));
+		TubeGlow(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.4f, SearchGlow(0.85));
 	}
 	else
 	{
-		Line(Canvas, FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.0f, Phosphor * 0.35f);
+		TubeLine(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.0f, Phosphor * 0.35f);
 	}
 
 	// Target marks: a blip drawn along the raster's lines (the echo is as long as the pulse, a few lines high), struck
@@ -1217,7 +1261,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 		for (int32 L = -2; L <= 2; ++L)
 		{
 			const double W = (L == 0 ? 9.0 : L == 1 || L == -1 ? 7.0 : 4.0);
-			Glow(Canvas, P + FVector2D(-W, 2.0 * L), P + FVector2D(W, 2.0 * L), 1.4f, Ink * (L == 0 ? 1.0f : 0.7f));
+			TubeGlow(P + FVector2D(-W, 2.0 * L), P + FVector2D(W, 2.0 * L), 1.4f, Ink * (L == 0 ? 1.0f : 0.7f));
 		}
 	}
 	Graticule(FLinearColor(0.03f, 0.02f, 0.0f));

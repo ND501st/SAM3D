@@ -302,6 +302,30 @@ def cover_tx_post(bm):
     _box(bm, -2.4 * MM, 2.4 * MM, -0.35 * MM, 0.35 * MM, 2.1 * MM, 2.4 * MM)
 
 
+# ------------------------------------------------------------------------------------------------ АСТИГМАТ. I, II
+# OS81-9M's astigmatism trimmers each lie under a cream plate turned in the face on a slotted screw at one end (samsim_panels
+# at 10x, about 1.12 px a millimetre there: an elongated hexagon 32 x 15 mm, pointed at both ends, its screw 7 mm across
+# near one point and a pressed round boss near the other, over the trimmer's hole; I turns on its aft screw, II on its
+# forward one). It stands 3 mm off the plate on the screw's spacer (SAM3D's estimate). That it is a cover over the
+# trimmer is SAM3D's reading of the photo: no document describes it.
+ASTIG = {'w': 15 * MM, 'tip0': 7.5 * MM, 'tip1': 25.5 * MM, 'boss': 18 * MM, 'lift': 3 * MM}
+
+
+def cover_astig(bm):
+    a = ASTIG
+    h = a['w'] / 2
+    out = [(0.0, -a['tip0']), (h, -1.0 * MM), (h, a['boss'] + 1.0 * MM), (0.0, a['tip1']), (-h, a['boss'] + 1.0 * MM),
+           (-h, -1.0 * MM)]
+    _prism(bm, out, -0.5 * MM, 0.5 * MM)
+    _dome(bm, 3.0 * MM, 0.8 * MM, 0.0, a['boss'], 0.5 * MM)            # the pressed boss over the trimmer
+
+
+def cover_astig_post(bm):
+    _disc(bm, 2.5 * MM, 0, 0, -ASTIG['lift'], -0.5 * MM, seg=16)          # the spacer under the plate
+    _disc(bm, 3.5 * MM, 0, 0, 0.5 * MM, 1.7 * MM, seg=16, r_top=3.0 * MM)   # the screw's head
+    _box(bm, -3.0 * MM, 3.0 * MM, -0.35 * MM, 0.35 * MM, 1.6 * MM, 1.9 * MM)   # its slot
+
+
 # ------------------------------------------------------------------------------------------------ БАЛАНС ПА's lid
 # OS52-14M's БАЛАНС ПА button sits in a square shroud (both columns: samsim_panels; the senior operator's open, the deputy
 # commander's shut by a lid). The lid: 19 mm across, 27 mm down from its hinge along the shroud's top edge.
@@ -335,5 +359,6 @@ PARTS = [
     ('SM_CoverHv', cover_hv), ('SM_CoverHvHinge', cover_hv_hinge),
     ('SM_CoverTx', cover_tx), ('SM_CoverTxPost', cover_tx_post),
     ('SM_CoverBal', cover_bal),
+    ('SM_CoverAstig', cover_astig), ('SM_CoverAstigPost', cover_astig_post),
     ('SM_WheelLockCollar', wheel_lock_collar),
 ]

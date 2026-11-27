@@ -362,7 +362,7 @@ def room(h, cabin=None, console=None):
 TRACED = {
     # КАНАЛ II's ten lamps (fo, left): the top row sits half a pitch left of the bottom one; a notch and its screw at
     # either end between the rows, the right-hand screw bright brass, the left one in the plate's shadow
-    ('fo_panel', -0.1278, 0.1076): {
+    ('fo_panel', -0.1528, 0.1076): {
         'pts': [(66.0, 29.8), (71.5, 28.6), (75.0, 25.5), (77.4, 21.4), (77.8, 18.6), (75.5, 15.5), (71.5, 11.8),
                 (69.0, 8.0), (68.4, 4.6), (69.4, 1.0), (72.0, -2.0), (76.0, -4.5), (78.5, -7.5), (78.8, -12.0),
                 (78.8, -21.0), (77.5, -25.5), (75.0, -28.0), (72.0, -28.8), (-63.0, -28.8), (-66.3, -28.8),
@@ -371,7 +371,7 @@ TRACED = {
                 (-73.8, 25.5), (-69.0, 28.9), (-63.6, 29.8)],
         'screws': [(73.8, 4.6, 3.6), (-72.5, -4.5, 3.6)]},
     # КАНАЛ I's ten lamps (fo, right): the same plate, its notches a little higher on the right and lower on the left
-    ('fo_panel', 0.2054, 0.1076): {
+    ('fo_panel', 0.1804, 0.1076): {
         'pts': [(63.0, 29.8), (67.5, 28.8), (71.0, 26.3), (73.2, 22.5), (73.8, 18.5), (73.5, 15.5), (71.6, 12.6),
                 (69.0, 9.6), (67.7, 6.0), (67.9, 2.5), (69.5, -0.5), (72.0, -3.0), (74.3, -6.0), (75.3, -10.1),
                 (75.3, -19.7), (74.0, -24.5), (71.5, -27.8), (68.5, -28.8), (-63.0, -28.8), (-66.1, -27.6),
@@ -381,14 +381,14 @@ TRACED = {
         'screws': [(71.5, 5.5, 3.5), (-70.0, -6.5, 3.5)]},
     # МЕТОД, ЦЕЛЬ В ЗОНЕ, ПУСК ГОТОВ, ВНИМАНИЕ (fo, middle): a long strip, a notch and screw at each end, the lower
     # corner standing out further than the upper
-    ('fo_panel', 0.0395, 0.1205): {
+    ('fo_panel', 0.0145, 0.1205): {
         'pts': [(74.5, 15.4), (76.3, 13.8), (76.6, 11.0), (74.0, 10.2), (71.6, 8.0), (71.0, 5.5), (71.4, 2.8),
                 (73.0, 0.8), (76.0, -0.5), (77.5, -3.0), (77.6, -9.5), (76.5, -12.5), (74.0, -13.8), (-71.5, -13.8),
                 (-74.0, -13.0), (-75.0, -10.5), (-74.5, -4.0), (-72.0, -2.0), (-70.0, 1.0), (-69.5, 5.0), (-70.5, 8.5),
                 (-73.5, 10.5), (-74.8, 12.0), (-74.3, 14.5), (-72.0, 15.4)],
         'screws': [(73.8, 5.6, 3.0), (-72.6, 4.6, 3.0)]},
     # ЛЮКИ ЗАКР. and ОТКАЗ СРП (fo, below the window): a short plate notched at both ends round its screws
-    ('fo_panel', 0.0423, -0.0263): {
+    ('fo_panel', 0.0173, -0.0263): {
         'pts': [(32.0, 17.1), (34.2, 16.0), (34.6, 13.0), (32.5, 10.5), (29.4, 8.6), (27.1, 3.8), (26.7, -0.6),
                 (27.4, -5.0), (30.1, -9.1), (33.5, -11.2), (34.9, -13.9), (34.2, -16.6), (32.0, -17.3),
                 (-35.0, -17.3), (-36.9, -16.4), (-37.0, -13.9), (-34.6, -11.9), (-30.9, -9.1), (-29.0, -4.7),
@@ -396,7 +396,7 @@ TRACED = {
         'screws': [(30.8, -0.6, 3.5), (-33.5, 0.0, 3.5)]},
     # АВАР. ПУСК ОБЕСТОЧ. over АВАР. ПУСК ГОТОВ (fo, beside the emergency launch button): a narrow upright strip, its
     # top notched round a screw at the upper left, its foot notched round the round part below it
-    ('fo_panel', 0.2082, -0.0082): {
+    ('fo_panel', 0.1832, -0.0082): {
         'pts': [(14.5, 34.5), (12.8, 37.6), (9.5, 39.2), (4.5, 39.8), (2.2, 39.0), (1.0, 36.5), (-2.0, 34.6),
                 (-5.5, 34.6), (-8.5, 33.6), (-11.5, 31.5), (-14.0, 28.5), (-14.9, 25.5), (-14.9, -33.5), (-14.3, -36.5),
                 (-12.5, -38.4), (-8.5, -38.5), (-6.8, -37.0), (-4.7, -34.3), (0.0, -32.6), (4.7, -34.3), (6.8, -37.0),
@@ -410,7 +410,7 @@ TRACED = {
     ('op_panel', 0.2582, -0.2953): {'stadium': (5.0, -1.3, 32.0, 72.6), 'well': 14.0},    # ПЕЛЕНГ I / II
     # БР (fo, under МЕТОД): a white block 45 x 33.5 mm, its corners rounded 3 mm, the lamp and its two screws on its upper
     # part, the lower part a raised lip (below, SOLIDS); traced at 9 px a millimetre, 14 Nov 2026
-    ('fo_panel', 0.0415, 0.0873): {
+    ('fo_panel', 0.0165, 0.0873): {
         'pts': [(22.5, -16.8), (22.5, 16.8), (-22.5, 16.8), (-22.5, -16.8)],
         'screws': [(-18.0, 5.0, 3.2), (17.4, 5.0, 3.2)], 'screws_on_face': True},
 }
@@ -422,6 +422,8 @@ WELL_DEPTH = 0.0025
 # 9-12x on a millimetre grid, 14 Nov 2026; the photo about 1 mm a pixel, so +-1 mm; depths by eye from the shading):
 # 'plate' an outline (u, v) standing d1 out of the face, t thick, with holes; 'box' w x h from d0 to d1; 'hex' a nut,
 # 'across' its flats, from d0 to d1; 'disc' a round, r, from d0 to d1. Placed in metres on the panel.
+# The fo_panel's places here and in TRACED moved 25 mm aft with its items when the panel was widened (16 Nov 2026,
+# tools/recon/osa/migrations/guidance_width_2026_11.py): each stands where it stood in the cabin.
 def rrect2(cx, cy, w, h, r_top, r_bot, seg=6):
     """A rectangle (anticlockwise) with its top corners rounded r_top and its bottom ones r_bot."""
     pts = []
@@ -438,34 +440,34 @@ SOLIDS = [
     # Ш7 (fo, left of its legends): the test socket, a brick-red insulating strip 11.5 x 64.5 mm standing 4 mm out, a
     # dark slit for each pin beside its legend, and above and below it a steel hex boss, 11.5 mm across its flats, with
     # the hole for the test plug's guide
-    {'panel': 'fo_panel', 'shape': 'plate', 'outline': rrect(-0.1978, 0.01825, 0.0125, 0.0645, 0.0015), 'd1': 0.004,
+    {'panel': 'fo_panel', 'shape': 'plate', 'outline': rrect(-0.2228, 0.01825, 0.0125, 0.0645, 0.0015), 'd1': 0.004,
      't': 0.006, 'mat': 'Paint_Red'},
 ] + [
-    {'panel': 'fo_panel', 'shape': 'box', 'at': (-0.1980, v), 'w': 0.0014, 'h': 0.005, 'd0': 0.0035, 'd1': 0.0043,
+    {'panel': 'fo_panel', 'shape': 'box', 'at': (-0.2230, v), 'w': 0.0014, 'h': 0.005, 'd0': 0.0035, 'd1': 0.0043,
      'mat': 'Rubber_Black'} for v in SH7_ROWS
 ] + [
-    p for u, v in ((-0.1982, 0.0575), (-0.1975, -0.0207)) for p in (
+    p for u, v in ((-0.2232, 0.0575), (-0.2225, -0.0207)) for p in (
         {'panel': 'fo_panel', 'shape': 'hex', 'at': (u, v), 'across': 0.0115, 'd0': -0.001, 'd1': 0.006, 'mat': 'Metal_Steel'},
         {'panel': 'fo_panel', 'shape': 'disc', 'at': (u, v), 'r': 0.0024, 'd0': 0.0055, 'd1': 0.0063, 'mat': 'Rubber_Black'})
 ] + [
     # БР's block: its lower part a lip standing 1.2 mm above the mount (the project owner's reading of the photo)
-    {'panel': 'fo_panel', 'shape': 'plate', 'outline': rrect2(0.0415, 0.0761, 0.045, 0.0112, 0.0005, 0.003),
+    {'panel': 'fo_panel', 'shape': 'plate', 'outline': rrect2(0.0165, 0.0761, 0.045, 0.0112, 0.0005, 0.003),
      'd1': 0.0072, 't': 0.003, 'mat': 'Paint_Ivory'},
     # ДЦ's plate: a white plate 105 x 78 mm, its corners rounded 8 mm, standing 5 mm off the block (its shadow on the
     # left), a brass screw in each corner; the meter's black case and БР's block stand on it
-    {'panel': 'fo_panel', 'shape': 'plate', 'outline': rrect(0.040, 0.038, 0.105, 0.078, 0.008, 6), 'd1': 0.005,
+    {'panel': 'fo_panel', 'shape': 'plate', 'outline': rrect(0.015, 0.038, 0.105, 0.078, 0.008, 6), 'd1': 0.005,
      't': 0.007, 'mat': 'Paint_Panel'},
 ] + [
     {'panel': 'fo_panel', 'shape': 'disc', 'at': (u, v), 'r': 0.0036, 'd0': 0.0045, 'd1': 0.0062, 'mat': 'Metal_Screw'}
-    for u, v in ((-0.0056, 0.0640), (-0.0056, 0.0108), (0.0857, 0.0647), (0.0857, 0.0113))
+    for u, v in ((-0.0306, 0.0640), (-0.0306, 0.0108), (0.0607, 0.0647), (0.0607, 0.0113))
 ] + [
     # ДЦ's case (HOUSINGS' dts_housing): a screw at each corner and the zero adjuster under the window
 ] + [
     {'panel': 'fo_panel', 'shape': 'disc', 'at': (u, v), 'r': 0.0026, 'd0': 0.0143, 'd1': 0.0156, 'mat': 'Metal_Screw'}
-    for u in (0.018, 0.061) for v in (0.0575, 0.014)
+    for u in (-0.007, 0.036) for v in (0.0575, 0.014)
 ] + [
-    {'panel': 'fo_panel', 'shape': 'disc', 'at': (0.0426, 0.0206), 'r': 0.0036, 'd0': 0.0143, 'd1': 0.0165, 'mat': 'Bakelite_Black'},
-    {'panel': 'fo_panel', 'shape': 'box', 'at': (0.0426, 0.0206), 'w': 0.0052, 'h': 0.0008, 'd0': 0.0160, 'd1': 0.0167,
+    {'panel': 'fo_panel', 'shape': 'disc', 'at': (0.0176, 0.0206), 'r': 0.0036, 'd0': 0.0143, 'd1': 0.0165, 'mat': 'Bakelite_Black'},
+    {'panel': 'fo_panel', 'shape': 'box', 'at': (0.0176, 0.0206), 'w': 0.0052, 'h': 0.0008, 'd0': 0.0160, 'd1': 0.0167,
      'mat': 'Metal_Dark'},
 ]
 # ПЕЛЕНГ I / II are hex-nut push-buttons the game draws (SM_HexNut, SM_HexPusher), each in its dark well on the oval.

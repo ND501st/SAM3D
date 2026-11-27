@@ -2144,3 +2144,96 @@ the operators' manual (voenizdat_osa_1991) for the words.
   barrel, as on the photo.
 - **Unreal.** Build the C++; import `SM_KeyPlug` with the parts of section 60; re-import `SM_KeyBarrel`,
   `SM_SignalBase`, `T_Panel_fo_panel` and `T_Panel_so_panel`.
+
+## 62. SŁ-2M's guidance column widened to its blocks (16 Nov 2026)
+
+SAM Simulator's photo of the AK console (`samsim_panels`), from which the guidance column (`fo_panel`) was drawn
+610 mm wide, cuts it off at its forward edge. On the view flat `fo_panel_g094a` (wwp_gecko g094-a through its grade-A
+camera; it agrees with the layout to about 2 mm near the cut, then reads up to 10 mm aft and 6 mm low further aft, a
+2 % stretch and 0.7 degrees of tilt, so places were read beside items already placed), the blocks 0004-14M, OS81-10M,
+0004-11M and OS52-14M run 50 mm further forward. g095-b (grade B) shows the whole column with the indicator box beside it.
+
+- **The column** is 660 mm wide; its centre is at y 2.225 (was 2.2) and its forward edge at 2.555. Every item on it
+  moved 25 mm aft in the panel's frame, so each stays where it was in the cabin. The four blocks grow 50 mm forward
+  and keep their aft edges. `tools/recon/osa/migrations/guidance_width_2026_11.py` did this, the view's anchors in
+  `views/g094-a.json` and the housings' places in `sl2m_housings.py` with it.
+- **In the strip that was cut off:**
+  - the forward key locks of 0004-14M, 0004-11M and OS52-14M, each with the printed arc and ОТКР. / ЗАКР. as the
+    search column's forward locks have them. 0004-14M's is behind a bag in g094-a: g095-b shows it at the block's
+    forward edge, placed level with its aft lock;
+  - OS81-10M's three slotted potentiometers, ГОРИЗ. СМЕЩ., ВЕРТ. СМЕЩ. and АМПЛ. РАЗВ. ε (voenizdat_osa_1991 p98-99;
+    the legends read on g095-b), as `trim` controls `fo.el_hshift`, `fo.el_vshift` and `fo.el_sweep`. The first two
+    move the elevation scope's picture (`elev_search`'s `picture`; Unreal's `DrawElevationScope` shifts the raster,
+    the band, the marks and the antenna line, not the graticule on the filter). АМПЛ. РАЗВ. was inert here;
+    section 64 wires it. ГОРИЗ. had
+    been a fourth black knob read off the photo's cut edge, where the pale part is the slot's bushing;
+  - the lamp ЗАХ. АПЧ I, under 0004-11M's forward lock, the mirror of ЗАХ. АПЧ II at the block's aft end. SAM3D had
+    put it on the hex-ringed part under АВАРИЙНЫЙ ПУСК, which stays as an unnamed fixture.
+- **The racks.** SŁ-2M's rack is 2.02 m long (`SM_RackSL2M`, its top rail to 2.555). SŁ-1M's aft post, which began
+  where SŁ-2M ended and stands about 10 mm proud of its plate, now begins at 2.555 (`SL2M_FORWARD_Y` in
+  `build_cabin_interior.py`), and so does SŁ-1M's brow. The shell's `lower_side_wall` forward run still starts at 2.505.
+- **The indicator box (settled in section 63).** The box (`ind_panel`, 58 mm) stands at 2.528-2.586. That is 40 mm aft of where it was
+  measured (2.597), so it clears SŁ-1M's flange (from 2.5875, placed from the drawing). It now covers the column's
+  forward 27 mm: about 6 mm of 0004-14M's forward lock is behind it. On g095-b there is a gap of about 15 mm between
+  the column and the box. Putting the box at its measured place needs SŁ-1M about 40 mm further forward, where it meets
+  `driver_units`, `post_valve_panel`, `stowage_panel` and the fire system. The project owner chose to move SŁ-1M.
+- **Unreal.** Build the C++; re-import `SM_RackSL2M`, `SM_RackSL1M`, `T_Panel_fo_panel` and `T_Panel_gyro_panel` (whose
+  ПИТАНИЕ ПТ — СЕТЬ legend had not been re-baked after it was moved onto its traced part).
+
+## 63. OS81-9M's indicator controls, and SŁ-1M 40 mm forward (16 Nov 2026)
+
+The project owner's review of the range column in the game: the shift controls looked wrong, and the parts marked I and II
+over them looked like covers. Read on SAM Simulator's AK photo (`samsim_panels`) at 10x, about 1.12 px a millimetre
+there; the layout's own ВЕРТ. СМЕЩ. I and II agree with the photo to 1 mm and served as its anchors.
+
+- **ВЕРТ. СМЕЩ. and ГОРИЗ. СМЕЩ. (I and II)** are slotted potentiometers, as voenizdat_osa_1991 p98-99 names OS81-10M's.
+  Each is a black cup 27.6 mm across, a cream knurled bushing 19.6 mm in it, and a steel shaft 8 mm across with its slot.
+  They had been flat brass discs. A `trim` look with a `ring` colour is now drawn by `SimCabinComponent` as `SM_PotCup`
+  (ring), `SM_PotBushing` (the look's colour) and `SM_PotShaft` (steel, turned with the value), from
+  `build_cabin_parts.py`. They are drawn 27 mm across, clear of the range hood.
+- **АСТИГМАТ. I and II** are each a cream plate, an elongated hexagon 32 x 15 mm, turned in the face on a slotted screw
+  near one point (I's aft, II's forward), with a pressed boss near the other. SAM3D reads them, as the owner did, as
+  covers over the astigmatism trimmers; no document describes them (confidence low).
+  - Each cover is a control of its own, `ssc.astig_cover_1` and `_2` (shut or turned aside), drawn as `SM_CoverAstig` on
+    `SM_CoverAstigPost` (`sl2m_covers.py` ASTIG). Open, each lies turned up off its trimmer.
+  - Each guards its trimmer (`"guard"`), a 6 mm slot under the boss. The trimmers had been drawn as levers 10 mm
+    higher, on the engraved АСТИГМАТ., which is now a text of its own.
+  - `test_cabin.cpp` checks that a shut cover keeps the trimmer from turning.
+  - `tools/recon/osa/migrations/os81_9m_parts_2026_11.py` made these changes.
+- **SŁ-1M 40 mm forward.** The owner chose the photo (g095-b's registered camera, good to a centimetre or two) over
+  Fig. 3 (about 4.8 mm a pixel) for the indicator box, which is back at its measured 2.597. These moved 40 mm forward with
+  SŁ-1M:
+  - the gyro panel, АРРЕТИР., SŁ-1M's face and the vent hatch's lever;
+  - the R-124 A-2 and A-4 boxes on its doors;
+  - its rack's posts, brow, pipe and cable (`SL1M_FORWARD` in `build_cabin_interior.py`);
+  - the grey pillar beside its front end with its valve, and the web from the pillar to the wall with its covers and
+    gauge (`build_driver_units`, `build_cab_units`, `post_valve_panel`, `stowage_panel`).
+
+  The hull's turn-in (`CAB_Y`, 4.06, from the drawing, and SP-1M's too) stays. The rack's outboard corner sinks 9 mm into
+  the wall, and the web is cut to end at the wall (305 mm wide, was 315). The fire system's canister and its two lying
+  bottles move 20 mm along the corner wall, clear of the web. ФК's КОНТРОЛЬ СИСТЕМ and ПУСК — ИСХ. ПОЛОЖ. are now just out of the deputy commander's
+  seated reach, so he stands for them (`stand_for`, `test_crew_body.cpp`). The box now stands about 17 mm clear of the guidance column
+  (g095-b: about 15 mm). `tools/recon/osa/migrations/sl1m_forward_2026_11.py` made these changes.
+- **Unreal.** Build the C++; import `SM_PotCup`, `SM_PotBushing`, `SM_PotShaft`, `SM_CoverAstig`, `SM_CoverAstigPost`
+  (`ue_import_cabin_parts.py`); re-import `SM_RackSL1M`, `SM_DriverUnits`, `SM_FireSystem` and `T_Panel_op_panel`.
+
+## 64. АМПЛ. РАЗВ. ε, the elevation sweep's height (16 Nov 2026)
+
+The project owner asked for OS81-10M's third slotted potentiometer to work as in the real Osa.
+
+- **What the sources say.** voenizdat_osa_1991 p99 lists ГОРИЗ. СМЕЩ., ВЕРТ. СМЕЩ. and АМПЛ. РАЗВ. εс among the slots
+  that set up the indicator's picture. p86 says the elevation sweep is driven by a spiral potentiometer in the ε
+  mechanism. p100 says that turning the УГОЛ МЕСТА hand wheel moves the sweep. So the sweep's height on the screen
+  follows a voltage proportional to the antenna's elevation. АМПЛ. РАЗВ. sets that voltage's amplitude, which is the
+  picture's vertical scale. Nothing found says how far it turns the scale.
+- **SAM3D's reading.** `ScopePicture::sweep` (`PictureSweep`, `kPictureSweep` = 0.15) is 1 at the knob's middle and
+  0.85 to 1.15 at its ends (SAM3D's choice). `elev_search`'s `picture` names it (`"sweep": "fo.el_sweep"`).
+  `DrawElevationScope` scales the picture vertically about its own middle, which ВЕРТ. СМЕЩ. moves. The scaling covers
+  the beam's band, the raster's lines (as many, spread with it), the antenna's line and the echoes; the filter's
+  graticule stays. Mis-set, the picture reads high or low against the engraved marks, as a deflection amplifier's gain
+  would. What the tube writes is now clipped to its round face, so a shifted or stretched picture stays on the glass.
+- **Test.** `test_cabin.cpp` covers the knob's curve, the elevation scope's three slotted potentiometers, the range
+  indicator untouched, and the loader's check that a `sweep` is a knob that turns.
+- **The other parts marked with it** are live: ГОРИЗ. СМЕЩ. and ВЕРТ. СМЕЩ. move the picture (section 62). The ЗАХ. АПЧ I
+  lamp is lit by `ch1_apch_lock`, which `launcher.hpp` sets while channel I has a missile selected or in flight and
+  holds out for `relock_s` after a letter change (voenizdat_osa_1991 p150).

@@ -147,6 +147,26 @@ def trim(bm):
     box(bm, 0.0, 0.0, 0.27, 0.62, 0.1, 0.06)       # the slot's raised lips stand in for the cut
 
 
+def pot_cup(bm):
+    # A slotted potentiometer in a black cup, SŁ-2M's ВЕРТ. СМЕЩ. and ГОРИЗ. СМЕЩ. (samsim_panels at 10x: a black cup
+    # 27.6 mm across round a cream knurled bushing 19.6 mm across, the slotted shaft 8 mm across in it). The cup: its rim
+    # 3.3 mm proud of the plate, its floor 0.8 mm up (1 = the cup's diameter).
+    lathe(bm, [(0.0, 0.03), (0.42, 0.03), (0.42, 0.11), (0.46, 0.125), (0.5, 0.11), (0.5, 0.0), (0.0, 0.0)])
+
+
+def pot_bushing(bm):
+    # The cream knurled bushing on the cup's floor, a ring round the shaft.
+    lathe(bm, [(0.16, 0.03), (0.355, 0.03), (0.355, 0.15), (0.33, 0.165), (0.16, 0.165), (0.16, 0.03)], ribs=14,
+          rib_depth=0.08, rib_rows=(1, 2), cap=False)
+
+
+def pot_shaft(bm):
+    # The steel shaft, turned with the control, its screwdriver slot across +X (two lips with a gap between).
+    lathe(bm, [(0.0, 0.03), (0.145, 0.03), (0.145, 0.17), (0.0, 0.17)])
+    for y in (-0.065, 0.065):
+        box(bm, 0.0, y, 0.18, 0.2, 0.1, 0.02)
+
+
 def toggle_base(bm):
     # Hex nut on a threaded bushing.
     m = Matrix.Translation((0, 0, 0.08))
@@ -433,6 +453,7 @@ PARTS = [
     ('SM_HexNut', hex_nut, 0.0), ('SM_HexPusher', hex_pusher, 0.01),
     ('SM_Knob', knob, 0.012), ('SM_KnobPointer', knob_pointer, 0.012), ('SM_KnobBar', knob_bar, 0.012),
     ('SM_Trim', trim, 0.01),
+    ('SM_PotCup', pot_cup, 0.01), ('SM_PotBushing', pot_bushing, 0.006), ('SM_PotShaft', pot_shaft, 0.0),
     ('SM_ToggleBase', toggle_base, 0.015), ('SM_ToggleLever', toggle_lever, 0.0), ('SM_LampBezel', lamp_bezel, 0.01),
     ('SM_LampLens', lamp_lens, 0.0), ('SM_ButtonRing', button_ring, 0.01), ('SM_ButtonCap', button_cap, 0.0),
     ('SM_Jack', jack, 0.01), ('SM_Socket', socket, 0.01), ('SM_Latch', latch, 0.01), ('SM_LatchPlate', latch_plate, 0.006), ('SM_LatchCore', latch_core, 0.0),

@@ -8,6 +8,8 @@ screenshot per panel. Stops Play at the end.
     python tools/ue_panel_shot.py --out out/panels --distance 0.45 --fov 55 radio_i_panel
     python tools/ue_panel_shot.py --at -0.12,0.07 --distance 0.2 radio_right_panel      # close on a part of the panel
     python tools/ue_panel_shot.py --set rad1.preset=2 --set rad.listen=1 --wait 8 radio_i_panel
+    python tools/ue_panel_shot.py --wheel fo.el_vshift=0.9 fo_panel                     # turn a wheel (0..1) before the shot
+    python tools/ue_panel_shot.py --scale 10 --wait 400 fo_panel                         # let the crew power up first
 
 --set moves a control (as a script would) before the shot; --wait is the sim seconds to let pass after the sets.
 """
@@ -49,7 +51,10 @@ def main():
     parser.add_argument("--fov", type=float, default=60.0)
     parser.add_argument("--at", default="0,0", help="look at this point of the panel, u,v in metres from its centre")
     parser.add_argument("--set", action="append", default=[], metavar="CONTROL=POS")
+    parser.add_argument("--wheel", action="append", default=[], metavar="CONTROL=VALUE", help="set a wheel, 0..1")
     parser.add_argument("--wait", type=float, default=3.0, help="sim seconds to pass after the sets")
+    parser.add_argument("--scale", type=float, default=1.0, help="the sim's time scale while waiting (the NPC crew's "
+                                                                 "power-up done in less time)")
     parser.add_argument("--clean", action="store_true", help="hide the crew's bodies (a seated NPC's head stands between a "
                                                              "close camera and his panel); the HUD's text still shows")
     args = parser.parse_args()
@@ -68,10 +73,17 @@ def main():
             time.sleep(2)
             world = ("world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_game_world()\n"
                      "sim = [s for s in unreal.ObjectIterator(unreal.SimWorldSubsystem) if s.get_world() == world][0]\n")
+            if args.scale != 1.0:
+                ok, out = ue.run(world + f"sim.set_time_scale({args.scale})")
+                print(f"time scale {args.scale}")
             for item in args.set:
                 control, _, pos = item.partition("=")
                 ok, out = ue.run(world + f"print(sim.set_control_position({control!r}, {int(pos)}))")
                 print(f"set {control} = {pos}: {out.strip()}")
+            for item in args.wheel:
+                control, _, value = item.partition("=")
+                ok, out = ue.run(world + f"print(sim.set_wheel_value({control!r}, {float(value)}))")
+                print(f"wheel {control} = {value}: {out.strip()}")
             t0 = query(ue, lamps).get("t", 0)
             while query(ue, lamps).get("t", 0) < t0 + args.wait:
                 time.sleep(0.5)

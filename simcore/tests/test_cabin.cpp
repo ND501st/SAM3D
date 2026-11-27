@@ -179,7 +179,9 @@ SC_TEST("cabin: the Osa operators share the left-wall bench, guidance in front, 
         if (seat == nullptr || panel == nullptr) return;
         SC_EXPECT(seat->eye_m.x < 0.0 && panel->centre_m.x < seat->eye_m.x);    // left wall, panel in front of the seat
         SC_EXPECT_NEAR(seat->yaw_rad, DegToRad(-90.0), 1e-12);                  // facing the wall
-        SC_EXPECT_NEAR(panel->centre_m.y, seat->eye_m.y, 1e-9);                 // panel straight ahead
+        // Panel straight ahead. The guidance column grew 50 mm forward to its blocks (16 Nov 2026, g094-a), its centre
+        // 25 mm ahead of the deputy commander's seat, which stays where Fig. 3 has it.
+        SC_EXPECT_NEAR(panel->centre_m.y, seat->eye_m.y, 0.03);
         SC_EXPECT(seat->eye_m.y < previous_y);                                   // front to rear
         previous_y = seat->eye_m.y;
         // Close to the console: Fig. 3 leaves 0.19 m between the bench and SŁ-2M (the operators' knees touch the
@@ -1073,7 +1075,11 @@ SC_TEST("cabin: the range indicator's astigmatism, shift and gain by hand (voeni
     SC_EXPECT_NEAR(p.shift_x, 0.0, 1e-9);
     SC_EXPECT_NEAR(p.shift_y_2, 0.0, 1e-9);
     SC_EXPECT_NEAR(p.gain, 1.0, 1e-9);
-    // АСТИГМАТ. off its middle smears its own sweep as focus does; the shift knobs move their own sweep.
+    // АСТИГМАТ. lies under its cover: shut, the trimmer can't be reached.
+    console.panel.SetValue("ssc.astig_2", 0.65);
+    SC_EXPECT_NEAR(ScopePictureOf(*range, console.panel).blur_2, 0.0, 1e-9);
+    // Turned aside, АСТИГМАТ. off its middle smears its own sweep as focus does; the shift knobs move their own sweep.
+    console.panel.Set("ssc.astig_cover_2", 1);
     console.panel.SetValue("ssc.astig_2", 0.65);
     console.panel.SetValue("ssc.hshift_1", 1.0);
     console.panel.SetValue("ssc.vshift_2", 0.25);
@@ -1101,6 +1107,43 @@ SC_TEST("cabin: the range indicator's astigmatism, shift and gain by hand (voeni
     SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "s", "label": "S", "kind": "ppi", "panel": "p", "at_m": [0, 0],
         "size_m": [0.2, 0.2], "picture": { "gain_boost": "soc.gain" }, "source": "sam3d", "confidence": "estimate" } ])"),
                             "is not a switch"));
+}
+
+SC_TEST("cabin: OS81-10M's slotted potentiometers shift the elevation picture and set its sweep's height (voenizdat_osa_1991 p86, p99)") {
+    SC_EXPECT_NEAR(PictureSweep(0.5), 1.0, 1e-12);
+    SC_EXPECT_NEAR(PictureSweep(1.0), 1.0 + kPictureSweep, 1e-12);
+    SC_EXPECT_NEAR(PictureSweep(0.0), 1.0 - kPictureSweep, 1e-12);
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout osa;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, osa));
+    const CabinDisplay* elev = nullptr;
+    for (const CabinDisplay& d : osa.displays) {
+        if (d.id == "elev_search") elev = &d;
+    }
+    SC_EXPECT(elev != nullptr);
+    if (elev == nullptr) return;
+    SC_EXPECT(elev->picture.sweep == "fo.el_sweep");
+    // As set up: centred, the sweep as tall as the filter's marks.
+    ScopePicture p = ScopePictureOf(*elev, console.panel);
+    SC_EXPECT_NEAR(p.shift_x, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.shift_y, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.sweep, 1.0, 1e-9);
+    console.panel.SetValue("fo.el_sweep", 0.0);
+    console.panel.SetValue("fo.el_vshift", 0.75);
+    console.panel.SetValue("fo.el_hshift", 0.25);
+    p = ScopePictureOf(*elev, console.panel);
+    SC_EXPECT_NEAR(p.sweep, 1.0 - kPictureSweep, 1e-9);
+    SC_EXPECT_NEAR(p.shift_y, 0.5 * kPictureShift, 1e-9);
+    SC_EXPECT_NEAR(p.shift_x, -0.5 * kPictureShift, 1e-9);
+    // The range indicator has no sweep knob: its picture's height stays as set up.
+    for (const CabinDisplay& d : osa.displays) {
+        if (d.id == "ssc_range") SC_EXPECT_NEAR(ScopePictureOf(d, console.panel).sweep, 1.0, 1e-9);
+    }
+    // The loader: the sweep is a knob that turns.
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "s", "label": "S", "kind": "ppi", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.2, 0.2], "picture": { "sweep": "soc.mti" }, "source": "sam3d", "confidence": "estimate" } ])"),
+                            "is not a knob that turns"));
 }
 
 SC_TEST("cabin: ПРИБОРЫ lights the driver's fuel gauge and ОСВЕЩ. the guidance error meters") {

@@ -397,6 +397,7 @@ struct CabinPictureControls {
     std::string vshift;        // and up and down (ВЕРТ. СМЕЩ.; vshift_2)
     std::string hshift_2;
     std::string vshift_2;
+    std::string sweep;         // the elevation sweep's amplitude (АМПЛ. РАЗВ. ε): how tall the picture is
     std::vector<Condition> gain_when;  // the gain knob works only while these hold (controls only: РРУ, not АРУ);
                                        // otherwise the automatic gain control holds the set-up picture
     std::string gain_boost;    // a switch: off its first position the gain is raised (ДОП. УСИЛ.)
@@ -404,7 +405,7 @@ struct CabinPictureControls {
         return !(brightness.empty() && focus.empty() && contrast.empty() && marks.empty() && cursor.empty() && gain.empty() &&
                  scale_light.empty() && brightness_2.empty() && focus_2.empty() && gate.empty() && astig.empty() &&
                  astig_2.empty() && hshift.empty() && vshift.empty() && hshift_2.empty() && vshift_2.empty() &&
-                 gain_boost.empty());
+                 sweep.empty() && gain_boost.empty());
     }
 };
 
@@ -537,6 +538,7 @@ struct ScopePicture {
     double shift_y = 0.0;      // and up, a fraction of its height
     double shift_x_2 = 0.0;
     double shift_y_2 = 0.0;
+    double sweep = 1.0;        // the elevation sweep's height, times the set-up one (about the tube's middle)
 };
 
 // The curves (SAM3D's choice, not from a source; the sources say only what each knob is for): a brightness knob is dark
@@ -565,6 +567,12 @@ inline double PictureBlur(double k) {
 inline constexpr double kPictureShift = 0.1;
 inline constexpr double kPictureGainBoost = 1.5;
 inline double PictureShift(double k) { return (k - 0.5) * 2.0 * kPictureShift; }
+// АМПЛ. РАЗВ. ε (OS81-10M) sets the elevation sweep's amplitude: the vertical deflection the ε mechanism's spiral
+// potentiometer drives (voenizdat_osa_1991 p86, p99), so how far the picture stands up from the tube's middle for a given
+// elevation. At its middle the picture fills the engraved marks as set up; either end makes it 15% shorter or taller
+// (SAM3D's choice), and the beams, the antenna's line and the echoes then read against the filter's marks wrongly.
+inline constexpr double kPictureSweep = 0.15;
+inline double PictureSweep(double k) { return 1.0 + (k - 0.5) * 2.0 * kPictureSweep; }
 
 inline ScopePicture ScopePictureOf(const CabinDisplay& d, const ControlPanel& panel) {
     ScopePicture p;
@@ -599,6 +607,7 @@ inline ScopePicture ScopePictureOf(const CabinDisplay& d, const ControlPanel& pa
     if (!c.vshift.empty()) p.shift_y = PictureShift(knob(c.vshift));
     if (!c.hshift_2.empty()) p.shift_x_2 = PictureShift(knob(c.hshift_2));
     if (!c.vshift_2.empty()) p.shift_y_2 = PictureShift(knob(c.vshift_2));
+    if (!c.sweep.empty()) p.sweep = PictureSweep(knob(c.sweep));
     return p;
 }
 
@@ -1687,7 +1696,7 @@ private:
             CabinPictureControls& c = disp.picture;
             if (!Keys(*pic, p, {"brightness", "focus", "contrast", "marks", "cursor", "gain", "scale_light", "brightness_2",
                                 "focus_2", "gate", "astig", "astig_2", "hshift", "vshift", "hshift_2", "vshift_2",
-                                "gain_when", "gain_boost", "notes"}) ||
+                                "sweep", "gain_when", "gain_boost", "notes"}) ||
                 !OptionalString(*pic, p, "brightness", c.brightness) || !OptionalString(*pic, p, "focus", c.focus) ||
                 !OptionalString(*pic, p, "contrast", c.contrast) || !OptionalString(*pic, p, "marks", c.marks) ||
                 !OptionalString(*pic, p, "cursor", c.cursor) || !OptionalString(*pic, p, "gain", c.gain) ||
@@ -1696,7 +1705,7 @@ private:
                 !OptionalString(*pic, p, "astig", c.astig) || !OptionalString(*pic, p, "astig_2", c.astig_2) ||
                 !OptionalString(*pic, p, "hshift", c.hshift) || !OptionalString(*pic, p, "vshift", c.vshift) ||
                 !OptionalString(*pic, p, "hshift_2", c.hshift_2) || !OptionalString(*pic, p, "vshift_2", c.vshift_2) ||
-                !OptionalString(*pic, p, "gain_boost", c.gain_boost) ||
+                !OptionalString(*pic, p, "sweep", c.sweep) || !OptionalString(*pic, p, "gain_boost", c.gain_boost) ||
                 !LoadConditions(*pic, p, "gain_when", console.panel, console.equipment, c.gain_when)) {
                 return false;
             }
@@ -1713,7 +1722,8 @@ private:
                 {"brightness", &c.brightness}, {"focus", &c.focus}, {"contrast", &c.contrast}, {"marks", &c.marks},
                 {"cursor", &c.cursor}, {"gain", &c.gain}, {"scale_light", &c.scale_light}, {"brightness_2", &c.brightness_2},
                 {"focus_2", &c.focus_2}, {"gate", &c.gate}, {"astig", &c.astig}, {"astig_2", &c.astig_2},
-                {"hshift", &c.hshift}, {"vshift", &c.vshift}, {"hshift_2", &c.hshift_2}, {"vshift_2", &c.vshift_2}};
+                {"hshift", &c.hshift}, {"vshift", &c.vshift}, {"hshift_2", &c.hshift_2}, {"vshift_2", &c.vshift_2},
+                {"sweep", &c.sweep}};
             for (const auto& k : knobs) {
                 if (k.second->empty()) continue;
                 const ControlDef* def = console.panel.Find(*k.second);

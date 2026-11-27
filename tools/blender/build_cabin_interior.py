@@ -1411,20 +1411,30 @@ def rack_brow(b, X, side, top, ya, yb):
     prism(b, X, ya, yb, [(-0.14, top + 0.075 * f), (-0.03, top + 0.085 * f), (-0.022, top + 0.125 * f), (-0.06, top + 0.17 * f), (-0.22, ROOF_Z - 0.012)], 'Paint_Interior')
 
 
+# SŁ-2M's forward edge, where SŁ-1M's aft post, its brow and SŁ-2M's top rail meet: the guidance column's plate's forward
+# edge (fo_panel 2.225 + 0.33; widened 50 mm to its blocks on 16 Nov 2026, wwp_gecko g094-a; was 2.505)
+SL2M_FORWARD_Y = 2.555
+# SŁ-1M and what stands at its front end (its posts and top, the pillar beside it, the web from the pillar to the wall)
+# moved 40 mm forward of where Fig. 3 drew them (16 Nov 2026, the project owner's decision): the indicator box between
+# SŁ-2M and SŁ-1M stands at its measured place (g095-b, 2.597) clear of SŁ-1M's frame flange. CAB_Y, the hull's, stays.
+SL1M_FORWARD = 0.04
+
+
 def sl1m_top(b, X):
     """Over SŁ-1M (g091-a): the brow, the big pipe along its top going back to the roof, the cream cable on saddle clips, the small black
     plate, and the hatch's hanging arm in front of the rack's forward end. Places by eye along the rack's width, about +-5 cm."""
     top = FRONT_RACK_TOP_Z
-    rack_brow(b, X, -1, top, 2.505, 4.06)
-    pipe = [(X(-0.06), 3.99, 2.04), (X(-0.06), 3.55, 2.04), (X(-0.06), 3.48, 2.035), (X(-0.16), 3.12, 1.99), (X(-0.30), 2.92, 1.94)]
+    rack_brow(b, X, -1, top, SL2M_FORWARD_Y, 4.06 + SL1M_FORWARD)
+    f = SL1M_FORWARD                                 # the pipe, the cable and the plate move with the rack; the hatch's arm stays
+    pipe = [(X(-0.06), 3.99 + f, 2.04), (X(-0.06), 3.55 + f, 2.04), (X(-0.06), 3.48 + f, 2.035), (X(-0.16), 3.12 + f, 1.99), (X(-0.30), 2.92 + f, 1.94)]
     b.tube(pipe, 0.042, 'Paint_Interior', seg=16)
-    b.cylinder((X(-0.06), 3.54, 2.035), (X(-0.06), 3.49, 2.035), 0.05, 'Paint_Interior', seg=20)
+    b.cylinder((X(-0.06), 3.54 + f, 2.035), (X(-0.06), 3.49 + f, 2.035), 0.05, 'Paint_Interior', seg=20)
     z_cable = top + 0.08
-    b.tube([(X(-0.018), 3.66, z_cable + 0.01), (X(-0.02), 3.40, z_cable + 0.008), (X(-0.02), 3.05, z_cable - 0.005), (X(-0.02), 2.62, z_cable - 0.02)],
+    b.tube([(X(-0.018), 3.66 + f, z_cable + 0.01), (X(-0.02), 3.40 + f, z_cable + 0.008), (X(-0.02), 3.05 + f, z_cable - 0.005), (X(-0.02), 2.62 + f, z_cable - 0.02)],
            0.0035, 'Paint_LightGrey', seg=8)
     for yy, zz in ((3.60, z_cable + 0.01), (3.42, z_cable + 0.008), (3.22, z_cable + 0.002), (3.02, z_cable - 0.006), (2.82, z_cable - 0.012)):
-        b.box(X(-0.022), X(-0.012), yy - 0.008, yy + 0.008, zz - 0.009, zz + 0.009, 'Metal_Steel')
-    b.obox((X(-0.03), 3.39, top + 0.09), Vector((0, -1, 0)), Vector((0.05, 0, 1)).normalized(), Vector((1, 0, -0.05)).normalized(), (0.08, 0.06, 0.003), 'Bakelite_Black')
+        b.box(X(-0.022), X(-0.012), yy + f - 0.008, yy + f + 0.008, zz - 0.009, zz + 0.009, 'Metal_Steel')
+    b.obox((X(-0.03), 3.39 + f, top + 0.09), Vector((0, -1, 0)), Vector((0.05, 0, 1)).normalized(), Vector((1, 0, -0.05)).normalized(), (0.08, 0.06, 0.003), 'Bakelite_Black')
     arm0, arm1 = Vector((X(-0.06), 3.74, 2.035)), Vector((X(0.06), 3.58, 1.95))
     b.cylinder((X(-0.09), 3.74, 2.035), (X(-0.04), 3.74, 2.035), 0.05, 'Metal_Steel', seg=20)
     b.cylinder(arm0, arm1, 0.013, 'Paint_Interior', seg=12)
@@ -1440,7 +1450,7 @@ def sl2m_extra(b, X, zb=0.925, zr=2.140):
     """SŁ-2M's frame from g094-a: a top rail with a chamfer standing proud of the faces, the posts between the columns standing proud
     of them, a black name plate (СЛ-2М2 on the BM3, g095-a) on the rail over the middle column. The rail's foot at the top row's
     top (zr), 3 mm over the blocks, up to the lining (about 2.17 by g094-a's camera); widths by eye, about +-5 mm; the depth SAM3D's."""
-    ya, yb = 0.535, 2.505
+    ya, yb = 0.535, SL2M_FORWARD_Y
     b.box(X(-0.004), X(0.012), ya, yb, zr, left_roof_z(), 'Paint_Rack')
     prism(b, X, ya, yb, [(0.012, zr), (0.018, zr - 0.007), (0.0, zr - 0.013)], 'Paint_Rack', t=0.003)
     for yy in (1.8925, 1.2175):
@@ -2250,8 +2260,9 @@ def build_fire_system():
     g = corner_point(0.115, 0.06, 1.522)
     b.obox(corner_point(0.115, 0.045, 1.4885), r, z, n, (0.05, 0.007, 0.03), 'Paint_LightGrey')   # its foot
     b.cylinder(tuple(g - n * 0.03), tuple(g + n * 0.012), 0.029, 'Metal_Steel', seg=22)
-    # the pale canister aft of the box, standing on the wheel housing
-    c = corner_point(0.075, 0.06, 1.18)
+    # the pale canister aft of the box, standing on the wheel housing; it and the two lying bottles 20 mm further along
+    # the wall since the web by SŁ-1M's front end moved 40 mm forward (16 Nov 2026, SL1M_FORWARD): clear of it
+    c = corner_point(0.095, 0.06, 1.18)
     b.lathe(c, z, [(0.0, 0.0), (0.035, 0.0), (0.038, 0.01), (0.038, 0.17), (0.03, 0.185), (0.0, 0.19)], 'Paint_LightGrey', seg=20)
     # the 0-1 gauge's flange and body, forward of the box (fire_panel at u +0.10)
     g = face + r * 0.19 - z * 0.01
@@ -2261,7 +2272,7 @@ def build_fire_system():
     bottle = [(0.0, 0.0), (0.03, 0.0), (0.05, 0.02), (0.055, 0.05), (0.055, 0.30), (0.05, 0.33), (0.03, 0.35), (0.0, 0.352)]
     feet = []
     for d_, zz in ((0.07, 1.24), (0.195, 1.215)):
-        p0 = corner_point(0.11, d_, zz)
+        p0 = corner_point(0.13, d_, zz)
         b.lathe(p0, r, bottle, 'Metal_Dark', seg=24)
         b.cylinder(tuple(p0 + r * 0.352), tuple(p0 + r * 0.38), 0.016, 'Metal_Brass', seg=12)       # the valve head
         for t_ in (0.08, 0.27):                                                                   # the cradle's straps
@@ -2374,7 +2385,7 @@ def build_cab_units(layout):
         c = f - z * 0.065 + r * (0.06 * s) - n * 0.04
         b.cylinder(tuple(c), tuple(c - z * 0.03), 0.011, 'Metal_Steel', seg=12)
     n, r, z = _frame(90)                                        # the valve on the left front post
-    f = Vector((-1.0, 4.0, 1.78))
+    f = Vector((-1.0, 4.0 + SL1M_FORWARD, 1.78))
     b.obox(f - n * 0.03, r, z, n, (0.06, 0.06, 0.06), 'Paint_LightGrey')
     b.obox(f - n * 0.002 - z * 0.17, r, z, n, (0.09, 0.05, 0.004), 'Bakelite_Black')          # its plate
     well = next(p for p in layout['panels'] if p['id'] == 'radio_well_panel')
@@ -2405,33 +2416,34 @@ def build_driver_units():
            'Metal_Dark', seg=10)
     # the pillar: a grey box-section column from the wheel housing's height to the roof, off SŁ-1M's front post
     n, r, z = _frame(90)
-    b.obox(Vector((-1.05, 4.0, 1.64)), r, z, n, (0.06, 0.92, 0.09), 'Paint_LightGrey')
-    jb = Vector((-0.985, 4.0, 1.97))                                       # the junction box and its glands
+    b.obox(Vector((-1.05, 4.0 + SL1M_FORWARD, 1.64)), r, z, n, (0.06, 0.92, 0.09), 'Paint_LightGrey')
+    jb = Vector((-0.985, 4.0 + SL1M_FORWARD, 1.97))                                       # the junction box and its glands
     b.obox(jb - n * 0.02, r, z, n, (0.08, 0.10, 0.04), 'Paint_LightGrey')
     for dy in (-0.022, 0.022):
         b.cylinder(tuple(jb + Vector((0.0, dy, -0.05))), tuple(jb + Vector((0.0, dy, -0.072))), 0.009, 'Metal_Steel', seg=10)
     b.cylinder(tuple(jb), tuple(jb + n * 0.012), 0.018, 'Bakelite_Black', seg=16)
-    ring = Vector((-1.0, 4.0, 1.47))                                       # the flat ring bracket, open on its inboard side
+    ring = Vector((-1.0, 4.0 + SL1M_FORWARD, 1.47))                                       # the flat ring bracket, open on its inboard side
     b.torus(ring + n * 0.035, z, 0.045, 0.006, 'Metal_Steel', seg=28, rseg=6)
     b.obox(ring + n * 0.004, r, z, n, (0.03, 0.03, 0.01), 'Metal_Steel')
     # the web between the hull wall and the pillar, its face forward (u x v = +y), the holes and covers in it
-    o = Vector((-1.005, 4.065, 1.18))
+    o = Vector((-1.005, 4.065 + SL1M_FORWARD, 1.18))
     u, v = Vector((-1.0, 0.0, 0.0)), Vector((0.0, 0.0, 1.0))
     holes = [rrect(0.145, 0.62, 0.13, 0.13, 0.0649, seg=10), rrect(0.145, 0.79, 0.11, 0.11, 0.0549, seg=10)]
-    b.slab(tuple(o), u, v, [(0.0, 0.0), (0.315, 0.0), (0.315, 0.90), (0.0, 0.90)], holes, 0.006, 'Paint_Interior')
+    web = WALL_X - (WALL_X - BOW_X) * (o.y - CAB_Y) / (BOW_Y - CAB_Y) + o.x   # out to the wall, which turns in from CAB_Y
+    b.slab(tuple(o), u, v, [(0.0, 0.0), (web, 0.0), (web, 0.90), (0.0, 0.90)], holes, 0.006, 'Paint_Interior')
     for zc, h in ((1.535, 0.15), (1.33, 0.15)):                           # the stowage covers and their hinges
-        cv = Vector((-1.15, 4.074, zc))
+        cv = Vector((-1.15, 4.074 + SL1M_FORWARD, zc))
         b.obox(cv, u, v, Vector((0, 1, 0)), (0.17, h, 0.006), 'Paint_Rack')
         b.cylinder(tuple(cv + Vector((0.085, 0.004, -h / 2 + 0.01))), tuple(cv + Vector((0.085, 0.004, h / 2 - 0.01))), 0.005,
                    'Metal_Steel', seg=8)
-    g = Vector((-1.272, 4.07, 1.222))                                     # the small gauge low on the outboard side
+    g = Vector((-1.272, 4.07 + SL1M_FORWARD, 1.222))                                     # the small gauge low on the outboard side
     b.cylinder(tuple(g), tuple(g + Vector((0, 0.025, 0))), 0.024, 'Metal_Steel', seg=18)
     return finish(b, bevel=0.0012)
 
 
 def build_all(layout):
     objs = [build_hull(), build_glass()]
-    objs.append(build_rack('SM_RackSL1M', layout, ['gyro_panel'], -1, [(3.96, 4.06), (2.505, 2.65)], 'wall',
+    objs.append(build_rack('SM_RackSL1M', layout, ['gyro_panel'], -1, [(3.96 + SL1M_FORWARD, 4.06 + SL1M_FORWARD), (SL2M_FORWARD_Y, 2.65 + SL1M_FORWARD)], 'wall',
                            extra=sl1m_extra, stops_at_frame=True, hinge_ends=(False, True)))   # the ПАНЕЛЬ ИНДИКАЦИИ stands on the aft post (g095-b)
     objs.append(build_rack('SM_RackSL2M', layout, ['fo_panel', 'so_panel', 'op_panel'], -1, [], 'kick',
                            extra=lambda b, X: (sl2m_extra(b, X), sl2m_housings(b, layout)), roof_z=left_roof_z(),

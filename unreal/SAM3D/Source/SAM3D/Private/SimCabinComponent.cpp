@@ -692,6 +692,22 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		Item.Moving->SetStaticMesh(PartMesh(KnobPart(Control.look.kind)));
 		Item.Pointer->SetVisibility(false);
 		Item.bParts = true;
+		if (Control.look.kind == simcore::CabinLookKind::Trim && !Control.look.ring.empty() && PartMesh(TEXT("SM_PotCup")) &&
+			PartMesh(TEXT("SM_PotBushing")) && PartMesh(TEXT("SM_PotShaft")))
+		{
+			// A slotted potentiometer in its cup (SŁ-2M's ВЕРТ. СМЕЩ., ГОРИЗ. СМЕЩ.: samsim_panels): the cup in the ring's
+			// colour, the knurled bushing in the look's colour, the steel shaft with its slot turned with the value.
+			const double Cup = Control.look.width_m > 0.0 ? Control.look.width_m : 0.027;
+			PartBase = PartMesh(TEXT("SM_PotCup"));
+			PartBaseSize = Cup;
+			Item.LookWidthM = Cup;
+			Item.BaseColor = LookColor(Control.look.ring, DarkColor);
+			Place(AddDecor(PartMesh(TEXT("SM_PotBushing")), Item.MovingColor), Item.Location,
+				PartRotation(Item.Normal, Item.Up), FVector(Cup));
+			Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_PotShaft")));
+			Item.MovingColor = ChromeColor;
+			Paint(Item.Moving, Item.MovingColor);
+		}
 	}
 	else if (Control.style == simcore::CabinStyle::Wheel && PartMesh(TEXT("SM_WheelDish")) && PartMesh(TEXT("SM_WheelHandle")))
 	{

@@ -8,6 +8,7 @@ crash the editor's mesh builder). Run the art builders first:
     python tools/ue_import_cabin_interior.py              # everything
     python tools/ue_import_cabin_interior.py textures materials   # or some of: textures materials meshes
     python tools/ue_import_cabin_interior.py meshes --only SM_RadioR123M   # only the named meshes (comma-separated)
+    python tools/ue_import_cabin_interior.py textures --only T_Panel_fo_panel   # or only the named textures
 
 1. textures: art/cabin_textures/*.png -> /Game/SAM3D/Cabin/Textures (normal maps as normal maps, the grime masks
    linear, the panel faces sRGB colour).
@@ -105,6 +106,8 @@ def import_files(files, dest, options=None):
 
 def textures():
     files = sorted(glob.glob(os.path.join(%(repo)r, 'art', 'cabin_textures', '*.png')))
+    if ONLY:
+        files = [f for f in files if os.path.splitext(os.path.basename(f))[0] in ONLY]
     import_files(files, TEX)
     for f in files:
         name = os.path.splitext(os.path.basename(f))[0]

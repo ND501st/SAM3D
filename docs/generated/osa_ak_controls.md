@@ -4,16 +4,16 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 
 | State | Meaning | Controls |
 |---|---|---|
-| wired | drives a subsystem or the launch | 75 |
+| wired | drives a subsystem or the launch | 77 |
 | model | read by a simulation model | 130 |
-| display | sets a screen's picture or what a meter reads | 30 |
+| display | sets a screen's picture or what a meter reads | 33 |
 | indicator | only lights a lamp or turns on a display | 7 |
 | code | named by simcore's source or a system file, not by the console | 0 |
 | drill | worked in a drill, lesson or readiness state; changes nothing | 3 |
 | inert | nothing names it | 26 |
-| **all** | | **271** |
+| **all** | | **276** |
 
-## wired (75): drives a subsystem or the launch
+## wired (77): drives a subsystem or the launch
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
@@ -58,6 +58,8 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | op_panel | АВТОМАТ | `ro.auto` | Operator | SSC range tracking by the radar (ПОЛУАВТОМАТ, АВТОМАТ) |
 | op_panel | РУЧНОЕ | `ro.manual` | Operator | SSC range tracking by the radar (ПОЛУАВТОМАТ, АВТОМАТ) |
 | op_panel | ПОЛУАВТОМАТ | `ro.semi_auto` | Operator | SSC range tracking by the radar (ПОЛУАВТОМАТ, АВТОМАТ) |
+| op_panel | cover over АСТИГМАТ. I | `ssc.astig_cover_1` | Operator | nothing |
+| op_panel | cover over АСТИГМАТ. II | `ssc.astig_cover_2` | Operator | nothing |
 | op_panel | ПЕРЕДАТЧИК | `ssc.tx` | Operator | SSC range tracking by the radar (ПОЛУАВТОМАТ, АВТОМАТ); SSC transmitter radiating |
 | op_panel | guard over ПЕРЕДАТЧИК | `ssc.tx_cover` | Operator | nothing |
 | pu303_panel | ПИТАНИЕ УПРАВЛЕНИЯ (control power) | `gta.control_power` | Driver | The gas turbine's hatches open; ДАВЛ. МАСЛА; ЛЮКИ ЗАКР.; ЛЮКИ ОТКР.; НАГРУЗКИ ГОМ; НАГРУЗКИ ГТА; НАГРУЗКИ ИВП; ОБРАТ. ЧЕРЕД.; ОБРЫВ ФАЗ; ПИТАНИЕ УПРАВЛЕНИЯ; ПОДСВЕТКА (left); ПОДСВЕТКА (right); ПР ВС |
@@ -228,13 +230,16 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | vent_hatch_left | ЛЮК ВЕНТИЛЯЦИИ ЗАКР. — ОТКР. (left) | `vent.hatch_left` | Deputy commander | Climate: the cabin, racks and transmitters' heat; ЛЮКИ РТА ЗАКРЫТЫ |
 | vent_hatch_right | ЛЮК ВЕНТИЛЯЦИИ ЗАКР. — ОТКР. (right) | `vent.hatch_right` | Commander | Climate: the cabin, racks and transmitters' heat; ЛЮКИ РТА ЗАКРЫТЫ |
 
-## display (30): sets a screen's picture or what a meter reads
+## display (33): sets a screen's picture or what a meter reads
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
 | fo_panel | ЯРКОСТЬ (ε) | `fo.el_bright` | Deputy commander | Elevation-search indicator OS81-10M |
 | fo_panel | КОНТРАСТ (ε) | `fo.el_contrast` | Deputy commander | Elevation-search indicator OS81-10M |
 | fo_panel | ФОКУС (ε) | `fo.el_focus` | Deputy commander | Elevation-search indicator OS81-10M |
+| fo_panel | ГОРИЗ. СМЕЩ. (ε) | `fo.el_hshift` | Deputy commander | Elevation-search indicator OS81-10M |
+| fo_panel | АМПЛ. РАЗВ. ε | `fo.el_sweep` | Deputy commander | Elevation-search indicator OS81-10M |
+| fo_panel | ВЕРТ. СМЕЩ. (ε) | `fo.el_vshift` | Deputy commander | Elevation-search indicator OS81-10M |
 | fo_panel | ЯРКОСТЬ (ВПУ) | `tov.bright` | Deputy commander | TOV monitor |
 | fo_panel | КОНТРАСТ (ВПУ) | `tov.contrast` | Deputy commander | TOV monitor |
 | fo_panel | ПЕРЕКРЕСТ | `tov.cross` | Deputy commander | TOV monitor |
