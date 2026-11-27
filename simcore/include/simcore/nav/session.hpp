@@ -39,6 +39,7 @@ struct VisualRangeValues {
     double twilight_m = 3000.0;
     double night_m = 1500.0;
     double night_blackout_m = 150.0;  // a vehicle under full blackout at night: only its masked lamps (optional in the file)
+    double moonlit_m = 0.0;  // a night under a full moon high (roadmap S8); 0: the night's range whatever the moon
     double twilight_deg = 6.0;
     double margin = 0.1;
 };
@@ -51,9 +52,10 @@ public:
         if (!Keys(root, "", {"visual_range_id", "status", "notes", "source", "confidence", "values"}) || !Provenance(root, "")) return false;
         const json::Value* values = root.Find("values");
         if (values == nullptr) return Fail("values", "required");
-        const std::pair<const char*, double*> each[] = {{"day_m", &out.day_m}, {"twilight_m", &out.twilight_m}, {"night_m", &out.night_m},
+        const std::pair<const char*, double*> each[] = {{"day_m", &out.day_m},         {"twilight_m", &out.twilight_m},
+                                                        {"night_m", &out.night_m},     {"moonlit_m", &out.moonlit_m},
                                                         {"twilight_deg", &out.twilight_deg}, {"margin", &out.margin}};
-        if (!Keys(*values, "values", {"day_m", "twilight_m", "night_m", "night_blackout_m", "twilight_deg", "margin"})) return false;
+        if (!Keys(*values, "values", {"day_m", "twilight_m", "night_m", "moonlit_m", "night_blackout_m", "twilight_deg", "margin"})) return false;
         if (values->Find("night_blackout_m") != nullptr) {
             const std::string p = Join("values", "night_blackout_m");
             const json::Value* v = values->Find("night_blackout_m");
@@ -65,7 +67,10 @@ public:
         for (const auto& e : each) {
             const std::string p = Join("values", e.first);
             const json::Value* v = values->Find(e.first);
-            if (v == nullptr) return Fail(p, "required");
+            if (v == nullptr) {
+                if (std::string(e.first) == "moonlit_m") continue;  // optional (S8)
+                return Fail(p, "required");
+            }
             if (!Keys(*v, p, {"value", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
             const json::Value* n = v->Find("value");
             if (n == nullptr || !n->Is(json::Type::Number) || !(n->number > 0.0)) return Fail(Join(p, "value"), "a number > 0");
@@ -98,14 +103,17 @@ inline bool LoadVisualRange(const std::string& data_dir, const std::string& rel,
 }
 
 // How far a vehicle on the ground is seen: the light's range by the sun's elevation, capped by the weather's visibility.
-inline double VisualRangeM(double visibility_m, double sun_elevation_deg, const VisualRangeValues& v) {
-    const double light = sun_elevation_deg >= 0.0 ? v.day_m : sun_elevation_deg >= -v.twilight_deg ? v.twilight_m : v.night_m;
+// At night the moon (light.hpp's moon_share, 0 none to 1 a full moon high) carries it from night_m towards moonlit_m.
+inline double VisualRangeM(double visibility_m, double sun_elevation_deg, const VisualRangeValues& v, double moon_share = 0.0) {
+    double night = v.night_m;
+    if (v.moonlit_m > 0.0 && moon_share > 0.0) night += (v.moonlit_m - v.night_m) * (moon_share > 1.0 ? 1.0 : moon_share);
+    const double light = sun_elevation_deg >= 0.0 ? v.day_m : sun_elevation_deg >= -v.twilight_deg ? v.twilight_m : night;
     return std::max(0.0, std::min(light, visibility_m));
 }
 // The same for a vehicle with no lights on (blackout, roadmap C2): by night only its masked lamps, seen from the next in
 // the column; by day and at dusk as any other.
-inline double VisualRangeUnlitM(double visibility_m, double sun_elevation_deg, const VisualRangeValues& v) {
-    const double lit = VisualRangeM(visibility_m, sun_elevation_deg, v);
+inline double VisualRangeUnlitM(double visibility_m, double sun_elevation_deg, const VisualRangeValues& v, double moon_share = 0.0) {
+    const double lit = VisualRangeM(visibility_m, sun_elevation_deg, v, moon_share);
     return sun_elevation_deg >= -v.twilight_deg ? lit : std::min(lit, v.night_blackout_m);
 }
 

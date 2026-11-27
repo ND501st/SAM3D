@@ -1561,6 +1561,9 @@ public:
 	bool SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why, const FString& Vehicle = FString());
 	/** Network client: overwrite the local console with the server's snapshot if it is newer than Seq. */
 	bool ApplyConsoleSnapshot(const TArray<uint8>& Bytes, uint32& Seq);
+	/** Network client: the server's sky clock (its start hour, day and year) and its sim time, sent with the console
+	 *  (roadmap S8, docs/MULTIPLAYER.md): the sky and the light are the server's, whatever this machine was launched with. */
+	void ApplyServerSky(double StartLocalHours, int32 DayOfYear, int32 Year, double ServerSimSeconds);
 	/** Server: console snapshots and seat procedures to seated players (called after the sim steps). */
 	void PumpConsole();
 	/** The ground check's second (StartGroundCheck), after the steps. */
@@ -1755,8 +1758,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
 	bool GetSunNow(double& ElevationDeg, double& AzimuthDeg, bool& bDaylight, float& NightShare) const;
 
-	/** The scenario's sky clock (its place, date, clock offset and start hour), for the sky actor to turn the same sun. */
+	/** The scenario's sky clock (its place, date, clock offset and start hour), for the sky actor to turn the same sun. On a
+	 *  network client, the server's (its start hour may be another than this machine's -SimTime gave, roadmap S8). */
 	bool GetSkyClock(simcore::SkyClock& Out) const;
+
+	/** The session second the sky stands at: the sim time, or on a network client (which never steps) the server's, as it
+	 *  last sent it with the console (roadmap S8). */
+	double GetSkyTimeSeconds() const;
 
 	/** The moment being drawn: sim time plus the fixed step's leftover in the accumulator (between two steps); the sim
 	 *  time itself when paused, finished or on a network client (which never steps). */
@@ -1947,4 +1955,8 @@ private:
 	TArray<TWeakObjectPtr<USimCrewSeatComponent>> CrewSeats;
 	TWeakObjectPtr<USimCrewSeatComponent> LocalCrewSeat;
 	double LastConsoleSimTime = -1.0;
+	// The server's sky on a network client (roadmap S8): set by ApplyServerSky, cleared by a new scenario.
+	bool bHasServerSky = false;
+	simcore::SkyClock ServerSky;
+	double ServerSkySeconds = 0.0;
 };

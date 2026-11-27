@@ -208,7 +208,7 @@ Deterministic for a seed. `examples/air_war_demo.cpp` runs it end to end.
 
 Generic simcore models (used by the demo, not by the Osa's outcomes):
 
-- Aircraft: constant airspeed, turn-rate limited, and they fly straight lines in ENU, so they drift in true altitude over long distances. With a scenario's "weather" they drift with the wind and crab to hold their track (`weather.hpp`); missiles ignore the wind.
+- Aircraft (`aircraft.hpp`, roadmap R3): an aircraft given its type's limits (the air war's types) is a point mass flown by bank-to-turn, within its g limit and roll rate, its speed traded in climbs and lost in turns harder than its sustained one; a helicopter leans its nose down to fly forward and has no energy model yet. One without them (the hand-made scenarios) flies the old way, constant airspeed and turn-rate limited, with a bank shown for the drawing only. Both fly straight lines in ENU, so they drift in true altitude over long distances. With a scenario's "weather" they drift with the wind and crab to hold their track (`weather.hpp`); missiles ignore the wind.
 - Cloud blocks only the TV sight (and its EM-layer optical sensor is not yet told: `em/optical.hpp` is, through the engagement model). The map's woods and buildings block line of sight and radio paths as clutter heights (E9 in R6, `docs/EM_ARCHITECTURE.md` section 27), sampled from 50 m and 25 m grids; the country's own ground (`CountryGround`) has none.
 - Demo missile (`missile.hpp`): PN only, perfect target knowledge, no autopilot lag or noise, constant Cd,
   deterministic kill radius. The scenario path doesn't fly a missile; the engagement model resolves launches.
@@ -258,7 +258,9 @@ roadmap phase 6:
   the range goes back to the hand. Not modelled: the SOC's СА against non-synchronous pulses (no such interference
   in the EM layer), the anti-radiation missile threat. (6.7, 9.1, 9.4)
 - Targets: terrain following, low strike runs, pop-up helicopters and evasion on launch or lock are scenario behaviours
-  (9.3); the aircraft is still a constant-speed, turn-rate-limited point (no energy, no g limit).
+  (9.3); a target given its type's limits flies by bank-to-turn with an energy model (R3), one without them is still a
+  constant-speed, turn-rate-limited point. The terrain-following height is still set after the step, not flown as a
+  path angle; a damaged aircraft keeps its g and acceleration.
 - Power: GTA, take-off generator and an external supply; a prepared position's grid, cut and diesel set are a scenario
   block (7.6), and so are emplacements, nets and dummy positions (drawn in Unreal: `ASimPositionWork`). The tank's level
   shows on the driver's fuel gauge (7.4); the drive's own consumption is not modelled. No smoke generators.

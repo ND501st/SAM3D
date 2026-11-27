@@ -232,7 +232,7 @@ private:
                             "low_altitude_check", "antenna_height_m", "min_range_m", "max_range_m", "min_elevation_deg",
                             "max_elevation_deg", "range_sigma_floor_m", "angle_sigma_floor_deg", "monopulse_slope",
                             "range_resolution_m", "mti", "clutter", "tracker", "track_gate_m", "max_slew_deg_s", "iff", "sa_loss_db",
-                            "eccm", "low_target_elevation_deg", "source", "confidence", "notes"})) {
+                            "eccm", "low_target_elevation_deg", "airborne", "look_down_db", "source", "confidence", "notes"})) {
             return false;
         }
         RadarDef d;
@@ -262,9 +262,11 @@ private:
             !Val(v, path, "range_resolution_m", d.range_resolution_m, false) ||
             !Val(v, path, "track_gate_m", d.track_gate_m, false) ||
             !Val(v, path, "max_slew_deg_s", d.max_slew_rad_s, false, kDeg) ||
-            !Val(v, path, "low_target_elevation_deg", d.low_target_elevation_rad, false, kDeg)) {
+            !Val(v, path, "low_target_elevation_deg", d.low_target_elevation_rad, false, kDeg) ||
+            !Val(v, path, "look_down_db", d.look_down_db, false) || !OptionalBool(v, path, "airborne", d.airborne)) {
             return false;
         }
+        if (d.look_down_db < 0.0 || d.look_down_db > 80.0) return Fail(Join(path, "look_down_db"), "must be in 0 .. 80 dB");
         const json::Value* cal = v.Find("calibration");
         if (cal == nullptr) return Fail(Join(path, "calibration"), "required: the published range the radar is fitted to");
         if (!LoadAnchor(*cal, Join(path, "calibration"), d.calibration)) return false;

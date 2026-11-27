@@ -266,6 +266,10 @@ struct RegimentMessage {
     std::string road_crossing;  // the crossing on the session's roads ("" none)
     bool road_down = false;
     std::string road_entry;     // the entry's id (the bridge's damage it stands for)
+    int own_air_notice = 0;     // a notice of our aircraft (roadmap B10): its number among the session's, from 1 (0 none)
+    // The sky's sharing in the battery's sector (track F, F4.4): heard, the battery's plan of cooperation is told it.
+    int sharing = -1;           // 0 by zones, 1 one zone by height (command::CooperationMethod); -1 none
+    double sharing_split_m = 0.0;  // one zone: the split height, when the plan has none
 };
 
 struct RadioPlan {

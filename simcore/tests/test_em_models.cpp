@@ -86,17 +86,101 @@ SC_TEST("em propagation: two ridges cost more than the higher one alone (Deygout
     std::printf("    VHF: one ridge %.1f dB, two %.1f dB; 6 GHz: %.1f, %.1f dB\n", l_one, l_both, DiffractionLossDb(one, 6e9),
                 DiffractionLossDb(both, 6e9));
     SC_EXPECT(l_both > l_one + 5.0);
-    // the sum is exactly the three knife edges: J(main) + J(sub a) + J(sub b)
+    // the terrain's edges are exactly the three knife edges: J(main) + J(sub a) + J(sub b); the spherical earth's term (20 km
+    // is past the 18 km horizon of two 5 m masts) comes on top of them, never in place of them (P.526 eq. 66)
     const double k = std::sqrt(2.0 / WavelengthOf(50e6));
     double expect = KnifeEdgeLossDb(both.worst_v_geometry * k);
     if (both.sub_v_geometry_a > -1e8) expect += KnifeEdgeLossDb(both.sub_v_geometry_a * k);
     if (both.sub_v_geometry_b > -1e8) expect += KnifeEdgeLossDb(both.sub_v_geometry_b * k);
-    SC_EXPECT_NEAR(l_both, expect, 1e-9);
+    SC_EXPECT_NEAR(TerrainEdgesLossDb(both, 50e6), expect, 1e-9);
+    SC_EXPECT(l_both >= expect - 1e-9);
     // a path the main edge does not block has no sub-edges
     const PathGeometry high = AnalysePath(TwoRidges(300.0), Vec3{0.0, 0.0, 900.0}, 900.0, Vec3{20000.0, 0.0, 900.0}, 900.0, 50.0);
     SC_EXPECT(high.line_of_sight && high.sub_v_geometry_a < -1e8 && high.sub_v_geometry_b < -1e8);
     // a single ridge is unchanged: the old single-edge value (test above)
     SC_EXPECT(one.sub_v_geometry_a < -1e8 || one.sub_v_geometry_b < -1e8 || DiffractionLossDb(one, 50e6) > 0.0);
+}
+
+SC_TEST("em propagation: the smooth spherical earth's terms against hand calculations (ITU-R P.526-16 section 3.1.1)") {
+    // F(X), eqs. (17a) and (17b), and their join at X = 1.6.
+    SC_EXPECT_NEAR(SphericalDistanceTermDb(2.0), 11.0 + 10.0 * std::log10(2.0) - 35.2, 1e-9);  // -21.190
+    SC_EXPECT_NEAR(SphericalDistanceTermDb(1.0), -5.6488, 1e-9);
+    SC_EXPECT_NEAR(SphericalDistanceTermDb(1.6 - 1e-9), SphericalDistanceTermDb(1.6), 0.01);  // -15.1188 and -15.1182
+    // G(Y), eqs. (18), (18a): B = 3 gives 17.6 sqrt(1.9) - 5 log10(1.9) - 8 = 14.866; B = 1 gives 20 log10(1.1) = 0.828; the
+    // two forms meet within 0.02 dB at B = 2; the floor 2 + 20 log10 K holds for an antenna on the ground.
+    SC_EXPECT_NEAR(SphericalHeightGainDb(3.0, 1.0, 0.01), 14.8662, 1e-3);
+    SC_EXPECT_NEAR(SphericalHeightGainDb(1.0, 1.0, 0.01), 0.8279, 1e-3);
+    SC_EXPECT_NEAR(SphericalHeightGainDb(2.0, 1.0, 0.01), SphericalHeightGainDb(2.0 + 1e-9, 1.0, 0.01), 0.02);
+    SC_EXPECT_NEAR(SphericalHeightGainDb(1e-4, 1.0, 0.02), 2.0 + 20.0 * std::log10(0.02), 1e-9);
+    // K, eqs. (11a), (12a), for Fig. 2's land (epsilon 15, sigma 1e-3) at 100 MHz, ae 8,500 km: horizontal 0.00102, vertical
+    // 0.0152 (the figure's curves read about 0.001 and 0.015 there); beta (eq. 16) is 1 to a thousandth, as section 3.1.1.2 says
+    // for vertical polarisation above 20 MHz over land.
+    SC_EXPECT_NEAR(SurfaceAdmittanceK(100.0, 8500.0, false), 0.0010157, 2e-6);
+    SC_EXPECT_NEAR(SurfaceAdmittanceK(100.0, 8500.0, true), 0.015236, 2e-5);
+    SC_EXPECT_NEAR(SphericalBeta(SurfaceAdmittanceK(30.0, 8500.0)), 1.0, 2e-3);
+    // The first term by hand (eqs. 13-18): 50 MHz, a 3 m whip and a listener at 8,000 m, 500 km apart over ae 8,500 km.
+    // K_V 0.019198, beta 0.998933; X = 2.188 beta 50^(1/3) 8500^(-2/3) 500 = 9.6664, F = -149.276; Y1 = 0.019083, G(Y1) =
+    // -34.40 below its floor 2 + 20 log10 K = -32.335; Y2 = 50.887, G(Y2) = 107.634. 20 log10(E/E0) = -73.976 dB.
+    SC_EXPECT_NEAR(SphericalFirstTermDb(500e3, 3.0, 8000.0, 50e6, 8500e3), -73.976, 0.005);
+    SC_EXPECT_NEAR(SphericalEarthLossDb(500e3, 3.0, 8000.0, 50e6, 8500e3), 73.976, 0.005);
+}
+
+SC_TEST("em propagation: the smooth spherical earth for any distance (ITU-R P.526-16 section 3.2)") {
+    const double ae = 8500e3;
+    // Well inside the horizon with the first Fresnel zone clear: no loss (eq. 23).
+    SC_EXPECT_NEAR(SphericalEarthLossDb(10e3, 100.0, 100.0, 100e6, ae), 0.0, 1e-12);
+    // At the marginal line of sight (eq. 21) the interpolation (eqs. 24-25: clearance 0, the notional radius the real one)
+    // meets the first term: no step at the horizon.
+    const double d_los = std::sqrt(2.0 * ae) * (std::sqrt(3.0) + std::sqrt(8000.0));
+    const double in = SphericalEarthLossDb(d_los - 1.0, 3.0, 8000.0, 50e6, ae);
+    const double out = SphericalEarthLossDb(d_los + 1.0, 3.0, 8000.0, 50e6, ae);
+    std::printf("    3 m to 8,000 m at 50 MHz: horizon %.1f km, loss %.2f dB just inside, %.2f dB just past\n", d_los / 1e3, in, out);
+    SC_EXPECT_NEAR(in, out, 0.05);
+    // Past it the loss grows with distance, a few tenths of a dB a km at 50 MHz; short of it it falls towards zero.
+    double last = 0.0;
+    for (double d = 100e3; d <= 700e3; d += 50e3) {
+        const double l = SphericalEarthLossDb(d, 3.0, 8000.0, 50e6, ae);
+        SC_EXPECT(l >= last - 1e-9);
+        last = l;
+    }
+    SC_EXPECT(SphericalEarthLossDb(450e3, 3.0, 8000.0, 50e6, ae) > SphericalEarthLossDb(380e3, 3.0, 8000.0, 50e6, ae) + 15.0);
+    // Below 10 MHz section 3 sends the user to P.368: none here.
+    SC_EXPECT_NEAR(SphericalEarthLossDb(500e3, 3.0, 8000.0, 5e6, ae), 0.0, 1e-12);
+}
+
+SC_TEST("em propagation: past the horizon the smooth earth takes over from the one knife edge over the bulge (ITU-R P.526-16 eq. 66)") {
+    const FlatTerrain flat(0.0);
+    // A 3 m whip and a listening aircraft at 8,000 m, 670 km apart, at 50 MHz: the bulge's single knife edge lost about 24 dB;
+    // the smooth earth past the 376 km horizon loses over a hundred.
+    const PathGeometry g = AnalysePath(flat, Vec3{0.0, 0.0, 3.0}, 3.0, Vec3{0.0, 670e3, 8000.0}, 8000.0, 100.0);
+    const double edges = TerrainEdgesLossDb(g, 50e6);
+    const double all = DiffractionLossDb(g, 50e6);
+    std::printf("    670 km: the bulge's knife edge %.1f dB, with the smooth earth %.1f dB\n", edges, all);
+    SC_EXPECT(edges > 15.0 && edges < 35.0);
+    SC_EXPECT(all > 120.0);
+    // Over flat ground the fitted smooth surface is the ground itself (eqs. 58-64): the antennas' heights over it are their
+    // heights above the ground, and the actual path's edge is the smooth one's (the smooth one's peak found exactly, the
+    // profile's at its samples 1.1 km apart), so the loss is the larger of the two.
+    SC_EXPECT_NEAR(g.smooth_h1_m, 3.0, 1e-6);
+    SC_EXPECT_NEAR(g.smooth_h2_m, 8000.0, 1e-6);
+    SC_EXPECT(g.smooth_v_geometry >= g.worst_v_geometry - 1e-9);
+    SC_EXPECT_NEAR(g.smooth_v_geometry, g.worst_v_geometry, 1e-4 * std::fabs(g.worst_v_geometry));
+    const double sph = SphericalEarthLossDb(g.ground_range_m, 3.0, 8000.0, 50e6, g.earth_radius_m);
+    SC_EXPECT_NEAR(all, std::max(edges, sph), 0.01);
+    // Raised flat ground: the surface follows it.
+    const FlatTerrain plateau(200.0);
+    const PathGeometry p = AnalysePath(plateau, Vec3{0.0, 0.0, 205.0}, 205.0, Vec3{0.0, 40e3, 230.0}, 230.0, 100.0);
+    SC_EXPECT_NEAR(p.smooth_h1_m, 5.0, 1e-6);
+    SC_EXPECT_NEAR(p.smooth_h2_m, 30.0, 1e-6);
+    // A ridge adds its own edges on top of the smooth earth's excess (eq. 66 with this file's edges in Bullington's place).
+    const PathGeometry r = AnalysePath(TwoRidges(300.0), Vec3{0.0, 0.0, 5.0}, 5.0, Vec3{60e3, 0.0, 5.0}, 5.0, 50.0);
+    const double r_edges = TerrainEdgesLossDb(r, 50e6);
+    const double r_sph = SphericalEarthLossDb(r.ground_range_m, r.smooth_h1_m, r.smooth_h2_m, 50e6, r.earth_radius_m);
+    const double r_smooth = KnifeEdgeLossDb(r.smooth_v_geometry * std::sqrt(2.0 / WavelengthOf(50e6)));
+    SC_EXPECT_NEAR(DiffractionLossDb(r, 50e6), r_edges + std::max(0.0, r_sph - r_smooth), 1e-9);
+    SC_EXPECT(r.smooth_h1_m > 5.0);  // the surface lowered under the ridges (eqs. 61-62): the masts stand higher above it
+    // Microwaves keep the edges alone (the two rays over the sphere take the curve: kSphericalEarthMaxFreqHz).
+    SC_EXPECT_NEAR(DiffractionLossDb(g, 3e9), TerrainEdgesLossDb(g, 3e9), 1e-12);
 }
 
 SC_TEST("em propagation: rain attenuation follows ITU-R P.838 and costs microwaves, not VHF") {

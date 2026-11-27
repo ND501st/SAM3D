@@ -28,7 +28,7 @@ inline std::string FormatClockSeconds(double h, double start_hour) {
     const long long total = std::llround((start_hour + h) * 3600.0);
     const long long day = total / 86400;
     const long long in_day = total - day * 86400;
-    char buf[40];
+    char buf[96];  // room for any long long in each field, so GCC's -Wformat-truncation has nothing to say
     std::snprintf(buf, sizeof(buf), "D%lld %02lld:%02lld:%02lld", day + 1, in_day / 3600, (in_day / 60) % 60, in_day % 60);
     return buf;
 }

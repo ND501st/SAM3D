@@ -13,6 +13,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <string>
 
 #include "simcore/vec3.hpp"
 
@@ -34,7 +35,14 @@ enum class Stream : std::uint64_t {
     FalseAlarm = 11,
     TdoaNoise = 12,
     Doctrine = 13,
-    ArmSeeker = 14
+    ArmSeeker = 14,
+    AirCombat = 15,  // the air battle's shot: one draw per link of the chain (air_war/air_combat.hpp)
+    AirRadio = 16,   // the enemy's calls and our intercept of them: one draw per call and listener (air_war/air_radio.hpp)
+    Sight = 17,         // a pilot's glimpse draws and the offset of his perception tick (air_war/perception.hpp)
+    SightError = 18,    // the eye's bearing and range errors
+    GroundAcquire = 19,  // the ground law's draw, one per observer, object and pass
+    Reaction = 20,       // a pilot's reaction under fire: one draw per aircraft, cue and purpose (reactions.hpp)
+    Opportunity = 21     // a flight leader's chain on a target of opportunity: one draw per flight, contact, step and pass (air_war/opportunity.hpp)
 };
 
 inline std::uint64_t Mix64(std::uint64_t x) {
@@ -95,6 +103,13 @@ private:
 // Ids are ints in the sim; widen them for hashing without sign surprises.
 inline std::uint64_t Key(int v) { return static_cast<std::uint64_t>(static_cast<std::uint32_t>(v)); }
 inline std::uint64_t Key(long long v) { return static_cast<std::uint64_t>(v); }
+// A string's key for the draws, the same on every compiler and standard library (FNV-1a, then mixed). Never std::hash for
+// a draw: it differs between MSVC's, libstdc++'s and libc++'s, and replays must agree across the three (CI builds them all).
+inline std::uint64_t StringKey(const std::string& s) {
+    std::uint64_t h = 1469598103934665603ull;
+    for (char ch : s) h = (h ^ static_cast<unsigned char>(ch)) * 1099511628211ull;
+    return Mix64(h);
+}
 
 }  // namespace em
 }  // namespace simcore

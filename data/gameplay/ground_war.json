@@ -1,0 +1,200 @@
+{
+  "ground_war_id": "ground_war",
+  "status": "F3.1 and F3.2 (21 Nov 2026): the sector's combat tables of docs/fronts/03_GROUND_WAR.md section 4, read by simcore/ground_war/ground_data.hpp and used by the pure functions of simcore/ground_war/combat.hpp. Nothing runs the ground war yet (F3.3); no campaign reads this file.",
+  "source": "the norms of docs/research/FRONTS_RESEARCH_2026-11.md section 2 (fm_101_10_1_1976, hero_1972_oralfore, ciano_1988_qjm, fm_100_2_1_1984, mt_perventsev_balance) and SAM3D game values where no source gives a number, each labelled",
+  "confidence": "medium",
+  "notes": "A gameplay-level model with period norms, not a simulation of fire (docs/fronts/README.md decision 4). Strength is weighted equipment plus personnel; power is strength times posture, supply and cohesion; the ratio sets each side's daily loss and the attacker's advance. Percentages are as the manuals print them; the loader turns them into fractions.",
+  "strength": {
+    "unit": "T-55 equivalents: a T-55 is 1 (SAM3D's unit of weighted strength)",
+    "personnel_per_man": { "value": 0.01, "source": "estimate (SAM3D): a hundred men count as one T-55, so a 1985 division's people are about a sixth of its weighted strength; mt_perventsev_balance counts personnel within its coefficients", "confidence": "estimate" },
+    "weights": [
+      { "type": "t55", "tank": true, "weight": 1.0, "source": "estimate (SAM3D): the unit of strength; weights by mt_perventsev_balance's method (one coefficient per type of weapon from its effect in a meeting engagement), recomputed for 1985's types by judgement, not their 1968 numbers", "confidence": "estimate" },
+      { "type": "t62", "tank": true, "weight": 1.1, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "t64", "tank": true, "weight": 1.6, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; 125 mm gun, composite armour", "confidence": "estimate" },
+      { "type": "t72", "tank": true, "weight": 1.6, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; 125 mm gun, composite armour", "confidence": "estimate" },
+      { "type": "t80", "tank": true, "weight": 1.8, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "m60a3", "tank": true, "weight": 1.5, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; 105 mm gun, thermal sight", "confidence": "estimate" },
+      { "type": "m1", "tank": true, "weight": 2.0, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "leopard1", "tank": true, "weight": 1.3, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "leopard2", "tank": true, "weight": 2.0, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "sk105", "tank": true, "weight": 0.9, "source": "estimate (SAM3D): a light tank destroyer, 105 mm gun, thin armour", "confidence": "estimate" },
+      { "type": "bmp1", "weight": 0.55, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; with its squad and ATGM", "confidence": "estimate" },
+      { "type": "bmp2", "weight": 0.7, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "btr60", "weight": 0.3, "source": "estimate (SAM3D): mt_perventsev_balance's method; an armoured carrier with its squad", "confidence": "estimate" },
+      { "type": "btr70", "weight": 0.35, "source": "estimate (SAM3D): mt_perventsev_balance's method; an armoured carrier with its squad", "confidence": "estimate" },
+      { "type": "m113", "weight": 0.3, "source": "estimate (SAM3D): an armoured carrier with its squad", "confidence": "estimate" },
+      { "type": "m2", "weight": 0.8, "source": "estimate (SAM3D): an IFV with TOW and 25 mm gun", "confidence": "estimate" },
+      { "type": "m3", "weight": 0.75, "source": "estimate (SAM3D): the cavalry's IFV", "confidence": "estimate" },
+      { "type": "marder", "weight": 0.7, "source": "estimate (SAM3D): an IFV with 20 mm gun and Milan", "confidence": "estimate" },
+      { "type": "saurer_4k4f", "weight": 0.3, "source": "estimate (SAM3D): an armoured carrier with its squad", "confidence": "estimate" },
+      { "type": "d30", "weight": 0.45, "source": "estimate (SAM3D): a towed 122 mm howitzer and its crew", "confidence": "estimate" },
+      { "type": "2s1", "weight": 0.55, "source": "estimate (SAM3D): a self-propelled 122 mm howitzer", "confidence": "estimate" },
+      { "type": "2s3", "weight": 0.75, "source": "estimate (SAM3D): a self-propelled 152 mm howitzer", "confidence": "estimate" },
+      { "type": "bm21", "weight": 0.7, "source": "estimate (SAM3D): a 122 mm rocket launcher, 40 tubes", "confidence": "estimate" },
+      { "type": "m109", "weight": 0.75, "source": "estimate (SAM3D): a self-propelled 155 mm howitzer", "confidence": "estimate" },
+      { "type": "m110", "weight": 0.8, "source": "estimate (SAM3D): a self-propelled 203 mm howitzer", "confidence": "estimate" },
+      { "type": "mlrs", "weight": 1.0, "source": "estimate (SAM3D): a 227 mm rocket launcher, 12 rockets", "confidence": "estimate" },
+      { "type": "mortar_82", "weight": 0.05, "source": "estimate (SAM3D): a light mortar and its crew", "confidence": "estimate" },
+      { "type": "spg9", "weight": 0.06, "source": "estimate (SAM3D): a recoilless anti-tank gun and its crew", "confidence": "estimate" },
+      { "type": "technical", "weight": 0.08, "source": "estimate (SAM3D): a pick-up with a heavy machine gun", "confidence": "estimate" }
+    ]
+  },
+  "power": {
+    "supply_floor": { "value": 0.5, "source": "game value: a unit wholly out of supply fights at half its power; power scales linearly from there to 1 at full supply", "confidence": "estimate" },
+    "cohesion_floor": { "value": 0.3, "source": "game value: a unit whose cohesion is gone still fights at three tenths of its power until it breaks", "confidence": "estimate" }
+  },
+  "posture": {
+    "attack": { "value": 1.0, "source": "ciano_1988_qjm fig. 24 (Dupuy's QJM posture factors, NPW 1985 p. 48)", "confidence": "medium" },
+    "hasty_defence": { "value": 1.3, "source": "ciano_1988_qjm fig. 24", "confidence": "medium" },
+    "prepared_defence": { "value": 1.5, "source": "ciano_1988_qjm fig. 24", "confidence": "medium" },
+    "fortified_defence": { "value": 1.6, "source": "ciano_1988_qjm fig. 24", "confidence": "medium" },
+    "delay": { "value": 1.2, "source": "ciano_1988_qjm fig. 24", "confidence": "medium" },
+    "withdrawal": { "value": 1.15, "source": "ciano_1988_qjm fig. 24", "confidence": "medium" }
+  },
+  "ground": [
+    { "terrain": "open", "defender": 1.0, "advance": 1.0, "source": "game value: the reference ground (HERO's rates are normalised to it, hero_1972_oralfore p. IV-2)", "confidence": "estimate" },
+    { "terrain": "forest", "defender": 1.3, "advance": 0.6, "source": "game value: woods help the defender and slow the advance (docs/fronts/03_GROUND_WAR.md section 4)", "confidence": "estimate" },
+    { "terrain": "hills", "defender": 1.3, "advance": 0.7, "source": "game value", "confidence": "estimate" },
+    { "terrain": "mountains", "defender": 1.6, "advance": 0.4, "source": "game value: the border ranges and their gorges (docs/COUNTRY_MAP.md)", "confidence": "estimate" },
+    { "terrain": "marsh", "defender": 1.4, "advance": 0.4, "source": "game value", "confidence": "estimate" },
+    { "terrain": "urban", "defender": 1.4, "advance": 0.5, "source": "game value", "confidence": "estimate" }
+  ],
+  "conditions": {
+    "night_attacker": { "value": 0.8, "source": "game value: night multiplies the attacker's power (docs/fronts/03_GROUND_WAR.md section 4)", "confidence": "estimate" },
+    "poor_visibility_attacker": { "value": 0.9, "source": "game value: fog, rain or snow multiply the attacker's power", "confidence": "estimate" },
+    "river_line_defender": { "value": 1.5, "source": "game value: a river line multiplies the defender's power until the attacker has crossed", "confidence": "estimate" }
+  },
+  "losses": {
+    "notes": "Daily losses of a division in contact, % of its strength, by action: battle on the first day and on later days, and nonbattle (FM 101-10-1 table 5-8, page image checked in docs/research/fronts_2026-11/nato_ground.md loss-01). The manual says they rest on WWII and Korea and hold for up to 5 days.",
+    "actions": [
+      { "action": "covering", "battle_first_pct": 0.9, "battle_later_pct": 0.9, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: covering and security force action", "confidence": "medium" },
+      { "action": "attack_meeting", "battle_first_pct": 2.4, "battle_later_pct": 2.4, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: attack, meeting engagement", "confidence": "medium" },
+      { "action": "attack_position", "battle_first_pct": 3.8, "battle_later_pct": 1.9, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: attack of a position", "confidence": "medium" },
+      { "action": "attack_fortified", "battle_first_pct": 6.3, "battle_later_pct": 3.2, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: attack of a fortified zone", "confidence": "medium" },
+      { "action": "defence_meeting", "battle_first_pct": 1.5, "battle_later_pct": 1.5, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: defence, meeting engagement", "confidence": "medium" },
+      { "action": "defence_position", "battle_first_pct": 1.9, "battle_later_pct": 1.0, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: defence of a position", "confidence": "medium" },
+      { "action": "defence_sector", "battle_first_pct": 3.2, "battle_later_pct": 1.6, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: defence of a sector", "confidence": "medium" },
+      { "action": "inactive", "battle_first_pct": 0.7, "battle_later_pct": 0.7, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: inactive (in contact, neither side attacking)", "confidence": "medium" },
+      { "action": "pursuit", "battle_first_pct": 1.3, "battle_later_pct": 1.3, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: pursuit", "confidence": "medium" },
+      { "action": "delay", "battle_first_pct": 0.7, "battle_later_pct": 0.7, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 table 5-8 p. 5-8: retirement and delaying action", "confidence": "medium" },
+      { "action": "reserve", "battle_first_pct": 0.3, "battle_later_pct": 0.3, "nonbattle_pct": 0.3, "source": "fm_101_10_1_1976 p. 5-8: divisions in corps reserve lose about 0.6% a day in all; the split between battle and nonbattle is SAM3D's (derived)", "confidence": "low" }
+    ],
+    "reference_ratio": { "value": 3.0, "source": "game value at the ratio the manual's planning tables assume (fm_101_10_1_1976 p. 7-16: a threat to friendly force ratio of three or four to one); the table's rates hold at it", "confidence": "low" },
+    "ratio_exponent": { "value": 0.5, "source": "game value: away from the reference ratio each side's battle losses scale by (3/R)^k for the attacker and (R/3)^k for the defender (docs/fronts/03_GROUND_WAR.md section 4)", "confidence": "estimate" },
+    "scale_min": { "value": 0.25, "source": "game value: the scale's clip (docs/fronts/03_GROUND_WAR.md section 4)", "confidence": "estimate" },
+    "scale_max": { "value": 4.0, "source": "game value: the scale's clip (docs/fronts/03_GROUND_WAR.md section 4)", "confidence": "estimate" }
+  },
+  "tank_losses": {
+    "notes": "Tank losses of an armoured or mechanised division, % of its operational tanks, by day of its commitment; days 2 and 3 of the tanks on hand at the start of day 1. Assumes a threat to friendly ratio of three or four to one.",
+    "commitments": [
+      { "commitment": "delay_light", "day1_pct": 12, "day2_pct": 13, "day3_pct": 6, "source": "fm_101_10_1_1976 table 7-7 p. 7-16: delay in the covering force area, lightly committed", "confidence": "medium" },
+      { "commitment": "delay_moderate", "day1_pct": 30, "day2_pct": 18, "day3_pct": 11, "source": "fm_101_10_1_1976 table 7-7 p. 7-16: delay, moderately committed", "confidence": "medium" },
+      { "commitment": "delay_heavy", "day1_pct": 73, "day2_pct": 8, "day3_pct": 6, "source": "fm_101_10_1_1976 table 7-7 p. 7-16: delay, heavily committed", "confidence": "medium" },
+      { "commitment": "defend_moderate", "day1_pct": 22, "day2_pct": 12, "day3_pct": 6, "source": "fm_101_10_1_1976 table 7-7 p. 7-16: defend in the main battle area, moderately committed", "confidence": "medium" },
+      { "commitment": "defend_heavy", "day1_pct": 54, "day2_pct": 14, "day3_pct": 10, "source": "fm_101_10_1_1976 table 7-7 p. 7-16: defend in the main battle area, heavily committed", "confidence": "medium" }
+    ],
+    "reparable_share": { "value": 0.8, "source": "fm_101_10_1_1976 p. 7-16: up to 80 percent of the losses are reparable", "confidence": "medium" }
+  },
+  "advance": {
+    "notes": "HERO's normalised WWII rates by opposition (hero_1972_oralfore p. IV-2, page image checked: moderate is 10.10, not the OCR's 19.10). Which ratio makes which opposition is SAM3D's mapping (docs/fronts/03_GROUND_WAR.md section 4); below the first threshold there is no sustained advance, HERO's conclusion.",
+    "classes": [
+      { "opposition": "stalled", "from_ratio": 0.0, "km_per_day": 0.0, "source": "hero_1972_oralfore p. IV-2: no sustained advance below a threshold ratio; the threshold is a game value", "confidence": "estimate" },
+      { "opposition": "intense", "from_ratio": 1.5, "km_per_day": 2.80, "source": "hero_1972_oralfore p. IV-2 (intense resistance, average); from_ratio a game value", "confidence": "medium" },
+      { "opposition": "moderate", "from_ratio": 2.5, "km_per_day": 10.10, "source": "hero_1972_oralfore p. IV-2 (moderate resistance, average); from_ratio a game value", "confidence": "medium" },
+      { "opposition": "slight", "from_ratio": 4.0, "km_per_day": 23.34, "source": "hero_1972_oralfore p. IV-2 (slight resistance, average); from_ratio a game value", "confidence": "medium" },
+      { "opposition": "negligible", "from_ratio": 6.0, "km_per_day": 54.79, "source": "hero_1972_oralfore p. IV-2 (negligible resistance, average); from_ratio a game value", "confidence": "medium" }
+    ],
+    "unopposed_km_per_day": { "value": 69.78, "source": "hero_1972_oralfore p. IV-2: unopposed administrative march, average", "confidence": "medium" },
+    "draw_sigma": { "value": 0.35, "source": "estimate (SAM3D): the lognormal spread of a sector's day, of the width of hero_1972_oralfore's ranges (moderate 4.18-15.87 about 10.10)", "confidence": "estimate" }
+  },
+  "crossing": {
+    "intact_bridge_h": { "value": 2.0, "source": "game value: hours to take and cross an intact bridge under fire", "confidence": "estimate" },
+    "cut_bridge_h": { "value": 12.0, "source": "game value: hours to cross where the bridge is cut (assault boats, fords, the engineers' means)", "confidence": "estimate" },
+    "pontoon_factor": { "value": 0.5, "source": "game value: an engineers' pontoon park on hand halves the time where the bridge is cut", "confidence": "estimate" }
+  },
+  "decision_times_h": [
+    { "echelon": "division", "reaction_min": 2.0, "reaction_max": 4.0, "planning_min": 1.0, "planning_max": 3.0, "source": "fm_100_2_1_1984 p. 5-14", "confidence": "medium" },
+    { "echelon": "regiment", "reaction_min": 1.0, "reaction_max": 3.0, "planning_min": 0.5, "planning_max": 2.5, "source": "fm_100_2_1_1984 p. 5-14", "confidence": "medium" },
+    { "echelon": "battalion", "reaction_min": 0.4167, "reaction_max": 1.0, "planning_min": 0.3333, "planning_max": 0.75, "source": "fm_100_2_1_1984 p. 5-14 (25-60 and 20-45 minutes)", "confidence": "medium" }
+  ],
+  "trait_shift": { "value": 0.2, "source": "game value: a commander's traits move a threshold by at most this share of its range, as track B's officers do (docs/air_battle/README.md decision 9; docs/fronts/README.md decision 6)", "confidence": "estimate" },
+  "cohesion": {
+    "loss_per_strength_loss": { "value": 2.0, "source": "game value: cohesion falls twice as fast as strength within a day's fighting (docs/fronts/03_GROUND_WAR.md section 3.1)", "confidence": "estimate" },
+    "air_attack_loss": { "value": 0.05, "source": "game value: cohesion one air attack on the unit costs it", "confidence": "estimate" },
+    "recovery_per_day": { "value": 0.2, "source": "game value: cohesion regained a day, in contact too (so a steady grind wears it slowly and only heavy losses in hours break a unit, docs/fronts/03_GROUND_WAR.md section 5.4)", "confidence": "estimate" },
+    "break_below": { "value": 0.3, "source": "game value: a unit whose cohesion falls below this breaks and disperses (docs/fronts/03_GROUND_WAR.md section 5.4)", "confidence": "estimate" }
+  },
+  "dispersal": {
+    "reassemble_min_days": { "value": 1.0, "source": "game value: a dispersed unit's remnants reassemble behind in 1-3 days (docs/fronts/03_GROUND_WAR.md section 5.4)", "confidence": "estimate" },
+    "reassemble_max_days": { "value": 3.0, "source": "game value (docs/fronts/03_GROUND_WAR.md section 5.4)", "confidence": "estimate" },
+    "straggler_loss": { "value": 0.2, "source": "game value: the share of a dispersed unit's remaining strength lost as stragglers", "confidence": "estimate" }
+  },
+  "march": {
+    "road_day_kmh": { "min": 20, "max": 30, "source": "fm_100_2_1_1984 p. 5-2 (mixed columns by day on roads)", "confidence": "high" },
+    "road_night_kmh": { "min": 15, "max": 20, "source": "fm_100_2_1_1984 p. 5-2", "confidence": "high" },
+    "cross_country_kmh": { "min": 5, "max": 15, "source": "fm_100_2_1_1984 p. 5-2", "confidence": "high" },
+    "halt_h": { "min": 0.3333, "max": 0.5, "source": "fm_100_2_1_1984 p. 5-4: short halts of 20-30 minutes", "confidence": "medium" },
+    "halt_every_h": { "min": 2, "max": 3, "source": "fm_100_2_1_1984 p. 5-4: every 2-3 hours", "confidence": "medium" }
+  },
+  "reports": {
+    "division_per_day": { "value": 2, "source": "game value: a division's combat report twice a day and at once on a breakthrough, a withdrawal or a commander lost (docs/fronts/03_GROUND_WAR.md section 10)", "confidence": "estimate" }
+  },
+  "levels": {
+    "notes": "U0 and U1 (track F, F3.6; docs/fronts/03_GROUND_WAR.md section 3.3 and 'As built: F3.6'): in the player's battery's sector and its neighbours a formation's regiments (or brigades) are actors with their own stations, posture, cohesion, commander and reports; the formation's strength and power stay the sum of theirs, so U1 is the same war at a finer grain. hit_weight and support_weight only share out the losses the formation takes among its regiments.",
+    "down_after_h": { "value": 6, "source": "game value: a formation goes down a level 6 h after it is out of need (docs/fronts/03_GROUND_WAR.md section 3.3, track B's margins)", "confidence": "estimate" },
+    "neighbours": { "value": 1, "source": "game value: the player's sector and one either side at U1 (docs/fronts/03_GROUND_WAR.md section 3.3)", "confidence": "estimate" },
+    "hit_weight": { "value": 2, "source": "game value: a regiment whose stations the axis's breakthrough frontage meets takes twice its share of its formation's losses (the main blow's 6-10 km against a regiment's 10-15, fm_100_2_1_1984 pp. 5-18 to 5-21, vr_poltikovic_1984 p. 96)", "confidence": "estimate" },
+    "support_weight": { "value": 0.5, "source": "game value: a regiment out of contact (the artillery, a regiment with no tanks firing from behind, and the second echelon up to 12 km back, vr_poltikovic_1984 p. 96) takes half its share of its formation's losses: fire reaches it, the assault does not", "confidence": "estimate" }
+  },
+  "clock": {
+    "notes": "The ground war's clock and line at U0 (track F, F3.3; simcore/ground_war/ground_war.hpp, docs/fronts/03_GROUND_WAR.md 'As built: F3.3'). Each axis of the enemy's plan goes in with its first echelon from the plan's start, to its objective (or the plan's political depth); from F3.4 its commanders decide the rest (the second echelon from second_echelon_after_h, a stalled axis stopped after commanders.stall_h about stall_halt_h, withdrawals, counterattacks: 'As built: F3.4'). Our side's first echelon and flank screens hold their sectors, the covering share of them in the security zone, the second echelon once the enemy reaches the main defensive zone.",
+    "breakthrough_width_km": { "min": 6, "max": 10, "source": "fm_100_2_1_1984 pp. 5-18 to 5-21: a breakthrough sector 6-10 km wide; the line is pushed in over the range's middle", "confidence": "medium" },
+    "taper_km": { "min": 10, "max": 15, "source": "estimate (SAM3D): the penetration's shoulders taper back to the line over 10-15 km each side (docs/fronts/03_GROUND_WAR.md section 2); the middle is used", "confidence": "estimate" },
+    "security_zone_share": { "value": 0.25, "source": "estimate (SAM3D) after vr_poltikovic_1984 p. 96: a reinforced battalion of each first-echelon regiment delays in the security zone, about a quarter of a division's strength", "confidence": "estimate" },
+    "second_echelon_after_h": { "value": 24, "source": "estimate (SAM3D) after fm_100_2_1_1984 p. 2-11: the second echelon is committed to success, a day into the offensive: the senior commits it from then (F3.4's commanders, earlier if the first echelon is degraded)", "confidence": "estimate" },
+    "stall_halt_h": { "value": 24, "source": "game value: an axis that has not advanced for a day with no echelon left to commit goes over to the defence (fm_100_2_1_1984 p. 2-11's stalled axis): the middle of commanders.stall_h", "confidence": "estimate" },
+    "terrain_step_km": { "value": 1, "source": "game value: an axis's ground and rivers sampled this often along its route, once when the war is built", "confidence": "estimate" },
+    "hills_above_m": { "value": 150, "source": "game value: ground this high above the map's plain is hills for the combat table", "confidence": "estimate" },
+    "mountains_above_m": { "value": 300, "source": "game value: and this high mountains (the border ranges, docs/COUNTRY_MAP.md)", "confidence": "estimate" },
+    "bridge_reach_km": { "value": 5, "source": "game value: the air war's bridge object within this of where an axis's route crosses a river is that crossing's bridge", "confidence": "estimate" },
+    "river_line_km": { "value": 3, "source": "game value: the defender holds a river line (data's river_line_defender) while the attacker is within this of its bank", "confidence": "estimate" }
+  },
+  "commanders": {
+    "notes": "The ground war's commanders (track F, F3.4; simcore/ground_war/commanders.hpp, docs/fronts/03_GROUND_WAR.md section 5 and 'As built: F3.4'). Each threshold below is moved by a commander's trait by at most trait_shift of its range: boldness the attack and counterattack ratios, rigidity the stall he tolerates and how late he asks to withdraw, composure how long he holds without an order, methodical how long he takes to decide.",
+    "attack_ratio_range": { "min": 2.0, "max": 4.0, "source": "estimate (SAM3D) around fm_100_2_1_1984 pp. 2-10 to 2-11's 3:1 (and fm_100_5_1976 pp. 3-4, 3-5's 3:1 in the sector): the range a commander's boldness moves his side's attack ratio in (a bold man attacks at a lower ratio, docs/fronts/03_GROUND_WAR.md section 5.1)", "confidence": "estimate" },
+    "counterattack_ratio": { "min": 1.5, "max": 2.5, "source": "estimate (SAM3D) after reznichenko_1984 pp. 177-179 (the second echelon from the march into the flank of a wedged attacker) and hero_1972_oralfore p. IV-2 (no sustained advance below 1.5): the army commander orders a counterattack when his force over the penetration's reaches the middle of this, his boldness moving it", "confidence": "estimate" },
+    "stall_h": { "min": 12, "max": 36, "source": "game value: the hours an axis may go without advancing before its senior stops it when no echelon is left for it (fm_100_2_1_1984 p. 2-11's stalled axis); clock.stall_halt_h is its middle, rigidity holds on longer", "confidence": "estimate" },
+    "hold_without_order_h": { "min": 3, "max": 9, "source": "game value: a unit under its ineffective line that has asked to withdraw holds this long in contact without an order before it breaks and disperses (docs/fronts/03_GROUND_WAR.md section 5.4); the middle, composure holds longer", "confidence": "estimate" },
+    "moving_km_per_day": { "value": 2.8, "source": "hero_1972_oralfore p. IV-2: the intense opposition's 2.8 km a day, the slowest sustained advance; an axis whose pace over the last day is at least this moves (the second echelon goes to it, fm_100_2_1_1984 p. 2-11)", "confidence": "medium" },
+    "pace_window_h": { "value": 24, "source": "game value: an axis's pace is its advance averaged over about this many hours (an exponential average)", "confidence": "estimate" },
+    "reform_days": { "min": 1, "max": 2, "source": "game value: a unit withdrawn in good order re-forms behind in this many days as a smaller unit (docs/fronts/03_GROUND_WAR.md section 5.4; mt_stashek_losses p. 7: withdrawn and re-formed)", "confidence": "estimate" },
+    "repair_return_per_day": { "value": 0.25, "source": "game value: the share of a formation's tanks in repair returned to it each day (fm_101_10_1_1976 table 7-7: up to 80% of the tanks lost reparable)", "confidence": "estimate" },
+    "march_road_factor": { "value": 1.3, "source": "game value: a march's road distance over the straight line between its ends at U0; from F3.6 the route service's roads between anchors where it has a way, this where it has none (an end beyond the map's roads, the enemy's own country)", "confidence": "estimate" }
+  },
+  "picture": {
+    "notes": "Each side's picture of the ground war (track F, F3.5; simcore/ground_war/picture.hpp, docs/fronts/03_GROUND_WAR.md section 9 and 'As built: F3.5'). The commanders above a formation decide on what reached their staff: their own units' strengths from the units' reports (twice a day, reports.division_per_day, and at once when a unit reports, asks, stops or breaks), late by own_delay_h; the other side's strengths with an error, a lognormal factor of mean 1 drawn once per (side, source, sector, report hour); the axes' depths and paces and the line by station from the same reports. Ours learn the enemy in contact from our units' contact reports and the rest from the army's intelligence summary; the enemy learns ours from its air reconnaissance (its IntelPicture's troops entries) where it has seen them and by its ground reconnaissance at the line elsewhere. A formation's own commander knows his own unit's state.",
+    "report_first_h": { "value": 6, "source": "game value: the day's first scheduled combat report is compiled at 06:00 local, the next a period later (24 / reports.division_per_day)", "confidence": "estimate" },
+    "own_delay_h": { "value": 2, "source": "estimate (SAM3D): a division's combat report reaches its army's staff in about 2 h, within fm_100_2_1_1984 p. 5-14's division reaction time of 2-4 h", "confidence": "estimate" },
+    "own_sigma": { "value": 0.05, "source": "game value: a unit's own strength return is close to the truth (a 5% spread: casualties and stragglers not yet counted)", "confidence": "estimate" },
+    "contact_sigma": { "value": 0.25, "source": "game value: the spread of a unit's estimate of the enemy facing it (the enemy's strength in the sector, from contact and its own reconnaissance)", "confidence": "estimate" },
+    "prior_sigma": { "value": 0.3, "source": "game value: the spread of each side's peacetime estimate of the other's formations at the war's start", "confidence": "estimate" },
+    "army_intel_per_day": { "value": 1, "source": "game value: the army's intelligence summary of the enemy's formations not in contact (second echelon, reserve), once a day (army_intel's post, data/command/chain_pannonia.json)", "confidence": "estimate" },
+    "army_intel_delay_h": { "value": 6, "source": "game value: the summary's collation and travel to the army's command post", "confidence": "estimate" },
+    "army_intel_sigma": { "value": 0.4, "source": "game value: the spread of the army intelligence's estimate of formations it does not touch", "confidence": "estimate" },
+    "air_sigma": { "value": 0.2, "source": "game value: the spread of the enemy's estimate of our troops it has photographed (its air reconnaissance, the air war's IntelPicture)", "confidence": "estimate" },
+    "air_fresh_h": { "value": 24, "source": "game value: an entry of the enemy's picture for one of the theatre's troops objects tied to a formation (F3.7: the object's owner in our order of battle is the formation or under it) observed within this counts as a sighting of that formation", "confidence": "estimate" },
+    "ground_recon_delay_h": { "value": 3, "source": "game value: the enemy's ground reconnaissance at the line (patrols, observation posts) reports to its senior staff in about 3 h", "confidence": "estimate" },
+    "ground_recon_sigma": { "value": 0.35, "source": "game value: the spread of the enemy's estimate of our units at the line that its air has not seen", "confidence": "estimate" },
+    "crisis_below": { "value": 0.5, "source": "docs/fronts/02_AIR_FRONT.md section 3 (the crisis): a formation of the enemy's own below half strength in its ground picture lets its air chief ignore the loss gate in that sector", "confidence": "estimate" }
+  },
+  "troops": {
+    "notes": "The air war follows the ground units (track F, F3.7; simcore/ground_war/ground_war.hpp's troops ties, docs/fronts/03_GROUND_WAR.md section 6 and 'As built: F3.7'). Each theatre troops object whose owner in our order of battle is a formation of the ground war or under it is tied to it (to its regiment where it has one): its working share is that unit's strength over its establishment at the war's start, the enemy's strikes on it come off that unit's strength (the damage times the object's share of the unit and strike_loss_share) and its cohesion (cohesion.air_attack_loss an attack), it stands behind the line of contact with its unit, and its stocks are the unit's supply.",
+    "reform_depth_km": { "value": 25, "source": "game value: a unit withdrawn, dispersed or re-forming stands this far behind the line of contact (behind a division's second echelon, vr_poltikovic_1984 p. 96's 12 km a regiment's depth in defence)", "confidence": "estimate" },
+    "full_supply_days": { "value": 1, "source": "game value: a formation with a day's stocks or more (the air war's logistics.consumption_per_day) fights at full supply; below, its supply in proportion (power by ground.supply_floor), so a cut line is felt within its three days of stocks", "confidence": "estimate" },
+    "strike_loss_share": { "value": 0.1, "source": "game value (F6.1): of a strike's damage to a troops object (its working share lost), the share its unit's strength loses: troops dispersed and dug in lose their men and vehicles far less than their positions and stores are hit; set so a strike takes 0.2-3 per cent of the division and the air some 5-25 per cent of our battle losses (balance_bands.json fronts_bench strike_toll and air_share, docs/fronts/06_BALANCE.md 'As built: F6.1')", "confidence": "estimate" }
+  },
+  "counterattack": {
+    "notes": "Our army commander's counterattack at the penetration's tip (track F, F7.1; simcore/ground_war/ground_war.hpp, docs/fronts/03_GROUND_WAR.md 'As built: F7.1'). With this block the counterattack ratio (commanders.counterattack_ratio) is weighed against the enemy at the tip and flanks: the tip is one breakthrough sector wide (clock.breakthrough_width_km, fm_100_2_1_1984 pp. 5-18 to 5-21), so it holds as many regiments as one formation's first echelon (F3.6: the breakthrough's width over a regiment's attack frontage) of all the first-echelon regiments the axis's attackers bring, their artillery's fire at levels.support_weight; the second echelons behind it do not meet the counterattack. It is ordered only once the penetration's momentum is spent (the axis halted, its pace under commanders.moving_km_per_day, or its attackers believed under our degraded line), with the force that reaches the flank on the roads within reach_h of the order (reznichenko_1984 pp. 177-179: the second echelon or reserve from the march into the flank). Without this block F3.4's rule: against the whole axis's attackers at any hour.",
+    "reach_h": { "value": 12, "source": "game value: the counterattack goes in only with the force that can reach the penetration's flank, its commander's planning and the march on the roads, within half a day of the order: before the attacker's second echelon, committed to success a day into an attack (fm_100_2_1_1984 p. 2-11), can restore the momentum of an axis that has stalled", "confidence": "estimate" }
+  }
+}

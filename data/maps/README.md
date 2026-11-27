@@ -9,7 +9,7 @@ theatre's), sizes in metres, headings true; places that exist in `data/air_war/t
 | File | What |
 |---|---|
 | `kesmark_range.json` | The Kesmark district as 40 by 40 km, ground out to 150 km |
-| `pannonia.json` | **The whole country** (`"kind": "country"`, `simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`): its ground at 1 km, borders and the neighbour across each, regions, the Rava, Lenta and Tisava, main roads, railways and the two oil pipelines as networks with their river crossings, the capital, cities, towns and the district's villages, forests and landmarks. The Kesmark range is a district of it: its terrain, Rava and main lines are copied here unchanged, and a test proves the two grounds agree |
+| `pannonia.json` | **The whole country** (`"kind": "country"`, `simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`): its ground at 1 km, borders and the neighbour across each, regions, the Rava, Lenta and Tisava, main roads, railways and the two oil pipelines as networks with their river crossings, the capital, cities, towns and the district's villages, forests and landmarks, and its `sites`: with the settlements and landmarks the places everything placed stands at, by id (F1, `docs/fronts/F1_ANCHORS_AS_BUILT.md`: the theatres and the chain's places name them, so moving a site moves what stands there). The Kesmark range is a district of it: its terrain, Rava and main lines are copied here unchanged, and a test proves the two grounds agree |
 
 Change the Kesmark range's terrain, Rava, roads or railways and the country's copy must change with them
 (`tests/test_country_map.cpp` fails otherwise). A scenario plays on a map with `"terrain": {"type": "map", "map": "maps/<id>.json"}`. Site kinds: osa_position,

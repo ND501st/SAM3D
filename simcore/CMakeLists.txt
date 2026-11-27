@@ -54,6 +54,7 @@ add_executable(simcore_tests
   tests/test_cabin.cpp
   tests/test_scopes.cpp
   tests/test_em_models.cpp
+  tests/test_em_environment.cpp
   tests/test_em_data.cpp
   tests/test_em_scenarios.cpp
   tests/test_em_link.cpp
@@ -78,6 +79,7 @@ add_executable(simcore_tests
   tests/test_orientation.cpp
   tests/test_radio_setup.cpp
   tests/test_threats.cpp
+  tests/test_flight.cpp
   tests/test_crew.cpp
   tests/test_crew_body.cpp
   tests/test_crew_mobility.cpp
@@ -103,9 +105,23 @@ add_executable(simcore_tests
   tests/test_instructor.cpp
   tests/test_air_war.cpp
   tests/test_packages_live.cpp
+  tests/test_c2.cpp
+  tests/test_c2_live.cpp
+  tests/test_opportunity.cpp
+  tests/test_hot_phase.cpp
+  tests/test_routes.cpp
+  tests/test_front_line.cpp
+  tests/test_air_front.cpp
+  tests/test_flights.cpp
+  tests/test_levels.cpp
+  tests/test_air_radio.cpp
+  tests/test_perception.cpp
+  tests/test_perception_em.cpp
+  tests/test_reactions.cpp
   tests/test_dynamic_campaign.cpp
   tests/test_ground.cpp
   tests/test_map_obstacles.cpp
+  tests/test_map_leftovers.cpp
   tests/test_damage.cpp
   tests/test_mission_session.cpp
   tests/test_outcomes.cpp
@@ -115,11 +131,26 @@ add_executable(simcore_tests
   tests/test_picture_lost.cpp
   tests/test_logistics.cpp
   tests/test_weapons.cpp
+  tests/test_air_combat.cpp
+  tests/test_air_fight.cpp
+  tests/test_own_air.cpp
   tests/test_command.cpp
   tests/test_scenery.cpp
   tests/test_world_map.cpp
   tests/test_light.cpp
   tests/test_country_map.cpp
+  tests/test_ground_data.cpp
+  tests/test_ground_combat.cpp
+  tests/test_ground_war.cpp
+  tests/test_ground_commanders.cpp
+  tests/test_ground_picture.cpp
+  tests/test_ground_air.cpp
+  tests/test_ground_levels.cpp
+  tests/test_ground_feed.cpp
+  tests/test_ad_strategy.cpp
+  tests/test_situation_map.cpp
+  tests/test_campaign_situation.cpp
+  tests/test_anchors.cpp
   tests/test_nav.cpp
   tests/test_fx_acoustics.cpp
   tests/test_fx_bridge.cpp
@@ -218,8 +249,23 @@ simcore_configure_target(air_war_balance)
 
 add_executable(air_war_bench examples/air_war_bench.cpp)
 simcore_configure_target(air_war_bench)
+# What track F's fronts cost (docs/fronts/README.md, Efficiency): the air front's measure so far (F2.2).
+add_executable(fronts_bench examples/fronts_bench.cpp)
+simcore_configure_target(fronts_bench)
+# Our fighters and our own fire: the exercise sweep against the 25% anchor (roadmap S1, docs/air_battle/08_OUR_FIGHTERS.md).
+add_executable(own_air_balance examples/own_air_balance.cpp)
+simcore_configure_target(own_air_balance)
+# What the air battle costs a step, and what the levels of detail save (roadmap B12, docs/air_battle/02 5.4).
+add_executable(air_battle_bench examples/air_battle_bench.cpp)
+simcore_configure_target(air_battle_bench)
+# What the pilots' perception costs per step (roadmap B3, docs/air_battle/03_PERCEPTION.md 5.7).
+add_executable(perception_bench examples/perception_bench.cpp)
+simcore_configure_target(perception_bench)
 add_executable(aaa_bench examples/aaa_bench.cpp)
 simcore_configure_target(aaa_bench)
+# The live air fight, B8's beside roadmap S3's, and the far fight on and off (docs/air_battle/07_AIR_TO_AIR.md section 9).
+add_executable(air_combat_bench examples/air_combat_bench.cpp)
+simcore_configure_target(air_combat_bench)
 
 # The enemy air command (docs/air_war/): a campaign against one adversary, its raids through the battery's sector played
 # as generated scenarios by the NPC crew; prints the enemy staff's journal. Also run as a test on two days of the Pact,

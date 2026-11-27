@@ -1,7 +1,7 @@
 {
   "tasking_id": "rgt15_tasking_first_form",
-  "status": "first form (roadmap 14.2, docs/campaign/03_THE_BATTERY_MISSION.md section 1)",
-  "notes": "The 15th SAM Regiment's tasking of a battery (simcore/campaign/regiment.hpp): each rule a trigger the regiment can know, the task, and the reason the order gives. Routine rules are read at the evening briefing, urgent ones at once. The regiment knows the enemy's picture of the battery only from our intelligence's estimate in the campaign's journal.",
+  "status": "first form (roadmap 14.2, docs/campaign/03_THE_BATTERY_MISSION.md section 1); the fronts' triggers (track F, F4.4)",
+  "notes": "The 15th SAM Regiment's tasking of a battery (simcore/campaign/regiment.hpp): each rule a trigger the regiment can know, the task, and the reason the order gives. Routine rules are read at the evening briefing, urgent ones at once. The regiment knows the enemy's picture of the battery only from our intelligence's estimate in the campaign's journal; the fronts (F4.4: the covered division's withdrawal, its sector's priority, the sky's sharing there) only from what reached its commander or its staff through the pipeline, read only where the ground war and our air defence commanders run (ground.mode and ad_strategy.mode 1).",
   "source": "voenizdat_osa_1991 pp. 232-239 (a battery changes position only on the regiment commander's order; reserve positions within 2 km); docs/campaign/03_THE_BATTERY_MISSION.md section 1 (the rule table)",
   "confidence": "medium",
   "briefing_hour": 19,
@@ -27,6 +27,58 @@
       "source": "voenizdat_osa_1991 pp. 232-239 (the change of position by the regiment's order, to a reserve position prepared within 2 km); docs/campaign/03_THE_BATTERY_MISSION.md section 1 (the trigger and the reason); sam3d estimate (ready_in_s: the commander's short sequence, about 12 min; the march under 2 km with the vehicles out of their emplacements and the column closed up, about 20 min; the post's 18 min occupation, data/campaign/battery_plan.json; with a margin)",
       "confidence": "estimate",
       "notes": "Each estimate moves the battery once, and only an estimate made after the battery reached the position it holds; the old main position becomes a reserve."
+    },
+    {
+      "id": "withdraw_with_division",
+      "when": "division_withdraws",
+      "task": "march_back",
+      "urgent": true,
+      "positions": [ "bty21_depth_south", "bty21_depth_east" ],
+      "back_m": 6000,
+      "work_s": 900,
+      "ready_in_s": 7200,
+      "reason": "The division withdraws to its next line; the regiment moves its batteries back with it so that its troops stay covered.",
+      "source": "voenizdat_osa_1991 p. 238 (a battery changes position only on the regiment commander's order) and pp. 234-238 (a battery in defence 3-5 km behind the forward edge, 1.5-3 km from the troops it covers, kept so as the line moves: docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 4); vr_poltikovic_1984 p. 96 (the division's 3-4 prepared positions, its lines 6-8 km apart: back_m the near end); sam3d estimate (work_s: the regiment commander's decision on the order or report and its words on the net by the duty officer, about the army's chief of air defence's own half hour; ready_in_s: the commander's short sequence, about 12 min, a march of 10-20 km at a column's 20-30 km/h by day with its halts, about an hour, the post's 18 min occupation, data/campaign/battery_plan.json, and a margin)",
+      "confidence": "estimate",
+      "notes": "Track F, F4.4: on what reached the regiment's commander or its staff of the covered division (the 7th Motor Rifle Division, the 15th SAM Regiment's: the ground feed's withdrawal and relief orders and its reports that it has withdrawn), each withdrawal once. The battery goes to the nearest of its prepared positions (data/command/places_pannonia.json bty21_depth_*) at least back_m further behind the front's line than its main position; an object's cover becomes a relocation from there, troops' cover stays theirs."
+    },
+    {
+      "id": "sector_raised_to_defend",
+      "when": "sector_defend",
+      "task": "posture",
+      "urgent": true,
+      "readiness": 1,
+      "readiness_text": "no. 1 throughout: the division's sector has the main thrust",
+      "work_s": 900,
+      "ready_in_s": 1800,
+      "reason": "The army's chief of air defence has raised the division's sector to defend: the main thrust is there.",
+      "source": "docs/fronts/04_AIR_DEFENCE_STRATEGY.md sections 2 and 4 (the army's chief of air defence's priority by sector; the regiment takes his priorities and covers the main thrust); andersen_1979 p. 40 (60 % of the air defence to the main thrust); sam3d estimate (readiness no. 1 throughout for a battery on the main thrust; work_s as withdraw_with_division's; ready_in_s: the battery at its position, the order and its readiness checks)",
+      "confidence": "estimate",
+      "notes": "Track F, F4.4: an order of the army's chief of air defence (campaign/ad_strategy.hpp, F4.1) on the division's sector that reached the regiment's commander, each once; the battery keeps its task and position (the regiment's other batteries and the moves to the main thrust come with its five batteries)."
+    },
+    {
+      "id": "sector_to_economy",
+      "when": "sector_economy",
+      "task": "posture",
+      "urgent": false,
+      "readiness": 2,
+      "readiness_text": "no. 2, no. 1 on the regiment's warning: the division's sector is quiet",
+      "ready_in_s": 3600,
+      "reason": "The army's chief of air defence has put the division's sector to economy: no thrust there.",
+      "source": "docs/fronts/04_AIR_DEFENCE_STRATEGY.md sections 2 and 4 (economy: a quiet sector, what remains of the air defence, at least one fire unit in each object's cover); sam3d estimate (readiness no. 2 for a battery in a quiet sector; routine, at the evening briefing)",
+      "confidence": "estimate",
+      "notes": "Track F, F4.4: as sector_raised_to_defend, read at the regiment's evening briefing."
+    },
+    {
+      "id": "tell_sharing",
+      "when": "sharing_changed",
+      "task": "tell_sharing",
+      "urgent": true,
+      "work_s": 600,
+      "reason": "The sky's sharing in the division's sector has changed.",
+      "source": "vr_krupicka_1984 pp. 62-64 (the sky shared by zones or in one zone by height, the method set by the PVOS formation's commander; the SAM troops and the fighters each told the other's); data/command/own_air.json sky_by_sector (the method by the sector's priority, F4.3); sam3d estimate (work_s: the regiment's duty officer passes it on)",
+      "confidence": "estimate",
+      "notes": "Track F, F4.4: the method for the division's sector by the national sector's commander's priority there, as the orders that reached the regiment's commander give it (his pre-war plan before any), told when it differs from the plan of cooperation the battery holds; heard at the battery's post, the plan is shared that way (ScenarioRunner::RegimentTellsSharing)."
     }
   ]
 }

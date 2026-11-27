@@ -200,6 +200,9 @@ namespace SimFxAudio
 		Cluster = SimFxAudioEvent(Ev, "cluster", Cluster);
 		Crack = SimFxAudioEvent(Ev, "crack", Crack);
 		Fireball = SimFxAudioEvent(Ev, "fireball", Fireball);
+		FlarePop = SimFxAudioEvent(Ev, "flare_pop", FlarePop);
+		AamLaunch = SimFxAudioEvent(Ev, "aam_launch", AamLaunch);
+		FlarePopsMax = static_cast<int32>(SimFxAudioNum(Ev, "flare_pops_max", FlarePopsMax));
 		SdPopsPerBurst = static_cast<int32>(SimFxAudioNum(Ev, "sd_pops_per_burst", SdPopsPerBurst));
 		FlakDefaultKg = SimFxAudioNum(Ev, "flak_default_kg", FlakDefaultKg);
 		RushLeadS = SimFxAudioNum(Ev, "rush_lead_s", RushLeadS);
@@ -354,7 +357,7 @@ namespace SimFxAudio
 				Add(L.Sample);
 			}
 		}
-		for (const FEventSoundDef* E : {&Launch, &ArmLaunch, &RocketLaunch, &BombRush, &Debris, &Cluster, &Crack, &Fireball})
+		for (const FEventSoundDef* E : {&Launch, &ArmLaunch, &RocketLaunch, &BombRush, &Debris, &Cluster, &Crack, &Fireball, &FlarePop, &AamLaunch})
 		{
 			Add(E->Sample);
 		}

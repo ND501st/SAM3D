@@ -72,6 +72,8 @@ inline double DeliveryPathDeg(const std::string& delivery) {
     if (delivery == "loft") return 30.0;
     if (delivery == "popup") return -20.0;
     if (delivery == "dive") return -40.0;
+    if (delivery == "strafe") return -3.3;        // the A-10's mean dive in the 1979 test (cdat_array20_1980)
+    if (delivery == "gentle_dive") return -15.0;  // cannon and rockets from 10-25 degrees (mt_1970_bukhantsev)
     return 0.0;
 }
 

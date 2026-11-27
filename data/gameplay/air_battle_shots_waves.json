@@ -1,0 +1,44 @@
+{
+  "waves_id": "air_battle_shots",
+  "status": "First pass, 19 November 2026: the air battle check's flares (roadmap B13, -SimAirShots).",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Game values for the air battle check (data/scenarios/air_battle_flares.json, -SimAirShots' second scenario), not the air war: one NATO flight at a time from 12-14 km out over the battery, where the scenario's Strela-2 team shoots at it on the pass (test_waves.hpp WavePassKillChance) and its pilots, seeing the launch, fire flares by their reactions (gameplay/reactions.json, countermeasures by type and year). The rest as gameplay/test_waves.json, whose loader reads this file (simcore/air_war/test_waves_data.hpp).",
+  "theatre": "air_war/theatre_pannonia.json",
+  "weapons": "air_war/weapons.json",
+  "defences": ["air_war/theatre_pannonia_nation.json", "air_war/theatre_pannonia.json"],
+  "tuning": "gameplay/air_war.json",
+  "damage": "gameplay/damage.json",
+  "aaa": "gameplay/aaa.json",
+  "factions": ["air_war/faction_nato.json"],
+  "timing": {
+    "first_wave_s": 5,
+    "interval_s": [20, 30],
+    "flights": [1, 1],
+    "max_airborne": 12,
+    "friendly_share": 0,
+    "remove_after_s": 30,
+    "notes": "One flight a wave, the first 5 s in, the next every 20-30 s while fewer than twelve aircraft are up; none of ours. Leavers are gone 30 s after the pass."
+  },
+  "geometry": {
+    "entry_km": [12, 14],
+    "helicopter_km": [10, 12],
+    "jammer_orbit_km": 40,
+    "support_orbit_km": 60,
+    "city_radius_km": 1.5,
+    "notes": "From the battery: in from 12-14 km, the aims within 1.5 km of it, so each flight passes over the Strela-2 team."
+  },
+  "weapon_kinds": [
+    { "kind": "bomb", "release_km": 1.6 },
+    { "kind": "retarded_bomb", "release_km": 0.9 },
+    { "kind": "cluster", "release_km": 1.8 },
+    { "kind": "runway", "release_km": 1.0 },
+    { "kind": "guided_bomb", "release_km": 5.0, "scatter_m": 5 },
+    { "kind": "missile", "release_km": 8.0, "scatter_m": 5 },
+    { "kind": "rockets", "release_km": 2.8, "scatter_m": 60 },
+    { "kind": "atgm", "release_km": 3.5, "scatter_m": 3 },
+    { "kind": "gun", "release_km": 1.3, "scatter_m": 25 }
+  ],
+  "friendly_callsigns": ["Sokol"],
+  "friendly": []
+}

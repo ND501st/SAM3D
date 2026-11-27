@@ -86,7 +86,7 @@ inline std::string MilsText(double azimuth_deg) {
     while (a < 0.0) a += 360.0;
     while (a >= 360.0) a -= 360.0;
     int mils = static_cast<int>(a * 6000.0 / 360.0 + 0.5) % 6000;
-    char out[16];
+    char out[64];
     std::snprintf(out, sizeof(out), "%02d-%02d", mils / 100, mils % 100);
     return out;
 }
@@ -277,6 +277,18 @@ public:
         out.swap(heard_);
         return out;
     }
+    // A speaker takes back what he has not yet said (an order overtaken by his next one: the commander's «Цель — взять!»
+    // still waiting its turn when he orders the transmitters off against an ARM). Returns how many lines.
+    int Withdraw(const std::string& from, const std::vector<std::string>& ids) {
+        const std::size_t before = pending_.size();
+        pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
+                                      [&](const SpokenCallout& p) {
+                                          return p.from == from && std::find(ids.begin(), ids.end(), p.id) != ids.end();
+                                      }),
+                       pending_.end());
+        return static_cast<int>(before - pending_.size());
+    }
+
     // Everything said so far.
     const std::vector<SpokenCallout>& Log() const { return log_; }
     // What is being said now (started, not finished), on every channel.

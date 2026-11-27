@@ -8,10 +8,10 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | model | read by a simulation model | 130 |
 | display | sets a screen's picture or what a meter reads | 33 |
 | indicator | only lights a lamp or turns on a display | 7 |
-| code | named by simcore's source or a system file, not by the console | 0 |
+| code | named by simcore's source or a system file, not by the console | 1 |
 | drill | worked in a drill, lesson or readiness state; changes nothing | 3 |
 | inert | nothing names it | 26 |
-| **all** | | **276** |
+| **all** | | **277** |
 
 ## wired (77): drives a subsystem or the launch
 
@@ -279,6 +279,12 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | op_panel | РАБОТА / КОНТРОЛЬ / КАЛИБР. | `ssc.check_mode` | Operator | Range indicator |
 | pu303_panel | ПОДСВЕТКА (the panel's lights) | `gta.backlight` | Driver | ПОДСВЕТКА (left); ПОДСВЕТКА (right) |
 | pu303_panel | КОНТР. ЛАМП (lamp test) | `gta.lamp_test` | Driver | ДАВЛ. МАСЛА; ЛЮКИ ЗАКР.; ЛЮКИ ОТКР.; НАГРУЗКИ ГОМ; НАГРУЗКИ ГТА; НАГРУЗКИ ИВП; ОБРАТ. ЧЕРЕД.; ОБРЫВ ФАЗ; ПР ВС |
+
+## code (1): named by simcore's source or a system file, not by the console
+
+| Panel | Control | Id | Seat | Reaches |
+|---|---|---|---|---|
+| so_panel | КОД | `iff.code` | Senior operator | simcore/include/simcore/scenario_runner.hpp |
 
 ## drill (3): worked in a drill, lesson or readiness state; changes nothing
 

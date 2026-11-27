@@ -171,6 +171,17 @@ public:
         }
     }
 
+    // More deliveries for a session already running (roadmap B9: the intercept service's day summary, written during it). Those
+    // not yet given stay in order of time.
+    void Add(const std::vector<DeliveryDef>& more) {
+        for (const DeliveryDef& d : more) {
+            defs_.push_back(d);
+            if (Carried(d.means)) visitors_.push_back(VisitorFor(d));
+        }
+        std::stable_sort(defs_.begin() + static_cast<std::ptrdiff_t>(next_), defs_.end(),
+                         [](const DeliveryDef& a, const DeliveryDef& b) { return a.after_s < b.after_s; });
+    }
+
     // The deliveries due by t not yet given, in order (each once).
     std::vector<const DeliveryDef*> Due(double t) {
         std::vector<const DeliveryDef*> out;

@@ -1,13 +1,14 @@
 {
   "visual_range_id": "visual_range",
   "status": "first pass (roadmap G11.2, docs/campaign/11_BATTERY_LIFE_PROPOSAL.md section 5.12)",
-  "notes": "How far the player's character sees a vehicle on the ground (simcore/nav/session.hpp): within it the world's movers run at full detail (M2) and are drawn; beyond it by its margin they go back to M1. The light by the sun's elevation (day above the horizon, civil twilight to -6 degrees, night below), the weather's visibility the cap.",
+  "notes": "How far the player's character sees a vehicle on the ground (simcore/nav/session.hpp): within it the world's movers run at full detail (M2) and are drawn; beyond it by its margin they go back to M1. The light by the sun's elevation (day above the horizon, civil twilight to -6 degrees, night below), the weather's visibility the cap. At night the moon carries the range from night_m towards moonlit_m by its share of the light (simcore/light.hpp, roadmap S8).",
   "source": "game values (the eye's range for a vehicle on open ground by day, at dusk and by night with headlights or a moon); civil twilight's -6 degrees is the astronomical definition",
   "confidence": "estimate",
   "values": {
     "day_m": { "value": 8000, "source": "game value: a column of vehicles on a road seen across open country by day", "confidence": "estimate" },
     "twilight_m": { "value": 3000, "source": "game value: the same at dusk or dawn", "confidence": "estimate" },
-    "night_m": { "value": 1500, "source": "game value: headlights and dimmed lights, or a moon", "confidence": "estimate" },
+    "night_m": { "value": 1500, "source": "game value: headlights and dimmed lights on a moonless night", "confidence": "estimate" },
+    "moonlit_m": { "value": 3000, "source": "game value: the same under a full moon high in a clear sky (roadmap S8: light.hpp's moon_share carries the night's range from night_m towards it), as far as at dusk", "confidence": "estimate" },
     "night_blackout_m": { "value": 150, "source": "vokrachko_1963 (a blacked-out vehicle's rear distance indicator is designed to be seen only from the next vehicle, its figures from 150 m in)", "confidence": "medium", "notes": "A vehicle with no outside lights at night (the light discipline, voenizdat_osa_1991 p222): seen no farther than this (nav/movers.hpp, Mover::lit)." },
     "twilight_deg": { "value": 6, "source": "derived: civil twilight, the sun up to 6 degrees below the horizon (the astronomical definition)", "confidence": "high" },
     "margin": { "value": 0.1, "source": "game value: back to M1 only beyond the range by this share, so a mover at its edge does not flicker", "confidence": "estimate" }

@@ -189,6 +189,9 @@ enum class FlightRole {
     Awacs,       // airborne early warning and control (E-3, A-50): the defender's fighters met warned and vectored
     Tanker,      // air refuelling (KC-135, KC-10): deep strikes beyond the receivers' own radius, full loads
     Elint,       // stand-off electronic intelligence (RC-135, Nimrod R1, Il-20): the defenders' radars heard and fixed
+    // Fighters with a package but not beside it (docs/air_battle/07_AIR_TO_AIR.md, B8): any type that can escort may fly them.
+    Sweep,       // a fighter sweep ahead of the package on its route: clears the air before the strikers come
+    Cap,         // a combat air patrol held over the target area or a barrier while the package is in
     Count
 };
 
@@ -207,6 +210,8 @@ inline const char* FlightRoleName(FlightRole r) {
         case FlightRole::Awacs: return "awacs";
         case FlightRole::Tanker: return "tanker";
         case FlightRole::Elint: return "elint";
+        case FlightRole::Sweep: return "sweep";
+        case FlightRole::Cap: return "cap";
         case FlightRole::Count: break;
     }
     return "?";
@@ -246,6 +251,9 @@ enum class Delivery {
     Level,      // level from medium or high altitude, above the guns and shoulder-fired missiles
     Standoff,   // a guided weapon launched from its range, turning away (Maverick, Kh-29, GBU-15)
     HoverFire,  // a helicopter unmasking from cover to fire missiles or rockets, then down again
+    // Roadmap B6 (docs/air_battle/06_OPPORTUNITY.md 5.2): the gun's and the rockets' passes, flown (attack_pass.hpp).
+    Strafe,      // a low-angle gun pass: the A-10's from the 1979 test, open fire at about 1.1 km in a 3 deg dive (cdat_array20_1980)
+    GentleDive,  // cannon and rockets from a shallow 10-25 deg dive, the Pact's conventional attack (mt_1970_bukhantsev)
     Count
 };
 constexpr int kDeliveries = static_cast<int>(Delivery::Count);
@@ -259,6 +267,8 @@ inline const char* DeliveryName(Delivery d) {
         case Delivery::Level: return "level";
         case Delivery::Standoff: return "standoff";
         case Delivery::HoverFire: return "hover_fire";
+        case Delivery::Strafe: return "strafe";
+        case Delivery::GentleDive: return "gentle_dive";
         case Delivery::Count: break;
     }
     return "?";
@@ -277,7 +287,8 @@ inline bool ParseDelivery(const std::string& s, Delivery& out) {
 
 // Whether a delivery is flown from low level (the transit profile Low) or from medium altitude and above.
 inline bool DeliveryIsLow(Delivery d) {
-    return d == Delivery::Laydown || d == Delivery::Loft || d == Delivery::PopUp || d == Delivery::HoverFire;
+    return d == Delivery::Laydown || d == Delivery::Loft || d == Delivery::PopUp || d == Delivery::HoverFire || d == Delivery::Strafe ||
+           d == Delivery::GentleDive;
 }
 
 // What an aim point of a target is, as the weapons see it (docs/air_war/10_WEAPONS.md).
@@ -363,6 +374,18 @@ inline double DayPartHour(DayPart d) {
 
 enum class Weather { Clear, Cloudy, Poor };
 
+// The share of the days that are not clear on a day of the year (1-365) in Central Europe (roadmap S7, weather.mode 1):
+// crawford_1977_rand, a ceiling below 5,000 ft or visibility below 5 nmi about 85 % of the time in winter and 50 % in
+// summer; held from December to February and from June to August, the months between a straight line (a game value).
+inline double NotClearShare(int day_of_year) {
+    const double winter = 0.85, summer = 0.5;
+    const int d = ((day_of_year - 1) % 365 + 365) % 365 + 1;
+    if (d <= 59 || d >= 335) return winter;            // December, January, February
+    if (d >= 152 && d <= 243) return summer;           // June, July, August
+    if (d < 152) return winter + (summer - winter) * static_cast<double>(d - 59) / (152.0 - 59.0);   // spring
+    return summer + (winter - summer) * static_cast<double>(d - 243) / (335.0 - 243.0);               // autumn
+}
+
 inline const char* WeatherName(Weather w) {
     switch (w) {
         case Weather::Clear: return "clear";
@@ -373,7 +396,8 @@ inline const char* WeatherName(Weather w) {
 }
 
 // Where an item of the enemy's knowledge came from (docs/air_war/03_INTELLIGENCE.md).
-enum class IntelSource { None, Satellite, AirRecce, Elint, Comint, Humint, PilotReport, LaunchSighting, Prior };
+// InFlightReport (roadmap B5): a flight's report in the air through a post, there in minutes (c2.hpp).
+enum class IntelSource { None, Satellite, AirRecce, Elint, Comint, Humint, PilotReport, LaunchSighting, Prior, InFlightReport };
 
 inline const char* IntelSourceName(IntelSource s) {
     switch (s) {
@@ -386,6 +410,7 @@ inline const char* IntelSourceName(IntelSource s) {
         case IntelSource::PilotReport: return "pilot reports";
         case IntelSource::LaunchSighting: return "launch sighting";
         case IntelSource::Prior: return "pre-war survey";
+        case IntelSource::InFlightReport: return "in-flight report";
     }
     return "?";
 }
@@ -490,7 +515,7 @@ inline std::string FormatHour(double campaign_h, double start_hour) {
     if (h < 0.0) h += 24.0;
     const int hh = static_cast<int>(std::floor(h));
     const int mm = static_cast<int>(std::floor((h - hh) * 60.0 + 1e-6));
-    char buf[32];
+    char buf[96];
     std::snprintf(buf, sizeof(buf), "D%d %02d:%02d", day, hh, mm);
     return buf;
 }

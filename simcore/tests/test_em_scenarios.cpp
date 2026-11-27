@@ -2,6 +2,7 @@
 // "Testing"). Generic placeholder library (data/em/generic.json) — no real system data.
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -842,4 +843,37 @@ SC_TEST("em scenario: a degraded receiver loses its loss on the echo and the clu
     SC_EXPECT(snr_db[0] > -300.0);
     SC_EXPECT_NEAR(snr_db[0] - snr_db[1], 6.0, 1e-6);
     SC_EXPECT_NEAR(cn_db[0] - cn_db[1], 6.0, 1e-6);
+}
+
+SC_TEST("em scenario (S7): the receivers skip a beam that cannot reach them over the best ground; what they hear is the same") {
+    // A turning search radar and eight jets with warning receivers from 20 to 400 km: with the bound on, the paths to
+    // the far jets and to the near ones in the side lobes are not walked, and every receiver hears what it heard
+    // without the bound (the cache of the paths not walked is not refreshed: the same within a step's tolerance).
+    int heard[2][8] = {};
+    std::uint64_t culled[2] = {0, 0}, evaluated[2] = {0, 0};
+    for (int k = 0; k < 2; ++k) {
+        EmWorld w(kOrigin, nullptr, 11);
+        SC_EXPECT(w.SetLibrary(GenericLib()));
+        w.Scene().esm_sidelobe_bound = k == 1;
+        w.AddRadar(w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 5.0), "generic_search_c", true);
+        int rwr[8];
+        for (int i = 0; i < 8; ++i) {
+            const double r = 20000.0 + 54000.0 * i, b = DegToRad(37.0 * i);
+            const int jet = AddAircraft(w, "jet", Side::Blue, r * std::sin(b), r * std::cos(b), 6000.0, {0.0, 0.0, 0.0});
+            rwr[i] = w.AddEsm(jet, "generic_rwr");
+        }
+        for (int s = 0; s < 400; ++s) {
+            w.Step(0.1);
+            for (int i = 0; i < 8; ++i) heard[k][i] += w.Scene().FindEsm(rwr[i])->contacts.empty() ? 0 : 1;
+        }
+        culled[k] = w.Scene().stats.esm_culled;
+        evaluated[k] = w.Scene().stats.esm_evaluations;
+    }
+    std::printf("    paths culled %llu and %llu, walked %llu and %llu; steps heard:", static_cast<unsigned long long>(culled[0]),
+                static_cast<unsigned long long>(culled[1]), static_cast<unsigned long long>(evaluated[0]), static_cast<unsigned long long>(evaluated[1]));
+    for (int i = 0; i < 8; ++i) std::printf(" %d/%d", heard[0][i], heard[1][i]);
+    std::printf("\n");
+    SC_EXPECT(culled[1] > culled[0]);
+    for (int i = 0; i < 8; ++i) SC_EXPECT(std::abs(heard[0][i] - heard[1][i]) <= 2);
+    SC_EXPECT(heard[0][0] > 0);
 }

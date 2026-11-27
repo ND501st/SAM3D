@@ -1,0 +1,1039 @@
+{
+  "library_id": "fighter_radars_1985",
+  "display_name": "Fighter fire-control radars of the 1985 air battle, as EM radars on air platforms (track B, B7)",
+  "status": "B7 data set (15 November 2026). Each radar is calibrated to the figure the sources give (docs/air_battle/07_AIR_TO_AIR.md 5.2): the Sapfir-23ML's 50-55 km by hand, the Sapfir-23D's 55 km, the APG-63 class's 80 km looking up in the Soviet view. The APQ-120 class has an estimated anchor; the APG-66, RP-21 and RP-22 are labelled placeholders. Placed on an aircraft's platform by the session (B8), not by B7.",
+  "provenance": "per_value",
+  "notes": "Airborne radars (airborne: true): antenna_height_m is the carrier's height and the anchor a free-space figure. look_down_db is a game value until sourced, read by the air combat layer. Source ids are those of docs/SOURCES.md.",
+  "sources": [
+    {
+      "id": "airwar_ru",
+      "title": "airwar.ru, MiG-23M and MiG-23ML pages: detection and lock ranges of the Sapfir-23D and -23ML",
+      "tier": "4",
+      "notes": "Registered in docs/SOURCES.md."
+    },
+    {
+      "id": "dubrov_1983",
+      "title": "Dubrov 1983 on the Bekaa: the F-15's radar against clutter and looking up",
+      "tier": "1",
+      "notes": "Registered in docs/SOURCES.md."
+    },
+    {
+      "id": "lambeth_1984",
+      "title": "Lambeth 1984 on the Bekaa: the F-15's lock on the nose to 50 nm",
+      "tier": "4",
+      "notes": "Registered in docs/SOURCES.md."
+    },
+    {
+      "id": "nato_radar_refs",
+      "title": "Encyclopaedic pages: AN/APG-63 and AN/APG-66",
+      "tier": "4",
+      "notes": "Registered in docs/SOURCES.md."
+    }
+  ],
+  "radars": [
+    {
+      "id": "sapfir_23ml",
+      "name": "Sapfir-23ML fighter radar (MiG-23ML)",
+      "role": "search",
+      "emitter": {
+        "freq_hz": {
+          "value": 9600000000.0,
+          "source": "estimate (ew_textbooks): the X band of 1970s Soviet fighter radars; the band is not in the sources read",
+          "confidence": "estimate"
+        },
+        "prf_hz": {
+          "value": 4000,
+          "source": "estimate (ew_textbooks)",
+          "confidence": "estimate"
+        },
+        "pulse_width_s": {
+          "value": 1e-06,
+          "source": "estimate (ew_textbooks)",
+          "confidence": "estimate"
+        },
+        "peak_power_w": {
+          "value": 60000,
+          "source": "estimate (ew_textbooks): class value for a 1970s fighter X-band radar",
+          "confidence": "estimate"
+        },
+        "tx_loss_db": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate"
+        },
+        "antenna": {
+          "gain_db": {
+            "value": 32,
+            "source": "estimate (ew_textbooks): a 0.8 m planar array",
+            "confidence": "estimate"
+          },
+          "beamwidth_az_deg": {
+            "value": 4.5,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "beamwidth_el_deg": {
+            "value": 4.5,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "sidelobe_db": {
+            "value": -25,
+            "source": "estimate",
+            "confidence": "estimate"
+          }
+        },
+        "scan": "sector",
+        "scan_period_s": {
+          "value": 2.4,
+          "source": "estimate",
+          "confidence": "estimate",
+          "notes": "One bar of the sector."
+        },
+        "sector_width_deg": {
+          "value": 120,
+          "source": "estimate: a fighter radar's +-60 deg",
+          "confidence": "estimate"
+        },
+        "notes": "A fighter radar scans a sector about the nose; a steady single-target track is the lock the target's warning receiver hears."
+      },
+      "noise_figure_db": {
+        "value": 7.0,
+        "source": "estimate (ew_textbooks): 1970s receiver class",
+        "confidence": "estimate"
+      },
+      "pfa": {
+        "value": 1e-06,
+        "source": "assumption",
+        "confidence": "estimate"
+      },
+      "calibration": {
+        "range_m": 52500,
+        "rcs_m2": 5.0,
+        "target_altitude_m": 5000,
+        "pd": 0.5,
+        "source": "airwar_ru (MiG-23ML: 50-55 km by hand)",
+        "confidence": "medium",
+        "notes": "The mid of 50-55 km. The sources say 'a typical target': 5 m2 (a fighter head-on) and a Pd of 0.5 are SAM3D's assumptions, as for the Osa's anchor."
+      },
+      "airborne": true,
+      "antenna_height_m": {
+        "value": 5000,
+        "source": "estimate: the carrier's height at the anchor (a fighter at 5000 m)",
+        "confidence": "estimate",
+        "notes": "Airborne: this is the carrier's height, and the anchor is a free-space figure (RadarDef::airborne)."
+      },
+      "min_range_m": {
+        "value": 500,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_range_m": {
+        "value": 85000,
+        "source": "airwar_ru (MiG-23ML: 85 km on paper)",
+        "confidence": "medium"
+      },
+      "min_elevation_deg": {
+        "value": -60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_elevation_deg": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_sigma_floor_m": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "angle_sigma_floor_deg": {
+        "value": 0.5,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_resolution_m": {
+        "value": 150,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "look_down_db": {
+        "value": 25,
+        "source": "game value: pulse-Doppler look-down rejection (docs/air_battle/07_AIR_TO_AIR.md 5.2), until sourced",
+        "confidence": "estimate",
+        "notes": "The Sapfir-23D was the first Soviet series fighter radar able to work against targets over the ground (airwar_ru, MiG-23M); how much clutter it cut is not given."
+      },
+      "tracker": {
+        "confirm_hits": 2,
+        "confirm_window": 3,
+        "drop_confirmed_misses": 3,
+        "process_noise_accel": 60,
+        "notes": "Processing choices for a fighter's track-while-scan, not system data."
+      },
+      "source": "airwar_ru (MiG-23ML); estimates as marked",
+      "confidence": "medium",
+      "notes": "In service 50-55 km with the pilot searching by hand (the anchor: 52.5 km); 80-85 km when ground guidance cues the pilot onto the target (a narrower sector and height band: the anchor becomes the cued figure in the session, data/air_war/sensors.json); lock head-on at 30-50 km; 85 km on paper (max_range). The band, power, gain and scan are SAM3D estimates: the sources read give ranges only."
+    },
+    {
+      "id": "sapfir_23d",
+      "name": "Sapfir-23D fighter radar (MiG-23M)",
+      "role": "search",
+      "emitter": {
+        "freq_hz": {
+          "value": 9600000000.0,
+          "source": "estimate (ew_textbooks): the X band of 1970s Soviet fighter radars",
+          "confidence": "estimate"
+        },
+        "prf_hz": {
+          "value": 4000,
+          "source": "estimate (ew_textbooks)",
+          "confidence": "estimate"
+        },
+        "pulse_width_s": {
+          "value": 1e-06,
+          "source": "estimate (ew_textbooks)",
+          "confidence": "estimate"
+        },
+        "peak_power_w": {
+          "value": 50000,
+          "source": "estimate (ew_textbooks): class value for a 1970s fighter X-band radar",
+          "confidence": "estimate"
+        },
+        "tx_loss_db": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate"
+        },
+        "antenna": {
+          "gain_db": {
+            "value": 31,
+            "source": "estimate (ew_textbooks): a 0.75 m planar array",
+            "confidence": "estimate"
+          },
+          "beamwidth_az_deg": {
+            "value": 5.0,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "beamwidth_el_deg": {
+            "value": 5.0,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "sidelobe_db": {
+            "value": -25,
+            "source": "estimate",
+            "confidence": "estimate"
+          }
+        },
+        "scan": "sector",
+        "scan_period_s": {
+          "value": 2.4,
+          "source": "estimate",
+          "confidence": "estimate",
+          "notes": "One bar of the sector."
+        },
+        "sector_width_deg": {
+          "value": 120,
+          "source": "estimate: a fighter radar's +-60 deg",
+          "confidence": "estimate"
+        },
+        "notes": "A fighter radar scans a sector about the nose; a steady single-target track is the lock the target's warning receiver hears."
+      },
+      "noise_figure_db": {
+        "value": 7.0,
+        "source": "estimate (ew_textbooks): 1970s receiver class",
+        "confidence": "estimate"
+      },
+      "pfa": {
+        "value": 1e-06,
+        "source": "assumption",
+        "confidence": "estimate"
+      },
+      "calibration": {
+        "range_m": 55000,
+        "rcs_m2": 5.0,
+        "target_altitude_m": 5000,
+        "pd": 0.5,
+        "source": "airwar_ru (MiG-23M: detection 55 km)",
+        "confidence": "medium",
+        "notes": "'Typical target' read as 5 m2, Pd 0.5, as for the Sapfir-23ML."
+      },
+      "airborne": true,
+      "antenna_height_m": {
+        "value": 5000,
+        "source": "estimate: the carrier's height at the anchor (a fighter at 5000 m)",
+        "confidence": "estimate",
+        "notes": "Airborne: this is the carrier's height, and the anchor is a free-space figure (RadarDef::airborne)."
+      },
+      "min_range_m": {
+        "value": 500,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_range_m": {
+        "value": 55000,
+        "source": "airwar_ru (MiG-23M: detection 55 km)",
+        "confidence": "medium"
+      },
+      "min_elevation_deg": {
+        "value": -60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_elevation_deg": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_sigma_floor_m": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "angle_sigma_floor_deg": {
+        "value": 0.5,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_resolution_m": {
+        "value": 150,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "look_down_db": {
+        "value": 15,
+        "source": "game value: look-down rejection, below the Sapfir-23ML's (docs/air_battle/07_AIR_TO_AIR.md 5.2)",
+        "confidence": "estimate"
+      },
+      "tracker": {
+        "confirm_hits": 2,
+        "confirm_window": 3,
+        "drop_confirmed_misses": 3,
+        "process_noise_accel": 60,
+        "notes": "Processing choices for a fighter's track-while-scan, not system data."
+      },
+      "source": "airwar_ru (MiG-23M); estimates as marked",
+      "confidence": "medium",
+      "notes": "The first Soviet series fighter radar able to work against targets over the ground: detection 55 km and lock 35 km for a typical target (airwar_ru, MiG-23M). The MiG-23M is not in a 1985 war's fits; the radar is here for the type's history. Band, power and gain as the Sapfir-23ML's estimates."
+    },
+    {
+      "id": "apg63_class",
+      "name": "AN/APG-63 class fighter radar (F-15)",
+      "role": "search",
+      "emitter": {
+        "freq_hz": {
+          "value": 9400000000.0,
+          "source": "nato_radar_refs (X band)",
+          "confidence": "medium",
+          "notes": "Middle of the X band, as nato_fighter_fcr_x."
+        },
+        "prf_hz": {
+          "value": 5000,
+          "source": "estimate (ew_textbooks): pulse-Doppler radars switch between low, medium and high PRF; nato_radar_refs names low (uplook) and medium (downlook)",
+          "confidence": "estimate"
+        },
+        "pulse_width_s": {
+          "value": 2e-06,
+          "source": "estimate (ew_textbooks)",
+          "confidence": "estimate"
+        },
+        "peak_power_w": {
+          "value": 8000,
+          "source": "estimate (ew_textbooks): class value for a 1970s fighter X-band radar",
+          "confidence": "estimate"
+        },
+        "tx_loss_db": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate"
+        },
+        "antenna": {
+          "gain_db": {
+            "value": 34,
+            "source": "estimate (ew_textbooks): a 1 m planar array",
+            "confidence": "estimate"
+          },
+          "beamwidth_az_deg": {
+            "value": 3.5,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "beamwidth_el_deg": {
+            "value": 3.5,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "sidelobe_db": {
+            "value": -25,
+            "source": "estimate",
+            "confidence": "estimate"
+          }
+        },
+        "scan": "sector",
+        "scan_period_s": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate",
+          "notes": "One bar of the sector."
+        },
+        "sector_width_deg": {
+          "value": 120,
+          "source": "nato_radar_refs (APG-66: azimuth coverage +-60 deg; the APG-63 taken the same)",
+          "confidence": "low"
+        },
+        "notes": "A fighter radar scans a sector about the nose; a steady single-target track is the lock the target's warning receiver hears."
+      },
+      "noise_figure_db": {
+        "value": 5.0,
+        "source": "estimate (ew_textbooks): 1970s receiver class",
+        "confidence": "estimate"
+      },
+      "pfa": {
+        "value": 1e-06,
+        "source": "assumption",
+        "confidence": "estimate"
+      },
+      "calibration": {
+        "range_m": 80000,
+        "rcs_m2": 5.0,
+        "target_altitude_m": 5000,
+        "pd": 0.5,
+        "source": "dubrov_1983 (the F-15's radar looking up: over 80 km, the Soviet view)",
+        "confidence": "medium",
+        "notes": "The target's 5 m2 and the Pd of 0.5 are SAM3D's assumptions."
+      },
+      "airborne": true,
+      "antenna_height_m": {
+        "value": 5000,
+        "source": "estimate: the carrier's height at the anchor (a fighter at 5000 m)",
+        "confidence": "estimate",
+        "notes": "Airborne: this is the carrier's height, and the anchor is a free-space figure (RadarDef::airborne)."
+      },
+      "min_range_m": {
+        "value": 500,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_range_m": {
+        "value": 92600,
+        "source": "lambeth_1984 (lock on the nose to 50 nm)",
+        "confidence": "medium"
+      },
+      "min_elevation_deg": {
+        "value": -60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_elevation_deg": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_sigma_floor_m": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "angle_sigma_floor_deg": {
+        "value": 0.5,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_resolution_m": {
+        "value": 150,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "look_down_db": {
+        "value": 40,
+        "source": "game value: pulse-Doppler look-down rejection, the strongest of the library (docs/air_battle/07_AIR_TO_AIR.md 5.2)",
+        "confidence": "estimate"
+      },
+      "tracker": {
+        "confirm_hits": 2,
+        "confirm_window": 3,
+        "drop_confirmed_misses": 3,
+        "process_noise_accel": 60,
+        "notes": "Processing choices for a fighter's track-while-scan, not system data."
+      },
+      "source": "dubrov_1983; lambeth_1984; nato_radar_refs; estimates as marked",
+      "confidence": "medium",
+      "notes": "No NATO source for a detection range was found. The Soviet view calibrates it: over 80 km looking up, about 50 km against clutter (dubrov_1983), lock on the nose to 50 nm (lambeth_1984, the max_range). The anchor is the 80 km look-up figure, a free-space one; the clutter figure (50 km) is in sensors.json and is the radar's look-down limit, applied by the air combat layer with look_down_db. X band, 1973 (nato_radar_refs); the rest estimates."
+    },
+    {
+      "id": "apq120_class",
+      "name": "AN/APQ-120 class fighter radar (F-4E)",
+      "role": "search",
+      "emitter": {
+        "freq_hz": {
+          "value": 9400000000.0,
+          "source": "estimate: the X band, as nato_fighter_fcr_x",
+          "confidence": "estimate"
+        },
+        "prf_hz": {
+          "value": 1500,
+          "source": "estimate (ew_textbooks): a low-PRF pulse radar without Doppler processing",
+          "confidence": "estimate"
+        },
+        "pulse_width_s": {
+          "value": 1e-06,
+          "source": "estimate (ew_textbooks)",
+          "confidence": "estimate"
+        },
+        "peak_power_w": {
+          "value": 100000,
+          "source": "estimate (ew_textbooks): class value for a 1970s fighter X-band radar",
+          "confidence": "estimate"
+        },
+        "tx_loss_db": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate"
+        },
+        "antenna": {
+          "gain_db": {
+            "value": 32,
+            "source": "estimate (ew_textbooks): a 0.8 m dish",
+            "confidence": "estimate"
+          },
+          "beamwidth_az_deg": {
+            "value": 4.0,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "beamwidth_el_deg": {
+            "value": 4.0,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "sidelobe_db": {
+            "value": -25,
+            "source": "estimate",
+            "confidence": "estimate"
+          }
+        },
+        "scan": "sector",
+        "scan_period_s": {
+          "value": 2.4,
+          "source": "estimate",
+          "confidence": "estimate",
+          "notes": "One bar of the sector."
+        },
+        "sector_width_deg": {
+          "value": 120,
+          "source": "checo_1969_a2a (the F-4's radar arc: 60 deg either side of the nose)",
+          "confidence": "medium"
+        },
+        "notes": "A fighter radar scans a sector about the nose; a steady single-target track is the lock the target's warning receiver hears."
+      },
+      "noise_figure_db": {
+        "value": 8.0,
+        "source": "estimate (ew_textbooks): 1970s receiver class",
+        "confidence": "estimate"
+      },
+      "pfa": {
+        "value": 1e-06,
+        "source": "assumption",
+        "confidence": "estimate"
+      },
+      "calibration": {
+        "range_m": 37000,
+        "rcs_m2": 5.0,
+        "target_altitude_m": 5000,
+        "pd": 0.5,
+        "source": "estimate: no published detection range found (aam_weapons.md aam-nato-13); about 20 nmi",
+        "confidence": "estimate",
+        "notes": "SAM3D's estimate, low confidence, until a period source is found."
+      },
+      "airborne": true,
+      "antenna_height_m": {
+        "value": 5000,
+        "source": "estimate: the carrier's height at the anchor (a fighter at 5000 m)",
+        "confidence": "estimate",
+        "notes": "Airborne: this is the carrier's height, and the anchor is a free-space figure (RadarDef::airborne)."
+      },
+      "min_range_m": {
+        "value": 500,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_range_m": {
+        "value": 60000,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "min_elevation_deg": {
+        "value": -60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_elevation_deg": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_sigma_floor_m": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "angle_sigma_floor_deg": {
+        "value": 0.5,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_resolution_m": {
+        "value": 150,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "look_down_db": {
+        "value": 0,
+        "source": "airwar_ru (MiG-23M: the APQ-120 had no look-down mode)",
+        "confidence": "medium"
+      },
+      "tracker": {
+        "confirm_hits": 2,
+        "confirm_window": 3,
+        "drop_confirmed_misses": 3,
+        "process_noise_accel": 60,
+        "notes": "Processing choices for a fighter's track-while-scan, not system data."
+      },
+      "source": "airwar_ru (MiG-23M); estimates as marked",
+      "confidence": "low",
+      "notes": "The Soviet account says the APQ-120 had no look-down mode and resisted jamming less than the MiG-23M's radar (airwar_ru, MiG-23M): look_down_db is 0. No detection range was found in any source read: the anchor is a SAM3D estimate, labelled so, until a source is found."
+    },
+    {
+      "id": "apg66_placeholder",
+      "name": "AN/APG-66 fighter radar (F-16A): PLACEHOLDER",
+      "role": "search",
+      "emitter": {
+        "freq_hz": {
+          "value": 9400000000.0,
+          "source": "nato_radar_refs (X band 6.2-10.9 GHz)",
+          "confidence": "medium"
+        },
+        "prf_hz": {
+          "value": 5000,
+          "source": "estimate (ew_textbooks): low PRF uplook, medium PRF downlook (nato_radar_refs)",
+          "confidence": "estimate"
+        },
+        "pulse_width_s": {
+          "value": 2e-06,
+          "source": "estimate (ew_textbooks)",
+          "confidence": "estimate"
+        },
+        "peak_power_w": {
+          "value": 5000,
+          "source": "estimate (ew_textbooks): class value for a 1970s fighter X-band radar",
+          "confidence": "estimate"
+        },
+        "tx_loss_db": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate"
+        },
+        "antenna": {
+          "gain_db": {
+            "value": 31,
+            "source": "estimate (ew_textbooks): a 0.7 m planar array",
+            "confidence": "estimate"
+          },
+          "beamwidth_az_deg": {
+            "value": 4.5,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "beamwidth_el_deg": {
+            "value": 4.5,
+            "source": "estimate (ew_textbooks)",
+            "confidence": "estimate"
+          },
+          "sidelobe_db": {
+            "value": -25,
+            "source": "estimate",
+            "confidence": "estimate"
+          }
+        },
+        "scan": "sector",
+        "scan_period_s": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate",
+          "notes": "One bar of the sector."
+        },
+        "sector_width_deg": {
+          "value": 120,
+          "source": "nato_radar_refs (azimuth coverage +-60 deg)",
+          "confidence": "medium"
+        },
+        "notes": "A fighter radar scans a sector about the nose; a steady single-target track is the lock the target's warning receiver hears."
+      },
+      "noise_figure_db": {
+        "value": 6.0,
+        "source": "estimate (ew_textbooks): 1970s receiver class",
+        "confidence": "estimate"
+      },
+      "pfa": {
+        "value": 1e-06,
+        "source": "assumption",
+        "confidence": "estimate"
+      },
+      "calibration": {
+        "range_m": 55000,
+        "rcs_m2": 5.0,
+        "target_altitude_m": 5000,
+        "pd": 0.5,
+        "source": "placeholder: estimate, no published detection range",
+        "confidence": "estimate",
+        "notes": "PLACEHOLDER figure."
+      },
+      "airborne": true,
+      "antenna_height_m": {
+        "value": 5000,
+        "source": "estimate: the carrier's height at the anchor (a fighter at 5000 m)",
+        "confidence": "estimate",
+        "notes": "Airborne: this is the carrier's height, and the anchor is a free-space figure (RadarDef::airborne)."
+      },
+      "min_range_m": {
+        "value": 500,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_range_m": {
+        "value": 148160,
+        "source": "nato_radar_refs (80 nmi)",
+        "confidence": "low",
+        "notes": "An instrumented range, not a detection range against a stated target."
+      },
+      "min_elevation_deg": {
+        "value": -60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_elevation_deg": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_sigma_floor_m": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "angle_sigma_floor_deg": {
+        "value": 0.5,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_resolution_m": {
+        "value": 150,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "look_down_db": {
+        "value": 35,
+        "source": "game value: pulse-Doppler look-down rejection (docs/air_battle/07_AIR_TO_AIR.md 5.2), until sourced",
+        "confidence": "estimate"
+      },
+      "tracker": {
+        "confirm_hits": 2,
+        "confirm_window": 3,
+        "drop_confirmed_misses": 3,
+        "process_noise_accel": 60,
+        "notes": "Processing choices for a fighter's track-while-scan, not system data."
+      },
+      "source": "placeholder: nato_radar_refs for the band only; estimates as marked",
+      "confidence": "low",
+      "notes": "PLACEHOLDER. No usable detection range found (aam_weapons.md aam-nato-13). nato_radar_refs gives X band 6.2-10.9 GHz, +-60 deg and 80 nmi as an instrumented range; the anchor here is a SAM3D estimate below the APG-63 class, to be replaced when a source is found."
+    },
+    {
+      "id": "rp21_placeholder",
+      "name": "RP-21 'Sapfir' fighter radar (MiG-21MF): PLACEHOLDER",
+      "role": "search",
+      "emitter": {
+        "freq_hz": {
+          "value": 9400000000.0,
+          "source": "placeholder: estimate, X band",
+          "confidence": "estimate"
+        },
+        "prf_hz": {
+          "value": 2000,
+          "source": "placeholder: estimate",
+          "confidence": "estimate"
+        },
+        "pulse_width_s": {
+          "value": 9e-07,
+          "source": "placeholder: estimate",
+          "confidence": "estimate"
+        },
+        "peak_power_w": {
+          "value": 40000,
+          "source": "placeholder: estimate",
+          "confidence": "estimate"
+        },
+        "tx_loss_db": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate"
+        },
+        "antenna": {
+          "gain_db": {
+            "value": 27,
+            "source": "placeholder: estimate",
+            "confidence": "estimate"
+          },
+          "beamwidth_az_deg": {
+            "value": 7.0,
+            "source": "placeholder: estimate",
+            "confidence": "estimate"
+          },
+          "beamwidth_el_deg": {
+            "value": 7.0,
+            "source": "placeholder: estimate",
+            "confidence": "estimate"
+          },
+          "sidelobe_db": {
+            "value": -20,
+            "source": "estimate",
+            "confidence": "estimate"
+          }
+        },
+        "scan": "sector",
+        "scan_period_s": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate",
+          "notes": "One bar of the sector."
+        },
+        "sector_width_deg": {
+          "value": 60,
+          "source": "placeholder: estimate",
+          "confidence": "estimate"
+        },
+        "notes": "A fighter radar scans a sector about the nose; a steady single-target track is the lock the target's warning receiver hears."
+      },
+      "noise_figure_db": {
+        "value": 8.0,
+        "source": "estimate (ew_textbooks): 1970s receiver class",
+        "confidence": "estimate"
+      },
+      "pfa": {
+        "value": 1e-06,
+        "source": "assumption",
+        "confidence": "estimate"
+      },
+      "calibration": {
+        "range_m": 20000,
+        "rcs_m2": 5.0,
+        "target_altitude_m": 5000,
+        "pd": 0.5,
+        "source": "placeholder: estimate, no source found",
+        "confidence": "estimate",
+        "notes": "PLACEHOLDER figure."
+      },
+      "airborne": true,
+      "antenna_height_m": {
+        "value": 5000,
+        "source": "estimate: the carrier's height at the anchor (a fighter at 5000 m)",
+        "confidence": "estimate",
+        "notes": "Airborne: this is the carrier's height, and the anchor is a free-space figure (RadarDef::airborne)."
+      },
+      "min_range_m": {
+        "value": 500,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_range_m": {
+        "value": 30000,
+        "source": "placeholder: estimate",
+        "confidence": "estimate"
+      },
+      "min_elevation_deg": {
+        "value": -60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_elevation_deg": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_sigma_floor_m": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "angle_sigma_floor_deg": {
+        "value": 0.5,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_resolution_m": {
+        "value": 150,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "look_down_db": {
+        "value": 0,
+        "source": "placeholder: estimate: no look-down",
+        "confidence": "estimate"
+      },
+      "tracker": {
+        "confirm_hits": 2,
+        "confirm_window": 3,
+        "drop_confirmed_misses": 3,
+        "process_noise_accel": 60,
+        "notes": "Processing choices for a fighter's track-while-scan, not system data."
+      },
+      "source": "placeholder: no source found",
+      "confidence": "estimate",
+      "notes": "PLACEHOLDER. The RP-21 and RP-22 were not found in a usable source (aam_weapons.md aam-our-01); every figure is a SAM3D estimate of a small first-generation intercept radar, to be replaced when a source is found."
+    },
+    {
+      "id": "rp22_placeholder",
+      "name": "RP-22 'Sapfir-21' fighter radar (MiG-21bis): PLACEHOLDER",
+      "role": "search",
+      "emitter": {
+        "freq_hz": {
+          "value": 9400000000.0,
+          "source": "placeholder: estimate, X band",
+          "confidence": "estimate"
+        },
+        "prf_hz": {
+          "value": 2000,
+          "source": "placeholder: estimate",
+          "confidence": "estimate"
+        },
+        "pulse_width_s": {
+          "value": 9e-07,
+          "source": "placeholder: estimate",
+          "confidence": "estimate"
+        },
+        "peak_power_w": {
+          "value": 45000,
+          "source": "placeholder: estimate",
+          "confidence": "estimate"
+        },
+        "tx_loss_db": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate"
+        },
+        "antenna": {
+          "gain_db": {
+            "value": 28,
+            "source": "placeholder: estimate",
+            "confidence": "estimate"
+          },
+          "beamwidth_az_deg": {
+            "value": 6.5,
+            "source": "placeholder: estimate",
+            "confidence": "estimate"
+          },
+          "beamwidth_el_deg": {
+            "value": 6.5,
+            "source": "placeholder: estimate",
+            "confidence": "estimate"
+          },
+          "sidelobe_db": {
+            "value": -20,
+            "source": "estimate",
+            "confidence": "estimate"
+          }
+        },
+        "scan": "sector",
+        "scan_period_s": {
+          "value": 2.0,
+          "source": "estimate",
+          "confidence": "estimate",
+          "notes": "One bar of the sector."
+        },
+        "sector_width_deg": {
+          "value": 60,
+          "source": "placeholder: estimate",
+          "confidence": "estimate"
+        },
+        "notes": "A fighter radar scans a sector about the nose; a steady single-target track is the lock the target's warning receiver hears."
+      },
+      "noise_figure_db": {
+        "value": 8.0,
+        "source": "estimate (ew_textbooks): 1970s receiver class",
+        "confidence": "estimate"
+      },
+      "pfa": {
+        "value": 1e-06,
+        "source": "assumption",
+        "confidence": "estimate"
+      },
+      "calibration": {
+        "range_m": 25000,
+        "rcs_m2": 5.0,
+        "target_altitude_m": 5000,
+        "pd": 0.5,
+        "source": "placeholder: estimate, no source found",
+        "confidence": "estimate",
+        "notes": "PLACEHOLDER figure."
+      },
+      "airborne": true,
+      "antenna_height_m": {
+        "value": 5000,
+        "source": "estimate: the carrier's height at the anchor (a fighter at 5000 m)",
+        "confidence": "estimate",
+        "notes": "Airborne: this is the carrier's height, and the anchor is a free-space figure (RadarDef::airborne)."
+      },
+      "min_range_m": {
+        "value": 500,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_range_m": {
+        "value": 35000,
+        "source": "placeholder: estimate",
+        "confidence": "estimate"
+      },
+      "min_elevation_deg": {
+        "value": -60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "max_elevation_deg": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_sigma_floor_m": {
+        "value": 60,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "angle_sigma_floor_deg": {
+        "value": 0.5,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "range_resolution_m": {
+        "value": 150,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "look_down_db": {
+        "value": 0,
+        "source": "placeholder: estimate: no look-down",
+        "confidence": "estimate"
+      },
+      "tracker": {
+        "confirm_hits": 2,
+        "confirm_window": 3,
+        "drop_confirmed_misses": 3,
+        "process_noise_accel": 60,
+        "notes": "Processing choices for a fighter's track-while-scan, not system data."
+      },
+      "source": "placeholder: no source found",
+      "confidence": "estimate",
+      "notes": "PLACEHOLDER. As the RP-21: no usable source; a slightly better estimate for the later set."
+    }
+  ]
+}

@@ -98,7 +98,7 @@ struct RouteCard {
 inline std::string ClockHhMm(double s, double start_hour) {
     long long m = std::llround(start_hour * 60.0 + s / 60.0);
     m = ((m % 1440) + 1440) % 1440;
-    char buf[8];
+    char buf[64];
     std::snprintf(buf, sizeof(buf), "%02lld:%02lld", m / 60, m % 60);
     return buf;
 }

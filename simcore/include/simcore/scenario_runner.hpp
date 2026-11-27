@@ -36,13 +36,19 @@
 #include <memory>
 #include <random>
 #include <set>
+#include <unordered_map>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "simcore/board_reading.hpp"
 #include "simcore/acmi.hpp"
+#include "simcore/air_levels.hpp"
+#include "simcore/air_war/air_fight_session.hpp"
+#include "simcore/air_war/air_radio.hpp"
+#include "simcore/air_war/perception_feed.hpp"
 #include "simcore/air_war/test_waves.hpp"
+#include "simcore/fx/air.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_comms.hpp"
 #include "simcore/debrief.hpp"
@@ -69,9 +75,11 @@
 #include "simcore/pu12.hpp"
 #include "simcore/radio_journal.hpp"
 #include "simcore/radio_setup.hpp"
+#include "simcore/reaction_chain.hpp"
 #include "simcore/command/people.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/seat_duty.hpp"
+#include "simcore/step_profile.hpp"
 #include "simcore/terrain.hpp"
 #include "simcore/voice_comms.hpp"
 #include "simcore/world.hpp"
@@ -138,10 +146,26 @@ public:
             e.evade_on_launch = t.evade_on_launch;
             e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
             e.friendly = t.friendly;
+            e.iff_code = t.friendly ? t.iff_code : 0;
             e.size_m = t.size_m;
             e.span_m = t.span_m;
             eng_targets_.push_back(e);
         }
+        flights_ = std::make_unique<Flights>();
+        levels_.Configure(def_.air_levels);
+        if (def_.air_radio.on) {  // the enemy's calls as transmissions (roadmap B9)
+            air_radio_ = std::make_unique<airwar::AirRadio>();
+            std::string radio_error;
+            if (air_radio_->Init(def_.air_radio, def_.origin, &world_.GetTerrain(), def_.seed, &radio_error)) {
+                air_radio_->SetFlights(flights_.get());
+                air_radio_->SetClockStart(def_.clock_start_s > 0.0 ? def_.clock_start_s : 0.0);
+                flights_->SetRadio(air_radio_.get());
+            } else {
+                air_radio_.reset();  // the loader checked the library; fall back to the fixed delay rather than crash
+            }
+        }
+        RegisterFlights(0);
+        ConfigureReactions();
         UpdateLight();  // the sun at second 0 (roadmap R7): the TV's daylight from here, the battery's night below
         kill_.Configure(def_.tuning.kill, def_.seed * 6007u + 3u);
         if (def_.has_faults) faults_.Configure(def_.faults, def_.fault_options, noise::Mix64(def_.seed + 0xFA175u));
@@ -187,6 +211,7 @@ public:
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
             if (em_link_->Ok()) {
                 engagement_.SetEmLink(em_link_.get());
+                if (levels_.On() && levels_.Values().mode >= 2 && levels_.Values().receiver_bound > 0.0) em_link_->SetEsmSidelobeBound(true);  // S7
                 for (const ScenarioTarget& t : def_.targets) {
                     if (!t.rwr.empty()) em_link_->SetTargetRwr(t.id, t.rwr);  // made with the target's platform
                 }
@@ -229,39 +254,51 @@ public:
 
     void Step(double dt) {
         if (finished_) return;
+        clock_.Start();
         time_ += dt;
         UpdateLight();
         weather_.SetTime(time_);  // the clouds drift
+        clock_.Lap(StepProfile::Crew);
         UpdateTargets(dt);
         UpdateWaves();
+        clock_.Lap(StepProfile::Waves);
         DeliverOrders();
         PlayDeliveries();
         UpdateVoice();
         UpdateOsaNet();
         UpdateIntercomCheck();
         UpdateBattery(dt);
+        clock_.Lap(StepProfile::Crew);
         StepNav(dt);
+        clock_.Lap(StepProfile::Nav);
         UpdateEmission(dt);
+        UpdateOwnAir();
         UpdateNeighbourFire(dt);
+        clock_.Lap(StepProfile::Defences);
         UpdateC2();
         UpdateRadios();
         UpdatePost();
         UpdateRadioTuning(dt);
         UpdateCompass();
+        clock_.Lap(StepProfile::Post);
         if (engagement_on_) {
             aim_crew_.assigned = assigned_target_;
             aim_crew_.ignore = decoys_known_;
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
-            // A radar lock is heard by the target's warning receiver; a TV track is not. With the EM layer, a target with
-            // a warning receiver of its own goes by what it hears (CueFromWarnings).
-            const TrackMethod m = engagement_.Method();
-            if ((m == TrackMethod::Radar || m == TrackMethod::RadarOnJam) && !HasRwr(engagement_.TrackedTarget())) {
-                CueTarget(engagement_.TrackedTarget(), false);
-            }
+            // A radar lock is heard only by a target with a warning receiver (CueFromWarnings, UpdatePerception): a pilot
+            // without one does not feel it (roadmap B3: the truth cue is gone).
         }
+        clock_.Lap(StepProfile::Engagement);
         UpdateLauncher();
         UpdateGuidanceEm();
         CueFromWarnings();
+        clock_.Lap(StepProfile::Guidance);
+        UpdatePerception();
+        clock_.Lap(StepProfile::Perception);
+        UpdateReactions();
+        clock_.Lap(StepProfile::Reactions);
+        UpdateAirFight();
+        clock_.Lap(StepProfile::AirFight);
         UpdateArms();
         UpdateFuel(dt);
         UpdatePositionPower();
@@ -322,6 +359,43 @@ public:
             next_acmi_s_ += 1.0;
         }
         CheckEnd();
+        clock_.Lap(StepProfile::Crew);
+        clock_.End();
+    }
+
+    // ---- What a step costs (roadmap B12, step_profile.hpp): wall time by part of the step, from now on. The unit's EM
+    // world times its phases too (em::EmStats). Nothing in the simulation reads it.
+    void SetProfile(bool on) {
+        clock_.SetOn(on);
+        clock_.Reset();
+        if (em_link_) em_link_->World().Rates().profile = on;
+    }
+    const StepProfile& Profile() const { return clock_.Profile(); }
+
+    // ---- The levels of detail (roadmap B12, air_levels.hpp): each flight's, and how often they changed.
+    AirLevel FlightLevel(const std::string& flight_id) const { return levels_.LevelOf(flights_->Index(flight_id)); }
+    AirLevel TargetLevel(const std::string& id) const {
+        const std::size_t i = TargetIndexOf(id);
+        return i < target_level_.size() ? target_level_[i] : AirLevel::A2;
+    }
+    int LevelChanges() const { return level_changes_; }
+    const AirLevels& Levels() const { return levels_; }
+    // A target's aircraft in the world (null before it appeared): for tests and the cost bench's trace.
+    const Aircraft* TargetAircraft(const std::string& id) const { return AircraftOf(id); }
+    // The aircraft in the sky now, and how many of them are wingmen at A1 (hearing on their leader's receiver).
+    void LevelCounts(int& alive, int& a1) const {
+        alive = a1 = 0;
+        for (std::size_t i : live_) {
+            ++alive;
+            if (i < target_level_.size() && target_level_[i] == AirLevel::A1) ++a1;
+        }
+    }
+    // Every pilot's perception ticks so far (perception.hpp's count).
+    std::uint64_t PerceptionTicks() const { return percep_ ? percep_->hub.Ticks() : 0; }
+    // The waypoint a target flies for (its place on its route).
+    std::size_t TargetNextWaypoint(const std::string& id) const {
+        const Aircraft* a = AircraftOf(id);
+        return a != nullptr ? a->next_waypoint : 0;
     }
 
     // Steps until the scenario ends. Returns false if `max_s` passed first.
@@ -435,6 +509,7 @@ public:
     void SetTerrain(const Terrain* terrain) {
         world_.SetTerrain(terrain != nullptr ? terrain : (map_ground_ ? static_cast<const Terrain*>(map_ground_.get()) : &ground_));
         if (em_link_) em_link_->SetTerrain(&world_.GetTerrain());
+        if (air_radio_) air_radio_->World().SetTerrain(&world_.GetTerrain());
         if (battery_fire_) battery_fire_->SetGround(&world_.GetTerrain(), &world_.Frame());
         if (neighbour_fire_) neighbour_fire_->SetGround(&world_.GetTerrain(), &world_.Frame());
     }
@@ -769,7 +844,8 @@ public:
     // launch and each result the judge called, right or wrong; the crew's word, not the truth.
     struct CrewCall {
         double time_s = 0.0;
-        std::string kind;    // "launch", "destroyed", "missed", "unknown"
+        std::string kind;    // "launch", "destroyed", "missed", "unknown"; roadmap S4: "hit" (seen burning, flies on),
+                             // "chaff" (seen dropping it on the scope), "jettisoned" (seen throwing off its load on the TV)
         std::string target;  // as the crew knows it (the scope's label)
     };
     const std::vector<CrewCall>& CrewCalls() const { return crew_calls_; }
@@ -1775,6 +1851,8 @@ public:
         }
         // An ARM attack reported to the battery commander (refused until he has heard a sign of one).
         if ((battery_ || LinkedToPost()) && def_.crew_data.FindCallout("report_arm_attack") != nullptr) out.push_back("report_arm_attack");
+        // A violator reported (S1; refused until he holds one: a track answering friend off every notice).
+        if (def_.own_air.present && def_.crew_data.FindCallout("report_violator") != nullptr) out.push_back("report_violator");
         // The battery's orders on the net (orders by a means): his read-back and his «к маршу готов».
         if (!OwnOnOrderNet().empty()) {
             for (const char* id : {"order_readback", "report_ready_to_march"}) {
@@ -1976,16 +2054,13 @@ private:
         bool gone = false;
         int world_id = -1;
         TargetPilot pilot;  // terrain following, pop-up, evasion (target_behaviour.hpp)
-        // Held by the instructor (roadmap 10.3): it flies his heading, height and speed; its own pilot and route wait.
+        // Held by the instructor (roadmap 10.3): it flies his heading, height and speed (his orders to it as a flight of
+        // one, flights.hpp); its own pilot waits, and its route, never overwritten, is there when he lets it go.
         bool held = false;
-        double held_heading_rad = 0.0;
         TargetPilot route_pilot;
-        std::vector<Vec3> route_waypoints;
-        std::size_t route_next = 0;
         AircraftDamage damage;  // what the testbed's defences did to it (damage.hpp, roadmap R1)
         Vec3 last_position;     // where the world had it before this step (a weapon's impact between the two)
     };
-    static constexpr double kHeldLegM = 50000.0;  // a held target flies at a point this far along his heading
     // A target added once the session runs (the instructor's, a package's): its state beside the scenario's own.
     void EnterTarget(ScenarioTarget t) {
         EngagementTarget e;
@@ -1994,6 +2069,7 @@ private:
         e.evade_on_launch = t.evade_on_launch;
         e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
         e.friendly = t.friendly;
+        e.iff_code = t.friendly ? t.iff_code : 0;
         e.size_m = t.size_m;
         e.span_m = t.span_m;
         eng_targets_.push_back(e);
@@ -2042,21 +2118,35 @@ private:
         const SunLight l = LightAt(def_.clock, time_, def_.light_values);
         const bool changed = !light_init_ || l.daylight != light_.daylight || l.dark != light_.dark;
         const bool phase = light_init_ && l.phase != light_.phase;
+        // The TV's threshold through the twilight (roadmap S8): told to the engagement as it moves, without an event.
+        const bool tv_light = !light_init_ || std::fabs(l.tv_threshold_factor - light_.tv_threshold_factor) > 1e-3;
         light_ = l;
-        if (!changed && !phase) return;
-        if (changed) {
+        if (changed || tv_light) {
             em::OpticalConditions o = def_.optics;
             o.daylight = light_.daylight;
+            o.threshold_factor = light_.tv_threshold_factor;
             engagement_.SetOpticalConditions(o);
+        }
+        if (!changed && !phase) return;
+        if (changed) {
             if (battery_) battery_->SetNight(light_.dark);
             if (order_net_) order_net_->SetNight(light_.dark);
         }
         if (light_init_) {
-            char buf[96];
+            char buf[192];
             std::snprintf(buf, sizeof(buf), "%s: the sun %.1f deg %s the horizon%s", LightPhaseName(light_.phase),
                           std::fabs(light_.sun_elevation_deg), light_.sun_elevation_deg < 0.0 ? "below" : "above",
                           changed ? (light_.dark ? ", dark" : (light_.daylight ? ", daylight" : "")) : "");
-            Event("light", buf);
+            std::string line = buf;
+            if (light_.phase == LightPhase::Night) {  // the moon of the night (S8)
+                if (light_.moon_elevation_deg > 0.0) {
+                    std::snprintf(buf, sizeof(buf), "; the moon %.0f %% lit, %.0f deg up", 100.0 * light_.moon_illuminated, light_.moon_elevation_deg);
+                    line += buf;
+                } else {
+                    line += "; no moon";
+                }
+            }
+            Event("light", line);
         }
         light_init_ = true;
     }
@@ -2076,11 +2166,23 @@ private:
             a.position = t.start;
             a.speed_mps = t.speed_mps;
             a.max_turn_rate_rad_s = t.max_turn_rate_rad_s;
+            a.max_load_g = t.max_load_g;  // its type's limits: with any it flies by bank-to-turn (roadmap R3)
+            a.sustained_turn_rate_rad_s = t.sustained_turn_rate_rad_s;
+            a.roll_rate_rad_s = t.roll_rate_rad_s;
+            a.max_speed_mps = t.max_speed_mps;
+            a.accel_mps2 = t.accel_mps2;
+            a.max_climb_mps = t.max_climb_mps;
             a.rcs_m2 = t.rcs_m2;
             a.waypoints = t.waypoints;
             a.bottom_m = t.BottomM();
+            a.frame_alt_m = world_.Frame().AltitudeOf(Vec3{});  // its altitude over the sea for the air's density (roadmap S4)
             targets_[i].pilot = TargetPilot(t.behaviour, t.evade);
             targets_[i].pilot.SetWeapon(t.weapon);
+            if (t.reactions.on && !t.weapon && !t.friendly) {  // roadmap B4: he reacts by his faction's tables
+                reactions_.Register(static_cast<int>(i), t.id, t.reactions, t.pilot_skill, t.seats > 1);
+            } else if (t.evade.present && !t.weapon && !t.friendly) {  // a hand-written "evade": its scripted row (S4)
+                reactions_.RegisterScripted(static_cast<int>(i), t.id, t.evade);
+            }
             targets_[i].pilot.OnSpawn(a);
             targets_[i].world_id = world_.AddAircraft(std::move(a));
             targets_[i].spawned = true;
@@ -2095,13 +2197,34 @@ private:
             s.last_position = a->position;
             // A weapon on to its aim, its last waypoint, strikes there: it passes it close, not half a kilometre short.
             if (def_.targets[i].weapon && a->next_waypoint + 1 == a->waypoints.size()) a->waypoint_capture_radius_m = kWeaponAimCaptureM;
-            if (s.held && !s.pilot.Evading()) {  // the instructor's heading (a jink he ordered steers itself)
-                a->waypoints = {a->position + Vec3{std::sin(s.held_heading_rad), std::cos(s.held_heading_rad), 0.0} * kHeldLegM};
-                a->next_waypoint = 0;
+        }
+        // The command layer (flights.hpp, roadmap B1): each aircraft told what to fly, or left to its route; then each
+        // pilot's height layer.
+        const Flights::Lookup air = FlightLookup();
+        clock_.Lap(StepProfile::Flights);
+        UpdateLevels(air);  // roadmap B12: each flight's level of detail
+        clock_.Lap(StepProfile::Levels);
+        flights_->Steer(time_, air);
+        LendReceivers(air);  // the wingmen of flights at A1 that keep their slots: their leader's receiver for theirs
+        clock_.Lap(StepProfile::Flights);
+        for (std::size_t i = 0; i < targets_.size(); ++i) {
+            TargetState& s = targets_[i];
+            if (!s.spawned || s.gone) continue;
+            Aircraft* a = world_.FindAircraft(s.world_id);
+            if (a == nullptr) continue;
+            // An attack pass flown in its dive (roadmap S4): the pilot's height layer takes the pass's line while its
+            // override is on.
+            const PilotOverride* ov = flights_->OverrideOf(static_cast<int>(i));
+            if (ov != nullptr && ov->kind == PilotOverride::Kind::Attack && ov->dive_rad > 0.0) {
+                s.pilot.SetPass(GroundEnu(ov->pass_aim.x, ov->pass_aim.y), ov->dive_rad, ov->open_fire_m);
+            } else if (s.pilot.InPass()) {
+                s.pilot.EndPass();
             }
             s.pilot.BeforeStep(*a);
         }
+        clock_.Lap(StepProfile::Pilots);
         world_.Step(dt);
+        clock_.Lap(StepProfile::World);
         for (std::size_t i = 0; i < targets_.size(); ++i) {
             TargetState& s = targets_[i];
             if (!s.spawned) continue;
@@ -2112,6 +2235,16 @@ private:
                 // pilot's work, but still held over the ground (roadmap R5).
                 if (a->alive && !def_.targets[i].weapon) s.pilot.HoldOverGround(*a, world_.GetTerrain(), world_.Frame(), dt);
             } else {
+                if (a->alive) {  // its override's turns and end, its place on the plan, the leg's speed
+                    bool ended = false;
+                    const std::string ev = flights_->AfterMove(static_cast<int>(i), *a, time_, air, ended);
+                    if (ended) s.pilot.OverrideEnded();
+                    if (!ev.empty()) Event(def_.targets[i].id, ev);
+                }
+                // A wingman at A1 scans the ground ahead at a lower rate (roadmap S7, levels mode 2).
+                s.pilot.SetHeightScanEvery(levels_.On() && levels_.Values().mode >= 2 && i < target_level_.size() && target_level_[i] == AirLevel::A1
+                                               ? levels_.Values().a1_height_scan_s
+                                               : 0.0);
                 const std::string what = s.pilot.AfterStep(*a, world_.GetTerrain(), world_.Frame(), dt, time_);
                 if (!what.empty()) Event(def_.targets[i].id, what);
             }
@@ -2134,6 +2267,14 @@ private:
             Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr || !a->alive) {
                 s.gone = true;
+                if (def_.targets[i].weapon) {
+                    flights_->Gone(static_cast<int>(i));
+                } else {
+                    std::vector<Flights::Note> notes;
+                    flights_->Down(static_cast<int>(i), time_, &notes);
+                    for (const Flights::Note& n : notes) Event(n.who, n.what);
+                    reactions_.Lost(static_cast<int>(i), a != nullptr ? a->position : s.last_position, time_, *flights_, ReactionContext());
+                }
             } else if (def_.targets[i].weapon && (a->next_waypoint >= a->waypoints.size() || AboveGround(a->position) <= 1.0)) {
                 // A weapon ends where it strikes: it no longer flies (its actor goes as an inactive one does), and the
                 // presentation feed has its warhead (a cruise missile's: fx/events.hpp). Where it strikes is on the
@@ -2159,16 +2300,423 @@ private:
                     e.fire = true;
                     fx_.Push(e);
                 }
+                flights_->Gone(static_cast<int>(i));
             } else if (a->next_waypoint >= a->waypoints.size()) {
                 s.gone = true;
                 Event(def_.targets[i].id, "passed its last waypoint");
+                a->demand = AircraftDemand();  // it flies on straight, as it is
+                flights_->Gone(static_cast<int>(i));
+            }
+        }
+        for (const Flights::Note& n : flights_->After(time_)) Event(n.who, n.what);
+        clock_.Lap(StepProfile::Pilots);
+        if (air_radio_) air_radio_->Step(time_, dt, air);  // the calls on the air; what our intercept posts heard of them
+        clock_.Lap(StepProfile::Radio);
+    }
+
+    // ---- The levels of detail (roadmap B12, air_levels.hpp, docs/air_battle/02_FLIGHTS_AND_PILOTS.md 5.4). Each flight
+    // is looked at when it comes into the sky and then once a second, at a moment of its own (staggered by its id, the
+    // same at any step): near one of our units, or engaged, it is at A2; far, after the hysteresis, at A1. Our own flights
+    // are always at A2. At A1 every aircraft flies and looks as at A2; each wingman keeping his slot hears the searches on
+    // his leader's receiver instead of his own (LendReceivers), which is switched off: the receivers are most of what the
+    // air battle costs. Nothing a pilot decides reads the levels: what reaches them (a lock, a launch, a burst) is in a
+    // picture.
+    std::vector<NearPoint> near_points_;
+    double levels_last_s_ = -1.0;
+    std::vector<double> rwr_lent_until_;  // each target's: until when he still hears on his leader's receiver, back at A2
+    // game value: an own receiver back on hears each radar every ESM period (0.2 s); after a second it holds them
+    static constexpr double kRwrWarmS = 1.0;
+
+    void UpdateLevels(const Flights::Lookup& air) {
+        live_.clear();
+        for (std::size_t i = 0; i < targets_.size(); ++i) {
+            if (air(static_cast<int>(i)) != nullptr) live_.push_back(i);
+        }
+        if (!levels_.On()) return;
+        if (target_level_.size() < def_.targets.size()) target_level_.resize(def_.targets.size(), AirLevel::A2);
+        const double prev = levels_last_s_;
+        levels_last_s_ = time_;
+        bool points = false;
+        const AirLevelValues& v = levels_.Values();
+        for (std::size_t k = 0; k < flights_->Size(); ++k) {
+            const FlightState& f = flights_->All()[k];
+            const int fi = static_cast<int>(k);
+            const AirLevels::Entry* e = levels_.EntryOf(fi);
+            const bool first = e == nullptr || !e->seen;
+            // Its stagger (roadmap S7, mode 2: by the serial fixed when it first flew; before, by its id's hash).
+            const bool due = v.mode >= 2 ? (e != nullptr && StaggerDueEven(e->serial, 1.0, prev, time_))
+                                         : StaggerDue(airwar::ObjectKeyOf(f.id), 1.0, prev, time_);
+            if (!first && (prev < 0.0 || !due)) continue;
+            double ratio = 1e9;
+            bool any = false;
+            for (const FlightSlot& sl : f.slots) {
+                if (!sl.alive || sl.gone) continue;
+                const Aircraft* a = air(sl.target);
+                if (a == nullptr) continue;
+                any = true;
+                if (f.side == "ours") {  // our own: always at A2
+                    ratio = 0.0;
+                    break;
+                }
+                if (!points) {
+                    NearPoints(v);
+                    points = true;
+                }
+                ratio = std::min(ratio, NearRatio(a->position, near_points_, v.margin_m));
+            }
+            if (!any) continue;  // not in the sky (yet, or any more)
+            const bool engaged = ratio > 1.0 && FlightEngaged(f);
+            if (levels_.Update(fi, ratio, engaged, time_) && !first) ++level_changes_;
+        }
+    }
+    // Our units' reach: the session's own vehicle, the battery's vehicles and launchers, the neighbours (their own reach,
+    // at least a launcher's radar), the post's radar when counted, our fighters in the session; and our ground objects a
+    // pilot may find (the session's movers on the roads and the dummies, B6's opportunities): near them every pilot looks.
+    void NearPoints(const AirLevelValues& v) {
+        near_points_.clear();
+        near_points_.push_back({def_.unit_position, v.radar_m});
+        if (battery_) {
+            for (const Battery::Vehicle& bv : battery_->Vehicles()) near_points_.push_back({bv.position, v.radar_m});
+        }
+        for (const BatteryFire* bf : {battery_fire_.get(), neighbour_fire_.get()}) {
+            if (bf == nullptr) continue;
+            for (const BatteryFire::Shooter& sh : bf->Shooters()) near_points_.push_back({sh.position, v.radar_m});
+        }
+        for (const ScenarioNeighbour& nb : def_.neighbours) near_points_.push_back({nb.position, std::max(nb.radius_m, v.radar_m)});
+        if (v.post_radar_m > 0.0 && def_.has_post_radar) near_points_.push_back({def_.post_radar.position, v.post_radar_m});
+        if (v.ground_m > 0.0) {
+            for (const auto& d : def_.prepared.dummies) near_points_.push_back({d.position, v.ground_m});
+            if (nav_) {
+                for (const nav::Mover& m : nav_->GetMovers().All()) {
+                    if (m.route.path.empty()) continue;  // one that arrived stays where the pilots may find it
+                    const MapPoint at = nav::PointAlong(m.route, m.arc_m);
+                    near_points_.push_back({Vec3{at.east_m, at.north_m, 0.0}, v.ground_m});
+                }
+            }
+        }
+        if (v.fighter_radar_m > 0.0) {
+            for (std::size_t i : live_) {
+                if (!def_.targets[i].friendly || def_.targets[i].weapon) continue;
+                const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+                if (a != nullptr) near_points_.push_back({a->position, v.fighter_radar_m});
             }
         }
     }
+    // Engaged: in its attack, a member manoeuvring (an override, an evasion), a missile of ours at one, or in a member's
+    // picture a launch, a trail, a burst, tracer or a lock or launch on his receiver within engaged_s.
+    bool FlightEngaged(const FlightState& f) const {
+        if (f.phase == "attack") return true;
+        const double since = time_ - levels_.Values().engaged_s;
+        for (const FlightSlot& sl : f.slots) {
+            if (!sl.alive || sl.gone || sl.target < 0) continue;
+            const std::size_t i = static_cast<std::size_t>(sl.target);
+            if (i >= targets_.size()) continue;
+            if (sl.overriding || targets_[i].held || targets_[i].pilot.Evading()) return true;
+            const std::string& id = def_.targets[i].id;
+            if (engagement_on_ && engagement_.TrackedTarget() == id) return true;
+            for (const NeighbourShot& ns : nb_shots_) {
+                if (ns.target == i) return true;
+            }
+            for (const BatteryFire* bf : {battery_fire_.get(), neighbour_fire_.get()}) {
+                if (bf == nullptr) continue;
+                for (const BatteryFire::Shooter& sh : bf->Shooters()) {
+                    if (sh.target == id) return true;
+                }
+            }
+            if (!percep_) continue;
+            for (const airwar::Sighting& sg : percep_->hub.Picture(airwar::ObjectKeyOf(id))) {
+                if (sg.time_s < since) continue;
+                switch (sg.kind) {
+                    case airwar::SightKind::Trail:
+                    case airwar::SightKind::LaunchSign:
+                    case airwar::SightKind::Burst:
+                    case airwar::SightKind::Tracer:
+                        return true;
+                    case airwar::SightKind::Emitter:
+                        if (sg.rwr == airwar::RwrState::Lock || sg.rwr == airwar::RwrState::Launch) return true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        return false;
+    }
+    // After the command layer steered: which wingmen hear on their leader's receiver this step. A wingman of a flight at
+    // A1 who keeps his slot, whose leader carries the same receiver and has it on, is at A1 himself: his own receiver is
+    // switched off and his perception hears the leader's searches and missiles' guidance (UpdatePerception). Every other
+    // aircraft is at A2. The
+    // leader's slot is looked at first, so a new leader (the old one lost) has his own receiver on before he lends it.
+    void LendReceivers(const Flights::Lookup& air) {
+        if (!levels_.On()) return;
+        const bool v_s7 = levels_.Values().mode >= 2;
+        if (rwr_lent_until_.size() < target_level_.size()) rwr_lent_until_.resize(target_level_.size(), -1.0);
+        for (std::size_t k = 0; k < flights_->Size(); ++k) {
+            const FlightState& f = flights_->All()[k];
+            const bool a1 = levels_.LevelOf(static_cast<int>(k)) == AirLevel::A1;
+            const FlightSlot* ls = f.Leader();
+            const bool lead_ok = ls != nullptr && ls->target >= 0 && static_cast<std::size_t>(ls->target) < target_level_.size();
+            if (lead_ok) SetTargetLevel(static_cast<std::size_t>(ls->target), AirLevel::A2);
+            for (std::size_t n = 0; n < f.slots.size(); ++n) {
+                const FlightSlot& sl = f.slots[n];
+                if (sl.target < 0 || static_cast<std::size_t>(sl.target) >= target_level_.size() || static_cast<int>(n) == f.leader_slot) continue;
+                const std::size_t i = static_cast<std::size_t>(sl.target);
+                bool lent = a1 && lead_ok && sl.keeping && sl.alive && !sl.gone && air(sl.target) != nullptr;
+                // A radar locked on him alone (roadmap S7, levels mode 2): his own receiver, so he hears the lock.
+                if (lent && v_s7 && LockedOn(i)) lent = false;
+                if (lent && !def_.targets[i].rwr.empty()) {
+                    const ScenarioTarget& lt = def_.targets[static_cast<std::size_t>(ls->target)];
+                    lent = lt.rwr == def_.targets[i].rwr && em_link_ && em_link_->RwrOn(lt.id);
+                }
+                SetTargetLevel(i, lent ? AirLevel::A1 : AirLevel::A2);
+            }
+        }
+    }
+    // A radar holds this aircraft now: the engagement's track, a battery's or a neighbour's shot at it, or a tracking
+    // emitter of the EM layer pointed at it (roadmap S7: the A1 wingman's lock).
+    bool LockedOn(std::size_t i) const {
+        if (i >= def_.targets.size()) return false;
+        const std::string& id = def_.targets[i].id;
+        if (engagement_on_ && engagement_.TrackedTarget() == id) return true;
+        for (const NeighbourShot& ns : nb_shots_) {
+            if (ns.target == i) return true;
+        }
+        for (const BatteryFire* bf : {battery_fire_.get(), neighbour_fire_.get()}) {
+            if (bf == nullptr) continue;
+            for (const BatteryFire::Shooter& sh : bf->Shooters()) {
+                if (sh.target == id) return true;
+            }
+        }
+        return em_link_ && em_link_->TrackedBy(id);
+    }
+    void SetTargetLevel(std::size_t i, AirLevel l) {
+        if (target_level_[i] == l) return;
+        target_level_[i] = l;
+        const ScenarioTarget& t = def_.targets[i];
+        if (em_link_ && !t.rwr.empty()) em_link_->SetRwrOn(t.id, l == AirLevel::A2);
+        // Back at A2 his own receiver needs a few of its looks to hold what it hears: until then he hears the leader's.
+        if (l == AirLevel::A2 && i < rwr_lent_until_.size()) rwr_lent_until_[i] = time_ + kRwrWarmS;
+    }
+    // The leader whose receiver a wingman hears on now (null: his own): at A1, and for kRwrWarmS after it.
+    const ScenarioTarget* LenderOf(std::size_t i) const {
+        if (!levels_.On() || i >= target_level_.size() || !em_link_) return nullptr;
+        if (target_level_[i] != AirLevel::A1 && !(i < rwr_lent_until_.size() && time_ < rwr_lent_until_[i])) return nullptr;
+        const int fi = flights_->FlightOf(static_cast<int>(i));
+        if (fi < 0) return nullptr;
+        const FlightSlot* ls = flights_->All()[static_cast<std::size_t>(fi)].Leader();
+        if (ls == nullptr || ls->target < 0 || static_cast<std::size_t>(ls->target) == i || !ls->alive || ls->gone) return nullptr;
+        const ScenarioTarget& lt = def_.targets[static_cast<std::size_t>(ls->target)];
+        if (lt.rwr != def_.targets[i].rwr || !em_link_->RwrOn(lt.id)) return nullptr;
+        return &lt;
+    }
+
+    // The aircraft of a target in the sky now, for the command layer (flights.hpp).
+    Flights::Lookup FlightLookup() {
+        return [this](int t) -> Aircraft* {
+            if (t < 0 || static_cast<std::size_t>(t) >= targets_.size()) return nullptr;
+            const TargetState& s = targets_[static_cast<std::size_t>(t)];
+            if (!s.spawned || s.gone) return nullptr;
+            Aircraft* a = world_.FindAircraft(s.world_id);
+            return a != nullptr && a->alive ? a : nullptr;
+        };
+    }
+
+    // ---- Flights and packages (flights.hpp, roadmap B1): the scenario's own, and those entering it later. A target named
+    // in no flight is a flight of one, its id the flight's.
+    void RegisterFlights(std::size_t first) {
+        std::map<std::string, std::vector<std::size_t>> members;
+        std::vector<std::string> order;
+        for (std::size_t i = first; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (t.flight.empty()) continue;
+            if (members.find(t.flight) == members.end()) order.push_back(t.flight);
+            members[t.flight].push_back(i);
+        }
+        for (std::size_t i = first; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (!t.flight.empty()) {
+                if (order.empty() || t.flight != order.front()) continue;
+                order.erase(order.begin());
+                AddFlightOf(t.flight, members[t.flight]);
+                continue;
+            }
+            AddFlightOf(std::string(), {i});
+        }
+        for (const ScenarioPackage& p : def_.packages) {
+            if (packages_added_.count(p.id) != 0) continue;
+            PackageState ps;
+            ps.id = p.id;
+            ps.size = p.size;
+            ps.lost_before = p.lost_before;
+            ps.turn_back_share = p.turn_back_share;
+            for (std::size_t k = 0; k < flights_->Size(); ++k) {
+                if (flights_->All()[k].package == p.id) ps.flights.push_back(static_cast<int>(k));
+            }
+            if (ps.flights.empty()) continue;  // its flights have not come in yet
+            ps.commander_flight = flights_->Index(p.commander);
+            flights_->AddPackage(std::move(ps));
+            packages_added_.insert(p.id);
+        }
+    }
+    void AddFlightOf(const std::string& id, const std::vector<std::size_t>& targets) {
+        FlightState f;
+        const ScenarioFlight* def = nullptr;
+        for (const ScenarioFlight& d : def_.flights) {
+            if (d.id == id) def = &d;
+        }
+        const ScenarioTarget& lead0 = def_.targets[targets.front()];
+        f.id = id.empty() ? lead0.id : id;
+        if (id.empty() && flights_->Index(f.id) >= 0) f.id = "target " + f.id;
+        f.side = lead0.friendly ? "ours" : "enemy";
+        if (def != nullptr) {
+            f.callsign = def->callsign;
+            f.package = def->package;
+            f.side = def->side;
+            f.keep_slots = def->keep_slots;
+            f.call_s = def->call_s;
+            f.formations = def->formations;
+        }
+        // Its slots in number order (unnumbered: in the order given); where each starts from the leader, in the leader's
+        // first leg's frame (the formation for a flight without one).
+        std::vector<std::size_t> ts = targets;
+        std::vector<int> numbers;
+        for (std::size_t k = 0; k < ts.size(); ++k) numbers.push_back(def_.targets[ts[k]].slot > 0 ? def_.targets[ts[k]].slot : static_cast<int>(k) + 1);
+        std::size_t lead = 0;
+        for (std::size_t k = 1; k < ts.size(); ++k) {
+            if (numbers[k] < numbers[lead]) lead = k;
+        }
+        const ScenarioTarget& L = def_.targets[ts[lead]];
+        Vec3 fwd = L.waypoints.empty() ? Vec3{0.0, 1.0, 0.0} : L.waypoints.front() - L.start;
+        fwd.z = 0.0;
+        fwd = fwd.LengthSquared() > 1.0 ? fwd.Normalized() : Vec3{0.0, 1.0, 0.0};
+        const Vec3 right{fwd.y, -fwd.x, 0.0};
+        bool weapons = true;
+        for (std::size_t k = 0; k < ts.size(); ++k) {
+            const ScenarioTarget& t = def_.targets[ts[k]];
+            weapons = weapons && t.weapon;
+            FlightSlot s;
+            s.target = static_cast<int>(ts[k]);
+            s.number = numbers[k];
+            const Vec3 d = t.start - L.start;
+            s.offset_m = Vec3{Dot(d, right), -Dot(d, fwd), d.z};
+            s.legs = t.legs;
+            f.slots.push_back(std::move(s));
+        }
+        f.weapons = weapons || (def != nullptr && !def->crewed);  // no crew: no nerve, no loss to its package
+        if (weapons) f.keep_slots = false;  // a stream of weapons: each flies its own plan
+        const int fi = flights_->Add(std::move(f));
+        RadioJoin(fi, def != nullptr ? def->radio : FlightRadioInfo());
+    }
+    // A flight's aircraft take their places on the enemy's radio (roadmap B9).
+    void RadioJoin(int fi, const FlightRadioInfo& info) {
+        if (!air_radio_) return;
+        std::vector<Vec3> starts;
+        for (const FlightSlot& s : flights_->All()[static_cast<std::size_t>(fi)].slots) starts.push_back(def_.targets[static_cast<std::size_t>(s.target)].start);
+        air_radio_->AddFlight(fi, flights_->All()[static_cast<std::size_t>(fi)], info, starts);
+    }
+
+public:
+    // ---- The flights' command (flights.hpp, roadmap B1; docs/air_battle/02_FLIGHTS_AND_PILOTS.md §2.3). Who may give an
+    // order is the authority rule set here (roadmap B5: air_war/package_control.hpp's AuthorityRule); without one every
+    // order is accepted. Each call is logged with its `by`.
+    void SetFlightAuthority(Flights::Authority a) { flights_->SetAuthority(std::move(a)); }
+    bool OrderFlight(const std::string& flight, FlightOrder o, std::string* why = nullptr) {
+        const int fi = flights_->Index(flight);
+        if (fi < 0) {
+            if (why != nullptr) *why = "no flight '" + flight + "'";
+            return false;
+        }
+        if (o.by.empty()) o.by = "the session";
+        if (!flights_->Order(fi, o, time_)) {
+            if (why != nullptr) *why = o.by + " may not order " + flight;
+            return false;
+        }
+        Event(flight, std::string("ordered: ") + ToString(o.kind) + " (by " + o.by + ")");
+        return true;
+    }
+    // A new route for a flight from where it is (a Divert on its legs), toward `aim`, its new release point.
+    // `by_radio`: a post's order said on its net, taken only if the flight's leader hears it (roadmap S2).
+    bool RerouteFlight(const std::string& flight, std::vector<RouteLeg> legs, const Vec3& aim, const std::string& by, std::string* why = nullptr,
+                       bool by_radio = false) {
+        if (legs.empty()) {
+            if (why != nullptr) *why = "a new route needs one leg at least";
+            return false;
+        }
+        FlightOrder o;
+        o.kind = OrderKind::Divert;
+        o.legs = std::move(legs);
+        o.has_aim = true;
+        o.aim = aim;
+        o.by = by;
+        o.by_radio = by_radio;
+        return OrderFlight(flight, std::move(o), why);
+    }
+    const FlightState* Flight(const std::string& id) const { return flights_->Find(id); }
+    std::vector<std::string> FlightsOf(const std::string& package) const { return flights_->FlightsOf(package); }
+    const Flights& AllFlights() const { return *flights_; }
+    // The enemy's radio (roadmap B9): its calls as transmissions and what our intercept posts heard; null without "air_radio".
+    // Put the enemy's calls on the air in a session whose scenario did not (a battery mission with the air war beside it):
+    // the flights it has join, and those that enter later. False, with why, if the library lacks a set or a receiver.
+    bool EnableAirRadio(const AirRadioDef& def, std::string* error = nullptr) {
+        if (air_radio_) return true;
+        auto radio = std::make_unique<airwar::AirRadio>();
+        if (!radio->Init(def, def_.origin, &world_.GetTerrain(), def_.seed, error)) return false;
+        def_.air_radio = def;
+        air_radio_ = std::move(radio);
+        air_radio_->SetFlights(flights_.get());
+        air_radio_->SetClockStart(def_.clock_start_s > 0.0 ? def_.clock_start_s : 0.0);
+        flights_->SetRadio(air_radio_.get());
+        for (std::size_t fi = 0; fi < flights_->Size(); ++fi) {
+            FlightRadioInfo info;
+            for (const ScenarioFlight& d : def_.flights) {
+                if (d.id == flights_->All()[fi].id) info = d.radio;
+            }
+            RadioJoin(static_cast<int>(fi), info);
+        }
+        return true;
+    }
+    const airwar::AirRadio* AirRadio() const { return air_radio_.get(); }
+    airwar::AirRadio* AirRadio() { return air_radio_.get(); }
+    // Flights and packages about to enter the running session (a package's, before its AddTargets): their targets name
+    // them. All or none: false, with why, for an id the session has already.
+    bool AddFlights(const std::vector<ScenarioFlight>& fs, const std::vector<ScenarioPackage>& ps, std::string* why = nullptr) {
+        const auto fail = [why](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        // Already the session's: a flight flying in it, a package whose flights are in it. A definition no aircraft has
+        // named yet is replaced.
+        std::set<std::string> ids, pids;
+        for (const ScenarioFlight& f : fs) {
+            if (f.id.empty() || !ids.insert(f.id).second || flights_->Index(f.id) >= 0) return fail("flight '" + f.id + "' is the session's already (or has no id)");
+        }
+        for (const ScenarioPackage& p : ps) {
+            if (p.id.empty() || !pids.insert(p.id).second || packages_added_.count(p.id) != 0) return fail("package '" + p.id + "' is the session's already (or has no id)");
+        }
+        for (const ScenarioFlight& f : fs) {
+            def_.flights.erase(std::remove_if(def_.flights.begin(), def_.flights.end(), [&f](const ScenarioFlight& o) { return o.id == f.id; }), def_.flights.end());
+            def_.flights.push_back(f);
+        }
+        for (const ScenarioPackage& p : ps) {
+            def_.packages.erase(std::remove_if(def_.packages.begin(), def_.packages.end(), [&p](const ScenarioPackage& o) { return o.id == p.id; }), def_.packages.end());
+            def_.packages.push_back(p);
+        }
+        return true;
+    }
+
+private:
 
     // ---- The dynamic campaign testbed's waves (scenario "waves", air_war/test_waves.hpp): a wave when one is due, the
     // strike aircraft's loads released, and the waves' aircraft long gone taken out of the world (first marked dead, so
     // the EM layer and the board let them go, then removed).
+    std::unique_ptr<Flights> flights_;     // the flights and packages in the session (flights.hpp, roadmap B1)
+    std::unique_ptr<airwar::AirRadio> air_radio_;  // the enemy's calls on the air (air_war/air_radio.hpp, roadmap B9)
+    StepClock clock_;                       // where a step goes, when asked (step_profile.hpp, roadmap B12)
+    AirLevels levels_;                      // each flight's level of detail (air_levels.hpp, roadmap B12)
+    std::vector<AirLevel> target_level_;    // each target's: A1 for a wingman hearing on his leader's receiver, else A2
+    int level_changes_ = 0;
+    std::vector<std::size_t> live_;         // the targets in the sky this step (indices into def_.targets)
+    std::set<std::string> packages_added_;
     std::unique_ptr<airwar::TestWaves> waves_;
     std::vector<std::size_t> wave_targets_;          // the waves' targets still in the world (indices into def_.targets)
     std::map<std::string, std::size_t> wave_index_;  // a wave aircraft's id -> its index (for its release)
@@ -2196,6 +2744,7 @@ private:
 
     // A load let go: the feed's release (the game flies and bursts it), its landing kept for its time.
     void ReleaseWaveLoad(airwar::WaveRelease r) {
+        if (r.delivery != "jettison") NoteReleased(r.carrier);
         Event(r.carrier, "releases " + std::to_string(r.count) + " " + r.weapon_name + (r.delivery.empty() ? "" : " (" + r.delivery + ")"));
         if (fx_on_) {
             fx::Event e;
@@ -2285,6 +2834,7 @@ private:
     int nb_round_hits_ = 0;
     int nb_shell_bursts_ = 0;
     std::map<std::string, int> nb_damaged_;  // how often an aircraft's damage rose to each level short of destroyed
+    int nb_escorts_ = 0;  // wingmen sent home with a damaged aircraft as escort (roadmap S4)
 
     static double GunRoundsPerMin(const std::string& sys) {
         return sys == "zsu234" ? 3400.0 : sys == "s60" ? 120.0 : sys == "ks30" ? 12.0 : (sys == "zu23" || sys == "aaa") ? 2000.0 : 0.0;
@@ -2329,10 +2879,11 @@ private:
             double near_d = reach_m, fresh_d = reach_m;
             for (std::size_t i : wave_targets_) {
                 const ScenarioTarget& t = def_.targets[i];
-                if (t.friendly || t.weapon || !targets_[i].spawned || targets_[i].gone) continue;
+                if (t.weapon || !targets_[i].spawned || targets_[i].gone) continue;
                 const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
-                if (a == nullptr || !a->alive) continue;
+                if (a == nullptr || !a->alive || RegimentHoldsFire(i, a->position)) continue;
                 const double dx = a->position.x - site.x, dy = a->position.y - site.y;
+
                 const double dist = std::sqrt(dx * dx + dy * dy);
                 if (dist >= reach_m) {
                     st.engaged.erase(i);
@@ -2412,6 +2963,7 @@ private:
             if (st.missiles == 0) st.reload_s = time_ + kNbReloadS;
             nb_shots_.push_back({j, fresh_i, time_ + flight_s, hit, true, st.launches});
             Event(nb.id, "launches at " + def_.targets[fresh_i].id);
+            PerceiveSiteLaunch(nb.id, st.launches, nb.position, fresh_a->position, flight_s, EyeSamWord(*d));
             if (fx_on_) {
                 fx::Event e;
                 e.kind = fx::EventKind::SamLaunch;
@@ -2448,7 +3000,7 @@ private:
     // whose aircraft is already down, flies on and destroys itself.
     void EndNeighbourShots() {
         for (std::size_t k = 0; k < nb_shots_.size();) {
-            const NeighbourShot s = nb_shots_[k];
+            NeighbourShot s = nb_shots_[k];
             if (s.end_s > time_ + 1e-9) {
                 ++k;
                 continue;
@@ -2457,6 +3009,11 @@ private:
             const ScenarioNeighbour& nb = def_.neighbours[s.neighbour];
             const std::string id = def_.targets[s.target].id;
             const Aircraft* a = targets_[s.target].spawned ? world_.FindAircraft(targets_[s.target].world_id) : nullptr;
+            if (s.missile && s.hit && IrDefence(def_.waves->Defence(nb.system)) &&
+                FlaresDecoy(id, (static_cast<std::uint64_t>(s.neighbour) << 32) ^ static_cast<std::uint64_t>(s.number))) {
+                s.hit = false;  // roadmap B4: its flares, out in time, took the IR missile
+                Event(id, "its flares decoy the missile from " + nb.name);
+            }
             if (s.missile && def_.waves->has_damage) {
                 EndNeighbourMissile(s, a);
                 continue;
@@ -2550,6 +3107,7 @@ private:
             const PassErrors e = fc != nullptr ? Corrected(st.errors, *fc, fired_s - st.pass_start_s) : PassErrors{};
             const GunAim aim = AimGun(g, muzzle, a->position - a->velocity * (time_ - fired_s), a->velocity, e);
             nb_rounds_fired_ += n;
+            if (percep_on_) Percep().Tracer(nb.id, muzzle, time_);
             if (!g.time_fuze) {
                 GunRoundsInFlight r;
                 r.neighbour = j;
@@ -2604,7 +3162,10 @@ private:
             const ScenarioNeighbour& nb = def_.neighbours[r.neighbour];
             const GunDef* g = def_.waves->aaa.Gun(nb.system);
             const Aircraft* a = targets_[r.target].spawned ? world_.FindAircraft(targets_[r.target].world_id) : nullptr;
-            if (r.shell) ++nb_shell_bursts_;
+            if (r.shell) {
+                ++nb_shell_bursts_;
+                if (percep_on_) Percep().Burst(r.burst, time_, light_.night_share >= 0.9);
+            }
             if (g == nullptr || a == nullptr || !a->alive) continue;
             const Vec3 at = a->position - a->velocity * (time_ - r.arrive_s);
             const double area = PresentedAreaM2(dt, def_.targets[r.target].size_m);
@@ -2673,16 +3234,39 @@ private:
         TargetState& ts = targets_[i];
         const std::string id = def_.targets[i].id;
         if (c.after == DamageLevel::Destroyed) {
-            if (DestroyTarget(id, ts.damage.by)) ++nb_kills_;
+            if (DestroyTarget(id, ts.damage.by) && def_.waves) ++nb_kills_;
             return;
         }
         ++nb_damaged_[ToString(c.after)];
+        if (reactions_.On(static_cast<int>(i))) reactions_.Damaged(static_cast<int>(i), c.after, time_, *flights_, ReactionContext());
         if (c.after < DamageLevel::Moderate) return;
         Aircraft* a = ts.spawned ? world_.FindAircraft(ts.world_id) : nullptr;
         if (a == nullptr || !a->alive) return;
+        // What the damage leaves him (roadmap S4): his g limit, turn rates, thrust and top speed by his level, from his
+        // type's own; and a holed tank, a keyed draw (em::Stream::Reaction, his id), with fuel for a while.
+        const DamageTable& tab = DamageTab();
+        const ScenarioTarget& tt = def_.targets[i];
+        const DamagedLimitsOut lim = DamagedLimits(tab, c.after);
+        a->max_load_g = tt.max_load_g > 1.0 ? std::max(1.5, tt.max_load_g * lim.g) : tt.max_load_g;
+        a->max_turn_rate_rad_s = tt.max_turn_rate_rad_s * lim.g;
+        a->sustained_turn_rate_rad_s = tt.sustained_turn_rate_rad_s * lim.g;
+        a->accel_mps2 = tt.accel_mps2 * lim.thrust;
+        a->max_speed_mps = tt.max_speed_mps * lim.top;
+        const auto keyed = [&](std::uint64_t what_for) {
+            return em::Uniform01(em::DrawHash(def_.seed, em::Stream::Reaction, airwar::ObjectKeyOf(id), 0xDA00u + what_for,
+                                              static_cast<std::uint64_t>(c.after)));
+        };
+        const double leak = c.after == DamageLevel::Heavy ? tab.heavy_fuel_leak : tab.moderate_fuel_leak;
+        bool leaking = false;
+        if (leak > 0.0 && !ts.damage.fuel_leak && keyed(1) < leak) {
+            ts.damage.fuel_leak = leaking = true;
+            const double at = time_ + tab.fuel_leak_min_s + (tab.fuel_leak_max_s - tab.fuel_leak_min_s) * keyed(2);
+            if (ts.damage.crash_at_s < 0.0 || at < ts.damage.crash_at_s) ts.damage.crash_at_s = at;
+        }
         std::string what = std::string(ToString(c.after)) + " damage from " + ts.damage.by;
         if (c.fire) what += ", on fire";
         if (c.crashes) what += ", going down";
+        if (leaking) what += ", losing fuel";
         if (c.jettison) what += ", jettisons its load";
         if (c.abort) what += ", turns for home";
         Event(id, what);
@@ -2700,27 +3284,56 @@ private:
             e.falls = ts.damage.smoke;
             fx_.Push(e);
         }
-        if (c.jettison && waves_) {
-            airwar::WaveScene scene;
-            scene.frame = &world_.Frame();
-            scene.terrain = &world_.GetTerrain();
-            scene.centre = def_.unit_position;
-            for (airwar::WaveRelease& r : waves_->Jettison(id, time_, a->position, a->velocity, scene)) ReleaseWaveLoad(std::move(r));
+        if (c.jettison) {
+            const bool had_stores = !reactions_.On(static_cast<int>(i)) || !reactions_.StoresGone(static_cast<int>(i));
+            if (reactions_.On(static_cast<int>(i)) && reactions_.Tanks(static_cast<int>(i)) > 0) FxJettison(i, *a, "drop_tank", reactions_.Tanks(static_cast<int>(i)));
+            if (had_stores) JettisonLoad(i, *a);
+            if (had_stores) CrewSeesTargetAct(i, false);
+            reactions_.RecordJettison(static_cast<int>(i), time_, "damaged");
         }
-        if (c.abort && !a->waypoints.empty()) a->next_waypoint = a->waypoints.size() - 1;  // straight for its way out
+        if (c.abort) {  // the pilot's own: straight for his way out, out of his flight (its lead passes on)
+            // His leader may send a wingman with him as escort (roadmap S4): the first other of his flight still with it.
+            int escort = -1;
+            const int fi = flights_->FlightOf(static_cast<int>(i));
+            if (fi >= 0 && tab.escort_share > 0.0 && keyed(3) < tab.escort_share) {
+                for (const FlightSlot& sl : flights_->All()[static_cast<std::size_t>(fi)].slots) {
+                    if (sl.target == static_cast<int>(i) || !sl.alive || sl.gone || sl.target < 0) continue;
+                    if (def_.targets[static_cast<std::size_t>(sl.target)].weapon || !TargetAlive(def_.targets[static_cast<std::size_t>(sl.target)].id)) continue;
+                    escort = sl.target;
+                    break;
+                }
+            }
+            FlightOrder home;
+            home.kind = OrderKind::ReturnHome;
+            home.by = "pilot";
+            flights_->OrderMember(static_cast<int>(i), home, time_, true, "the lead turns for home, damaged");
+            if (escort >= 0) {
+                FlightOrder with = home;
+                with.by = "lead";
+                if (flights_->OrderMember(escort, with, time_, true, "the lead leaves the flight as escort")) {
+                    ++nb_escorts_;
+                    Event(def_.targets[static_cast<std::size_t>(escort)].id, "escorts " + id + " home");
+                }
+            }
+        }
     }
 
     // The heavily damaged whose time has come fall (burning if they were on fire), credited to who did it.
     void CrashDamaged() {
-        for (std::size_t i : wave_targets_) {
+        const auto crash = [this](std::size_t i) {
             TargetState& ts = targets_[i];
-            if (ts.damage.crash_at_s < 0.0 || time_ < ts.damage.crash_at_s || !ts.spawned) continue;
+            if (ts.damage.crash_at_s < 0.0 || time_ < ts.damage.crash_at_s || !ts.spawned) return;
             ts.damage.crash_at_s = -1.0;
             const Aircraft* a = world_.FindAircraft(ts.world_id);
-            if (a == nullptr || !a->alive) continue;
+            if (a == nullptr || !a->alive) return;
             const std::string id = def_.targets[i].id;
             FxDown(id, ts.damage.by, ts.damage.fire, true);
-            if (DestroyTarget(id, ts.damage.by, false)) ++nb_kills_;
+            if (DestroyTarget(id, ts.damage.by, false) && def_.waves) ++nb_kills_;
+        };
+        if (def_.waves) {
+            for (std::size_t i : wave_targets_) crash(i);
+        } else {
+            for (std::size_t i = 0; i < targets_.size(); ++i) crash(i);  // roadmap B4: damage states in played raids
         }
     }
 
@@ -2752,6 +3365,57 @@ private:
         }
     }
 
+    // The testbed's flights as live actors in the air fight (roadmap S1): our CAP and interceptors under our GCI (the air
+    // fight's first controller of ours), the enemy's escorts fighting back and its others defending themselves. A type
+    // without a fit flies unarmed (air_combat.json's "unarmed", "helicopters"); a faction without a doctrine stays out.
+    std::vector<airwar::WaveFighter> wave_fight_;
+    void WaveFightersIn() {
+        if (!air_fight_ || wave_fight_.empty()) return;
+        const airwar::AirFightDef& af = def_.air_fight;
+        std::string gci;
+        for (const airwar::AirFightControllerDef& c : af.controllers) {
+            if (gci.empty() && c.side == "ours") gci = c.id;
+        }
+        std::string regiment = "our fighters";
+        if (own_air_ && !def_.own_air.regiments.empty()) regiment = def_.own_air.regiments.front().id;
+        for (const airwar::WaveFighter& wf : wave_fight_) {
+            const auto it = wave_index_.find(wf.target);
+            if (it == wave_index_.end() || af.combat.Doctrine(wf.faction) == nullptr) continue;
+            airwar::AirFightFighterDef f;
+            f.target = wf.target;
+            f.type = wf.type;
+            if (af.combat.Fit(f.type) == nullptr) {
+                f.type = def_.targets[it->second].type == "Air+Rotorcraft" ? "helicopters" : "unarmed";
+                if (af.combat.Fit(f.type) == nullptr) continue;
+            }
+            f.faction = wf.faction;
+            f.role = wf.role;
+            if (wf.faction == "ours") {
+                f.regiment = regiment;
+                f.controller = gci;
+                OurHot(f);
+            }
+            std::string e;
+            if (!air_fight_->AddFighter(f, static_cast<int>(it->second), &e)) Event("air fight", e);
+        }
+        wave_fight_.clear();
+    }
+    // Our pair's hot phase (roadmap S5, 10_FACTIONS.md §6-7: data/command/own_air.json's hot_phase), when the session's air
+    // fight was built under hot_phase.mode 2: once his GCI is lost he turns back with our side's turn_back for his role (CAP
+    // and escort 0.6), and with no word from it he breaks the later (2-5 s under its warning, 4-10 s jammed).
+    void OurHot(airwar::AirFightFighterDef& f) const {
+        const airwar::HotPhaseDef& h = def_.own_air.def.hot;
+        if (def_.air_fight.hot_mode < 2 || !h.present) return;
+        airwar::FlightRole role = airwar::FlightRole::Cap;  // an interceptor holds his zone as a CAP does
+        if (f.role == "escort") role = airwar::FlightRole::Escort;
+        if (f.role == "sweep") role = airwar::FlightRole::Sweep;
+        f.turn_back_lost = airwar::Clamp01(h.Value(airwar::HotParam::TurnBack).For(role, true));
+        const airwar::HotDelayDef& dl = h.reaction_delay;
+        if (dl.HasJammed() && dl.jammed_hi_s + dl.jammed_lo_s > 0.0) {
+            f.unwarned_break = std::min(1.0, (dl.lo_s + dl.hi_s) / (dl.jammed_lo_s + dl.jammed_hi_s));
+        }
+    }
+
     void EnterWaveTarget(ScenarioTarget t) {
         t.appear_at_s = std::max(t.appear_at_s, time_);
         const std::size_t i = def_.targets.size();
@@ -2767,10 +3431,18 @@ private:
         scene.frame = &world_.Frame();
         scene.terrain = &world_.GetTerrain();
         scene.centre = def_.unit_position;
+        const double own_ring = def_.waves->route_own_ring_m;  // roadmap S7: the low strikes' routes round the rings
         scene.defences.push_back(def_.unit_position);
-        for (const ScenarioNeighbour& nb : def_.neighbours) scene.defences.push_back(nb.position);
+        scene.rings_m.push_back(own_ring);
+        for (const ScenarioNeighbour& nb : def_.neighbours) {
+            scene.defences.push_back(nb.position);
+            scene.rings_m.push_back(nb.radius_m);
+        }
         if (battery_) {
-            for (const Battery::Vehicle& v : battery_->Vehicles()) scene.defences.push_back(v.position);
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                scene.defences.push_back(v.position);
+                scene.rings_m.push_back(own_ring);
+            }
         }
         for (const ScenarioScenery& s : def_.scenery) scene.objects.push_back(s.position);
         scene.em = em_link_ ? &em_link_->World().Scene().lib : nullptr;
@@ -2781,7 +3453,13 @@ private:
             std::string e;
             if (em_link_ && !w.jammers.empty() && !AddEmGear(def_.em.library, w.jammers, who, &e)) Event(who, "its jammers stay out: " + e);
             const std::size_t n = w.aircraft.size();
+            const std::size_t first = def_.targets.size();
+            if (!AddFlights(w.flight_defs, {}, &e)) Event(who, "its flights fly without their formations: " + e);
             for (ScenarioTarget& t : w.aircraft) EnterWaveTarget(std::move(t));
+            RegisterFlights(first);
+            if (def_.air_fight.present) {  // S1: the wave's fighters into the air fight (once it runs)
+                for (const airwar::WaveFighter& wf : w.fight) wave_fight_.push_back(wf);
+            }
             std::string flights;
             for (const std::string& f : w.flights) flights += (flights.empty() ? "" : "; ") + f;
             log_.Record({time_, DebriefEntry::Kind::Scenario, who, "enters", std::to_string(n) + " aircraft: " + flights});
@@ -2796,7 +3474,13 @@ private:
             velocity = a->velocity;
             return true;
         };
-        for (airwar::WaveRelease& r : waves_->Releases(time_, scene, lookup)) ReleaseWaveLoad(std::move(r));
+        WaveFightersIn();
+        // A fixed-wing aircraft's gun or rockets from a pass flown (roadmap S4, attack_pass.hpp).
+        airwar::TestWaves::PassControl passes;
+        passes.fly = [this](const std::string& id, const PilotOverride& ov) { return FlyPass(id, ov); };
+        passes.flying = [this](const std::string& id) { return PassOf(id) != nullptr; };
+        passes.end = [this](const std::string& id) { EndPass(id); };
+        for (airwar::WaveRelease& r : waves_->Releases(time_, scene, lookup, &passes)) ReleaseWaveLoad(std::move(r));
         LandWaveLoads();
         FireNeighbourDefences();
         // The long gone leave the world.
@@ -2851,7 +3535,14 @@ private:
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             const ScenarioTarget& t = def_.targets[i];
             if (t.rwr.empty() || !targets_[i].spawned || targets_[i].gone) continue;
-            const EmSensorLink::RwrWarning w = em_link_->WarningOf(t.id);
+            EmSensorLink::RwrWarning w = em_link_->WarningOf(t.id);
+            if (const ScenarioTarget* lender = LenderOf(i)) {  // a wingman at A1 hears a missile's guidance on his leader's
+                const EmSensorLink::RwrWarning lw = em_link_->WarningOf(lender->id);
+                if (lw.launch && !w.launch) {
+                    w.launch = true;
+                    w.launch_by = lw.launch_by;
+                }
+            }
             if (w.lock && (rwr_warned_[i] & 1) == 0) {
                 rwr_warned_[i] |= 1;
                 Event(t.id, "warning receiver: locked by " + w.lock_by);
@@ -2860,11 +3551,1510 @@ private:
                 rwr_warned_[i] |= 2;
                 Event(t.id, "warning receiver: missile guidance, " + w.launch_by);
             }
-            if (w.launch) CueTarget(t.id, true);
-            if (w.lock) CueTarget(t.id, false);
+            // The pilot's reaction comes from what his display shows him (UpdatePerception), not from this.
         }
     }
 
+    // ---- What the pilots see and hear (roadmap B3, air_war/perception.hpp, docs/air_battle/03_PERCEPTION.md). Each pilot
+    // of the other side keeps a picture of what his eyes and his warning receiver gave him, with their errors; he reacts
+    // to what is in it and to nothing else (the truth cues are gone: no cue from our lock, none from our launch).
+    airwar::PerceptionFeed& Percep() {
+        if (!percep_) {
+            percep_ = std::make_unique<airwar::PerceptionFeed>(def_.perception, static_cast<std::uint64_t>(def_.seed) * 0x9E3779B97F4A7C15ull + 0xB3ull);
+            percep_unit_ground_ = percep_->hub.AddGround("osa_battery_silent", GroundEnu(def_.unit_position.x, def_.unit_position.y), "unit");
+            for (const ScenarioNeighbour& nb : def_.neighbours) percep_->hub.AddGround("osa_battery_silent", GroundEnu(nb.position.x, nb.position.y), nb.id);
+        }
+        return *percep_;
+    }
+    bool PerceptionNight() const { return light_.night_share >= 0.9; }
+
+    // Our launch: its dust and flash at the launcher; the trail is laid as the engagement model flies the missile.
+    void PerceiveOwnLaunch() {
+        if (def_.targets.empty() || !percep_on_) return;
+        Percep().Launch(launches_, "own", GroundEnu(def_.unit_position.x, def_.unit_position.y), time_, PerceptionNight());
+    }
+    // A launch from another site (a battery's launcher, a neighbour, the testbed's missile site): the same sign, and a trail
+    // along the line to where its target was, at the missile's average speed.
+    void PerceiveSiteLaunch(const std::string& owner, int number, const Vec3& at, const Vec3& toward, double flight_s, const char* what = "SAM") {
+        if (!percep_on_) return;
+        airwar::PerceptionFeed& pf = Percep();
+        const Vec3 site = GroundEnu(at.x, at.y);
+        pf.Launch(number, owner, site, time_, PerceptionNight(), what);
+        const double f = std::max(flight_s, 1.0);
+        pf.Synthetic(owner, number, toward, f, (toward - site).Length() / f);
+    }
+    void PerceiveSamLaunch(const BatteryFire::Shooter& s, const std::string& target) {
+        if (def_.targets.empty() || !percep_on_) return;
+        const Aircraft* a = AircraftOf(target);
+        const Vec3 site = GroundEnu(s.position.x, s.position.y);
+        PerceiveSiteLaunch(s.callsign, s.launches, s.position, a != nullptr ? a->position : site + Vec3{0.0, 0.0, 4000.0}, s.flight_s > 1.0 ? s.flight_s : 20.0);
+    }
+
+    // The other side's emitters in the EM world: the battery's other launchers and the regiment's neighbours (the Osa's
+    // search radar on duty, the tracking radar and command link on what they engage) and the post's P-19.
+    void SyncEmSites() {
+        if (!em_link_ || !em_link_->Ok()) return;
+        // The battery's other launchers keep the battery commander's emission regime: silent under his EMCON, and for
+        // arm_silence_s from the time he gave the ARM drill's order «Излучение выключить!» (npc_arm_off_s_, his own state,
+        // not the true sign time). SHORTCUT (B4/B5): a launcher of the battery fire model has no crew of its own, so it is
+        // told by reading the commander's order time here, not by a call carried on the battery net to it. A player
+        // commander's order is not read yet (only the NPC's), and the neighbours are another unit's, on the air by their rule.
+        const bool battery_silent = regime_cmdr_.kind == EmissionKind::Silent ||
+                                    (npc_arm_off_s_ > -1e8 && time_ - npc_arm_off_s_ < def_.doctrine.arm_silence_s);
+        auto sync = [&](const BatteryFire* bf, const char* prefix) {
+            if (bf == nullptr) return;
+            const bool silent = battery_silent && prefix[0] == 'b';
+            for (const BatteryFire::Shooter& s : bf->Shooters()) {
+                if (s.external) continue;
+                const bool engaging = s.phase == BatteryFire::Phase::Acquiring || s.phase == BatteryFire::Phase::Tracking ||
+                                      s.phase == BatteryFire::Phase::Preparing || s.phase == BatteryFire::Phase::InFlight;
+                em_link_->SetOsaSite(std::string(prefix) + s.callsign, GroundEnu(s.position.x, s.position.y), s.deployed && !silent,
+                                     !silent && s.deployed && engaging && !s.target.empty(), s.target, !silent && s.deployed && s.phase == BatteryFire::Phase::InFlight);
+            }
+        };
+        sync(battery_fire_.get(), "b:");
+        sync(neighbour_fire_.get(), "n:");
+        if (post_em_ && post_em_->Ok()) {
+            if (const em::EmitterDef* d = post_em_->SearchEmitterDef()) em_link_->SetForeignEmitter("post_radar", def_.post_radar.position, *d, !PostRadarOff());
+        }
+    }
+
+    // The aircraft a pilot may see now.
+    void PerceptionAir(std::vector<airwar::AirObject>& out) {
+        if (percep_contrail_area_m2_.size() < def_.targets.size()) {
+            percep_contrail_area_m2_.resize(def_.targets.size(), 0.0);
+            percep_contrail_next_s_.resize(def_.targets.size(), 0.0);
+        }
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (!targets_[i].spawned || targets_[i].gone) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            airwar::AirObject o;
+            o.id = t.id;
+            o.key = airwar::ObjectKeyOf(t.id);
+            o.side = t.friendly ? 1 : 0;
+            o.pos = a->position;
+            o.vel = a->velocity;
+            o.alt_m = world_.Frame().AltitudeOf(a->position);
+            o.size_m = t.size_m;
+            o.type = t.model;
+            o.weapon = t.weapon;
+            o.burning = targets_[i].damage.fire;
+            if (o.alt_m > 4000.0) {  // a contrail is a function of the weather and the height only (fx::ContrailAt, never the feed)
+                if (time_ >= percep_contrail_next_s_[i]) {
+                    percep_contrail_next_s_[i] = time_ + 10.0;
+                    percep_contrail_area_m2_[i] =
+                        fx::ContrailAt(weather_, o.alt_m, 0.30).kind != fx::ContrailKind::None ? def_.perception.eye.contrail_width_m * 3000.0 : 0.0;
+                }
+                o.contrail_area_m2 = percep_contrail_area_m2_[i];
+            }
+            out.push_back(o);
+        }
+    }
+
+    // What the other side's pilots may see on the ground besides the batteries (roadmap B6): the prepared position's dummies
+    // (a dummy looks like a silent battery) and the movers on the session's roads, a column or convoy on the move as one,
+    // the rest as parked vehicles. A mover put out of action stays where it is, seen as parked vehicles.
+    void PerceiveGroundMovers(airwar::PerceptionFeed& pf) {
+        if (percep_dummies_.empty()) {
+            for (std::size_t k = 0; k < def_.prepared.dummies.size(); ++k) {
+                const Vec3& at = def_.prepared.dummies[k].position;
+                percep_dummies_.push_back(pf.hub.AddGround("osa_battery_silent", GroundEnu(at.x, at.y), "dummy:" + std::to_string(k)));
+            }
+        }
+        if (!nav_) return;
+        for (const nav::Mover& m : nav_->GetMovers().All()) {
+            if (m.state == nav::MoverState::Waiting || m.state == nav::MoverState::Arrived || m.route.path.empty()) continue;
+            const MapPoint at = nav::PointAlong(m.route, m.arc_m);
+            const Vec3 g = GroundEnu(at.east_m, at.north_m);
+            const bool column = m.state == nav::MoverState::Moving && (m.kind == "column" || m.kind == "convoy" || m.vehicles > 2);
+            const std::string cls = column ? "column_moving" : "vehicles_parked";
+            const auto it = percep_movers_.find(m.id);
+            if (it != percep_movers_.end()) {
+                if (airwar::GroundObject* o = pf.hub.FindGround(it->second)) o->cls = cls;  // halted, or on the move again
+                pf.hub.MoveGround(it->second, g);
+                continue;
+            }
+            percep_movers_[m.id] = pf.hub.AddGround(cls, g, "mover:" + m.id);
+        }
+    }
+
+    // Each pilot's perception tick: the pilots due now look about them and listen to their receivers; what is new in a
+    // picture sets off his reaction at today's entry points (target_behaviour.hpp). Perception runs on the runner that holds
+    // the sky's truth (a linked post's mirrors none).
+    void UpdatePerception() {
+        if (!percep_on_ || def_.targets.empty() || !external_launchers_.empty()) return;
+        airwar::PerceptionFeed& pf = Percep();
+        pf.Update(time_);
+        if (engagement_on_) {  // our missiles in flight lay their smoke trails
+            for (const EngagementModel::MissileView& m : engagement_.MissilesInFlight(time_, world_, eng_targets_)) {
+                pf.TrailHead("own", m.number, m.position, time_);
+            }
+        }
+        SyncEmSites();
+        if (time_ >= percep_ground_next_s_) {
+            percep_ground_next_s_ = time_ + 2.0;
+            pf.hub.MoveGround(percep_unit_ground_, GroundEnu(def_.unit_position.x, def_.unit_position.y));
+            if (battery_fire_) {
+                for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+                    if (s.external || !s.deployed) continue;
+                    const Vec3 g = GroundEnu(s.position.x, s.position.y);
+                    const auto it = percep_shooters_.find(s.callsign);
+                    if (it == percep_shooters_.end()) percep_shooters_[s.callsign] = pf.hub.AddGround("osa_battery_silent", g, s.callsign);
+                    else pf.hub.MoveGround(it->second, g);
+                }
+            }
+            PerceiveGroundMovers(pf);  // roadmap B6: the dummies and the roads' movers, for the opportunity chain
+        }
+        std::vector<std::size_t> due;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (!targets_[i].spawned || targets_[i].gone || t.weapon) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            if (pf.hub.Due(airwar::ObjectKeyOf(t.id), time_)) due.push_back(i);
+        }
+        if (due.empty()) return;
+        std::vector<airwar::AirObject> air;
+        PerceptionAir(air);
+        airwar::EnvIn env;
+        env.terrain = &world_.GetTerrain();
+        env.frame = &world_.Frame();
+        env.weather = &weather_;
+        env.light = light_;
+        env.visibility_m = def_.optics.visibility_m;
+        for (std::size_t i : due) {
+            const ScenarioTarget& t = def_.targets[i];
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr) continue;
+            airwar::ObserverIn ob;
+            ob.id = t.id;
+            ob.key = airwar::ObjectKeyOf(t.id);
+            ob.side = t.friendly ? 1 : 0;
+            ob.pos = a->position;
+            ob.vel = a->velocity;
+            ob.alt_m = world_.Frame().AltitudeOf(a->position);
+            ob.agl_m = ob.alt_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
+            ob.two_seat = t.seats > 1;
+            {  // his type's blind cone (roadmap S7), by the model it is drawn with (the air war's aircraft id)
+                const auto bt = def_.perception.lookout.rear_half_deg_by_type.find(t.model);
+                if (bt != def_.perception.lookout.rear_half_deg_by_type.end()) ob.rear_half_deg = bt->second;
+            }
+            // His optical aids in the scenario's year (roadmap S7): TISEO, Pave Spike, Pave Tack.
+            for (const airwar::PerceptionData::OpticalAid* aid : def_.perception.AidsOf(t.model, def_.year)) {
+                if (aid->vid_m > ob.aid_vid_m) {
+                    ob.aid_vid_m = aid->vid_m;
+                    ob.aid_air_deg = aid->field_deg;
+                }
+                if (aid->ground_m > ob.aid_ground_m) {
+                    ob.aid_ground_m = aid->ground_m;
+                    ob.aid_ground_deg = aid->field_deg;
+                    ob.aid_night = aid->night;
+                }
+            }
+            ob.skill = t.pilot_skill;
+            ob.stress = reactions_.Stress(static_cast<int>(i), time_);
+            ob.defensive = targets_[i].pilot.Evading();
+            if (!t.legs.empty()) {
+                const std::size_t k = std::min(a->next_waypoint, t.legs.size() - 1);
+                ob.attack = PhaseOfTag(t.legs[k].tag) == "attack";
+            }
+            std::vector<airwar::RwrHeard> heard;
+            if (!t.rwr.empty()) {
+                ob.rwr_set = def_.perception.RwrSet(t.rwr);
+                if (ob.rwr_set == nullptr) ob.rwr_set = &default_rwr_set_;  // a receiver with no display of its own in the data
+                if (em_link_) {
+                    // A wingman at A1 (roadmap B12) hears the searches and the missiles' guidance on his leader's receiver,
+                    // his own being off; back at A2 he does so a moment longer while his own takes hold, and hears a lock on
+                    // him on his own.
+                    const ScenarioTarget* lender = LenderOf(i);
+                    const auto hear = [&heard](const EmSensorLink::RwrContactView& c, bool borrowed) {
+                        airwar::RwrHeard h;
+                        h.key = c.key;
+                        h.state = c.state == 2 ? airwar::RwrState::Launch : (c.state == 1 ? airwar::RwrState::Lock : airwar::RwrState::Search);
+                        h.name = c.name;
+                        h.known = c.known;
+                        h.bearing_rad = c.bearing_rad;
+                        h.sigma_rad = c.sigma_rad;
+                        h.power_dbw = c.power_dbw;
+                        h.borrowed = borrowed;
+                        heard.push_back(h);
+                    };
+                    for (const EmSensorLink::RwrContactView& c : em_link_->RwrPictureOf(t.id)) {
+                        if (lender == nullptr || c.state != 0) hear(c, false);
+                    }
+                    if (lender != nullptr) {
+                        for (const EmSensorLink::RwrContactView& c : em_link_->RwrPictureOf(lender->id)) {
+                            if (c.state != 1) hear(c, true);  // a lock is held on his leader, not on him
+                        }
+                    }
+                }
+            }
+            std::vector<airwar::Sighting> fresh;
+            pf.hub.Tick(ob, env, time_, air, heard, &fresh);
+            if (t.friendly) continue;  // our fighters' reactions to what they see are the air battle's (B8, B10)
+            for (const airwar::Sighting& sg : fresh) ReactToSighting(i, sg);
+        }
+    }
+    // A pilot's reaction to what is new in his picture, at today's entry points (the delay by skill and stress, the calls
+    // and the jettison are B4's): a lock or a launch on his receiver, or a launch seen by eye (its dust and flash, its
+    // smoke trail), turns him with the place he believes it to be, never the unit's true one.
+    void ReactToSighting(std::size_t i, const airwar::Sighting& sg) {
+        // Emission discipline (roadmap S5): a lock or a launch on his receiver is when his held jammer is needed.
+        if (em_link_ && sg.by == airwar::SightBy::Rwr && sg.kind == airwar::SightKind::Emitter &&
+            (sg.rwr == airwar::RwrState::Lock || sg.rwr == airwar::RwrState::Launch)) {
+            em_link_->Painted(def_.targets[i].id);
+        }
+        if (reactions_.On(static_cast<int>(i))) {  // roadmap B4: the chain (reaction_chain.hpp); "evade" targets below
+            reactions_.Sighted(static_cast<int>(i), sg, time_, ReactionContext());
+            return;
+        }
+        // A hand-written "evade" (roadmap S4, 04_REACTIONS.md §12.3): its scripted row names the cue, flown at once.
+        ReactionChain::ScriptedCue cue;
+        if (reactions_.SightedScripted(static_cast<int>(i), sg, cue)) CueTarget(def_.targets[i].id, cue.launch, &cue.from);
+    }
+
+    // ---- Reactions under fire (roadmap B4, reaction_chain.hpp, docs/air_battle/04_REACTIONS.md). A target with
+    // "reactions" reacts by its faction's tables to what its picture holds (ReactToSighting), to a wingman going down
+    // (UpdateTargets) and to its own damage (OnDamage); the chain gives its acts here each step, and its calls go on the
+    // enemy's radio (B9) when the session has it. A target with "evade" flies the old scripted evasion (CueTarget).
+    // Damage states (roadmap R1) run for every aircraft of a session that has them ("damage", the testbed's tables, a
+    // package that brought them): our missile's hit may leave its aircraft heavily damaged, a damaged aircraft crashes in
+    // its time, the mission bridge's neighbours' missiles draw damage.
+    ReactionChain reactions_;
+    std::unique_ptr<AirRadioThreats> threat_radio_;
+    const airwar::AirRadio* threat_radio_of_ = nullptr;
+    static constexpr unsigned kDamageSeed = 0xDA3Au;
+    std::mt19937 damage_rng_{kDamageSeed};
+    std::vector<std::pair<std::size_t, int>> hit_heavy_;  // our missile's hits that left their aircraft flying, heavily damaged
+    std::set<std::string> survived_hits_;
+
+    void ConfigureReactions() {
+        ConfigureReactionChain();
+        damage_rng_.seed(def_.seed + kDamageSeed);
+        if (DamageStatesOn()) SplitOsaHits();
+    }
+    void ConfigureReactionChain() {
+        reactions_.Configure(&def_.reactions, static_cast<std::uint64_t>(def_.seed) * 0x9E3779B97F4A7C15ull + 0xB4ull, def_.year);
+    }
+    bool DamageStatesOn() const { return def_.has_damage || (def_.waves && def_.waves->has_damage); }
+    const DamageTable& DamageTab() const { return def_.waves && def_.waves->has_damage ? def_.waves->damage : def_.damage; }
+    // Our missile's hit (the engagement model's chance) is drawn into destroyed or heavily damaged (DAMAGE.md 5).
+    void SplitOsaHits() {
+        engagement_.SetHitSurvives([this](const std::string& id, int number) {
+            const std::size_t i = TargetIndexOf(id);
+            if (i >= def_.targets.size() || def_.targets[i].weapon) return false;
+            if (!(Uniform01(damage_rng_) < DamageTab().missile_heavy_share)) return false;
+            hit_heavy_.push_back({i, number});
+            survived_hits_.insert(id);
+            return true;
+        });
+    }
+    ReactionChain::Context ReactionContext() {
+        ReactionChain::Context c;
+        c.air = FlightLookup();
+        c.agl_m = [this](int t) {
+            const bool in = t >= 0 && static_cast<std::size_t>(t) < targets_.size() && targets_[static_cast<std::size_t>(t)].spawned;
+            const Aircraft* a = in ? world_.FindAircraft(targets_[static_cast<std::size_t>(t)].world_id) : nullptr;
+            return a != nullptr ? AboveGround(a->position) : 1000.0;
+        };
+        c.attacking = [this](int t) {
+            if (t < 0 || static_cast<std::size_t>(t) >= targets_.size() || !targets_[static_cast<std::size_t>(t)].spawned) return false;
+            const ScenarioTarget& d = def_.targets[static_cast<std::size_t>(t)];
+            const Aircraft* a = world_.FindAircraft(targets_[static_cast<std::size_t>(t)].world_id);
+            if (a == nullptr || d.legs.empty()) return false;
+            return PhaseOfTag(d.legs[std::min(a->next_waypoint, d.legs.size() - 1)].tag) == "attack";
+        };
+        if (air_radio_) {
+            if (threat_radio_of_ != air_radio_.get()) {
+                threat_radio_ = std::make_unique<AirRadioThreats>(air_radio_.get());
+                threat_radio_of_ = air_radio_.get();
+            }
+            c.radio = threat_radio_.get();
+        }
+        return c;
+    }
+
+    // ---- Our aviation (roadmap B10, command/own_air.hpp, own_flights.hpp; docs/air_battle/08_OUR_FIGHTERS.md). The day's
+    // identification codes and who holds them; our pilots' transponders on the codes they set; the notices of our flights
+    // down the chain and the regiment's net into the journal, then to the crews; the fighter regiments' duty scrambling pairs
+    // on our GCI's picture; and the trace of a launch at one of ours from the records. Without "own_air" every one of ours
+    // answers on the one default code, as before.
+    struct OwnAirState {
+        command::IffSchedule schedule;
+        command::IffHolding battery;      // the Osa crews' (the battery's paper)
+        command::IffHolding post;         // the command post's
+        std::vector<int> codes;           // per target: its transponder's code now (-1 off)
+        std::vector<command::OwnAirScenarioNotice> notices;  // the scenario's and the scrambles'
+        std::vector<command::NoticeTrace> traces;            // per notice: its way (the debrief's)
+        std::vector<char> sent;
+        std::vector<command::OwnFlightNotice> crew_known;    // what reached the own crew, as it read the words
+        std::vector<command::OwnFlightNotice> regiment_known;// what the regiment's post had (the neighbours fire by it)
+        std::vector<double> regiment_at_s;                   // per notice: when the regiment's post had it (-1 never)
+        command::FighterDuty duty;
+        command::OwnGciPicture gci;
+        bool warned = false;
+        std::vector<command::Scramble> scrambles;
+        std::set<std::string> ours_controlled;               // our pairs' targets (the GCI plots them as its own)
+        std::vector<std::vector<std::size_t>> pair_targets;  // per scramble: its aircraft's indices
+        std::vector<command::FriendlyFireFinding> findings;
+        std::set<std::string> traced;
+        int battery_code = 0;
+        int post_code = 0;
+        // The interrogator's code as a seat's act (S1): the senior operator's КОД switch (iff.code) set to the table's code
+        // on the commander's order; until it is, the interrogator asks on the code fitted.
+        bool knob_set = false;
+        double knob_at_s = -1.0;       // the NPC senior operator has the new code fitted then (< 0: not at it)
+        double change_since_s = -1.0;  // the table's code differs from the one fitted since then (< 0: they agree)
+        std::set<int> windows_said;    // notices whose crossing the battery commander has warned of (PU-12M)
+        std::set<std::string> violators;  // tracks reported as violators
+        // The allied false friend (S1): which enemy aircraft are the Pact's allies' on our Kremniy, their own schedule.
+        std::vector<char> allied;
+        command::IffSchedule allied_schedule;
+        std::set<std::string> false_friend_logged;
+        // The fighter regiments' reports (S1): our aircraft lost and our pilots' claims, each down the chain to the battery.
+        struct PendingReport {
+            command::OwnAirReport report;
+            double sent_s = 0.0;
+            bool sent = false;
+        };
+        std::vector<PendingReport> reports;
+        std::vector<command::NoticeTrace> report_traces;
+        std::set<std::string> down_reported;
+        std::size_t claims_read = 0;
+        std::map<std::string, double> alert_alt_m;  // per regiment: its airborne-alert zone's height
+        std::set<std::string> recalled;
+    };
+    std::unique_ptr<OwnAirState> own_air_;
+    std::string violator_az_;  // the azimuth of the last violator the commander held (his report's)
+
+    double ClockH(double s) const { return ((def_.clock_start_s >= 0.0 ? def_.clock_start_s : 0.0) + s) / 3600.0; }
+    // Target i's transponder now (B10): the code our pilot set (-1 off); without "own_air", the scenario's fixed code.
+    int TransponderCode(std::size_t i) const {
+        if (i < def_.targets.size() && Allied(i)) return own_air_->codes[i];
+        if (i >= def_.targets.size() || !def_.targets[i].friendly) return 0;
+        if (own_air_ && i < own_air_->codes.size()) return own_air_->codes[i];
+        return def_.targets[i].iff_code;
+    }
+    // An enemy aircraft of the Pact's allies on our Kremniy (S1, the false friend).
+    bool Allied(std::size_t i) const {
+        return own_air_ && i < own_air_->allied.size() && own_air_->allied[i] != 0 && i < own_air_->codes.size();
+    }
+    // Does target i answer an interrogator asking on `code`? One of ours, or an allied enemy, with its transponder on that code.
+    bool AnswersOn(std::size_t i, int code) const {
+        return i < def_.targets.size() && (def_.targets[i].friendly || Allied(i)) && TransponderCode(i) >= 0 && TransponderCode(i) == code;
+    }
+    int BatteryIffCodeNow() const { return own_air_ ? own_air_->battery_code : 0; }
+    int PostIffCode() const { return own_air_ ? own_air_->post_code : 0; }
+    // The regiment's radars and the other batteries ask on the day's table (they had the paper with the regiment's).
+    int RegimentIffCode() const {
+        if (!own_air_) return 0;
+        return def_.own_air.fixed_code > 0 ? def_.own_air.fixed_code : own_air_->schedule.FilterAt(ClockH(time_));
+    }
+    // The regiment's batteries hold fire at an aircraft (B10): it answers their interrogators, or it is inside a notice the
+    // regiment's post had by now, or above the split height in one zone (the plan they were given). Without "own_air": a
+    // friend by its reply, as before.
+    bool RegimentHoldsFire(std::size_t i, const Vec3& pos) const {
+        const bool replied = AnswersOn(i, RegimentIffCode());
+        if (!own_air_) return replied;
+        command::TrackSeen s;
+        s.pos = pos;
+        s.alt_m = world_.Frame().AltitudeOf(pos);
+        s.clock_h = ClockH(time_);
+        s.replied = replied;
+        const command::NoticeDef& nd = def_.own_air.def.notice;
+        return command::JudgeTrack(s, own_air_->regiment_known, def_.own_air.plan, 0.0, nd.slack_s / 3600.0) != command::OwnAirCall::Free;
+    }
+    // The NPC commander's call on the track he holds (B10), on his crew's instruments (the search scope's echo of it, else
+    // what he was told), its reply and the notices and plan that reached his crew. Free without "own_air".
+    command::OwnAirCall CrewJudges(const EngagementModel& eng, const std::string& tracked, const KnownTarget* told) const {
+        if (!own_air_) return command::OwnAirCall::Free;
+        command::TrackSeen s;
+        s.clock_h = ClockH(time_);
+        s.replied = eng.KnownFriend(tracked) || (told != nullptr && told->friendly);
+        bool have = false;
+        const double unit_alt = world_.Frame().AltitudeOf(def_.unit_position);
+        for (const Contact& c : eng.SearchPicture()) {
+            if (c.target_id != tracked) continue;
+            const double az = DegToRad(c.azimuth_deg), el = DegToRad(c.elevation_deg);
+            const double ground = c.range_m * std::cos(el);
+            s.pos = def_.unit_position + Vec3{ground * std::sin(az), ground * std::cos(az), 0.0};
+            s.alt_m = unit_alt + c.range_m * std::sin(el);
+            have = true;
+        }
+        if (!have && told != nullptr && told->has_azimuth && told->has_range) {
+            const double az = DegToRad(told->azimuth_deg);
+            s.pos = def_.unit_position + Vec3{told->range_m * std::sin(az), told->range_m * std::cos(az), 0.0};
+            s.alt_m = told->has_height ? told->height_m : unit_alt;
+            have = true;
+        }
+        if (!have) return command::OwnAirCall::Free;
+        const command::NoticeDef& nd = def_.own_air.def.notice;
+        return command::JudgeTrack(s, own_air_->crew_known, def_.own_air.plan, 0.0, nd.slack_s / 3600.0);
+    }
+
+    void StartOwnAir() {
+        const command::OwnAirScenarioDef& d = def_.own_air;
+        own_air_ = std::make_unique<OwnAirState>();
+        OwnAirState& o = *own_air_;
+        const double h0 = ClockH(0.0);
+        const int day0 = static_cast<int>(std::floor(h0 / 24.0));
+        o.schedule = d.fixed_code > 0 ? command::IffSchedule::Fixed(d.fixed_code)
+                                      : command::IffSchedule::Days(d.codes, d.war, day0 - 1, day0 + 2, static_cast<std::uint64_t>(def_.seed) + 0xB10ull);
+        o.battery.has_document = d.battery_table_s >= 0.0;
+        o.battery.document_h = ClockH(std::max(0.0, d.battery_table_s));
+        o.battery.last_filter = d.battery_last_code > 0 ? d.battery_last_code : o.schedule.FilterAt(h0 - 24.0);
+        o.post.has_document = d.post_table_s >= 0.0;
+        o.post.document_h = ClockH(std::max(0.0, d.post_table_s));
+        o.post.last_filter = d.post_last_code > 0 ? d.post_last_code : o.schedule.FilterAt(h0 - 24.0);
+        if (d.enemy_allies && d.def.false_friend.on) {  // the Pact's allies on their own schedule of the same war filters (S1)
+            o.allied_schedule = command::IffSchedule::Days(d.codes, true, day0 - 1, day0 + 2, static_cast<std::uint64_t>(def_.seed) + 0xB10ull + 0x610ull);
+        }
+        o.notices = d.notices;
+        o.traces.assign(o.notices.size(), command::NoticeTrace());
+        o.sent.assign(o.notices.size(), 0);
+        o.regiment_at_s.assign(o.notices.size(), -1.0);
+        if (!d.regiments.empty()) {
+            o.duty.Init(d.def, d.regiments, def_.clock_start_s >= 0.0 ? def_.clock_start_s : 0.0, static_cast<std::uint64_t>(def_.seed));
+            o.gci.Init(d.def.gci, d.gci_radar, static_cast<std::uint64_t>(def_.seed), command::FighterDuty::Key(d.regiments.front().gci));
+        }
+        log_.Record({0.0, DebriefEntry::Kind::Scenario, "own aviation", def_.id,
+                     "the battery's identification codes " + std::string(o.battery.has_document ? "from the day's table" : "of the day before (no table)") +
+                         (d.plan.present ? "; " + d.plan.Words() : std::string())});
+    }
+
+    // A notice's way (B10): sent by the fighter regiment at its time, down the chain to the regiment's post, which says it
+    // on the battery's net (with an R-111: the post's journal takes it); without a post, the battery commander's line on
+    // the battery net. A lost notice goes nowhere.
+    void SendNotices() {
+        OwnAirState& o = *own_air_;
+        const command::OwnAirScenarioDef& d = def_.own_air;
+        for (std::size_t k = 0; k < o.notices.size(); ++k) {
+            if (o.sent[k] != 0 || time_ + 1e-9 < o.notices[k].sent_s) continue;
+            o.sent[k] = 1;
+            const command::OwnAirScenarioNotice& n = o.notices[k];
+            command::NoticeTrace& tr = o.traces[k];
+            tr.flight = n.notice.flight;
+            tr.sent_h = n.sent_s / 3600.0;
+            if (n.lost) {
+                Event("own aviation", "the notice of " + n.notice.flight + " was not sent on (lost)");
+                continue;
+            }
+            const std::string words = command::NoticeWords(n.notice, world_.Frame());
+            double at_post_s = n.sent_s + 600.0;  // without the chain's data: ten minutes, a game value
+            if (d.has_chain) {
+                tr = command::RunNotice(d.chain, n.notice, words, d.origin, d.notice_post, n.sent_s / 3600.0, d.def.notice,
+                                        static_cast<unsigned>(def_.seed) + static_cast<unsigned>(k) * 131u, ClockH(0.0));
+                const double h = command::NoticeAtPostH(tr);
+                if (h < -1e17) {
+                    Event("own aviation", "the notice of " + n.notice.flight + " did not reach the regiment within six hours");
+                    continue;
+                }
+                at_post_s = h * 3600.0;
+            }
+            o.regiment_at_s[k] = at_post_s;
+            const double after = std::max(0.0, at_post_s - time_);
+            if (r111_) {
+                RegimentSays("Regiment to the battery: " + words, after + d.def.notice.liaison_s);
+                def_.radio_plan.messages.back().own_air_notice = static_cast<int>(k) + 1;
+            } else {
+                SayOnBatteryNet("Battery commander", words, after + d.def.notice.liaison_s);
+                own_air_says_.push_back({time_ + after + d.def.notice.liaison_s, static_cast<int>(k)});
+            }
+        }
+        for (std::size_t k = 0; k < o.notices.size(); ++k) {
+            if (o.regiment_at_s[k] >= 0.0 && o.regiment_at_s[k] <= time_ + 1e-9) {
+                bool have = false;
+                for (const command::OwnFlightNotice& r : o.regiment_known) have = have || (r.number == o.notices[k].notice.number && r.amendment == o.notices[k].notice.amendment);
+                if (!have) o.regiment_known.push_back(o.notices[k].notice);
+            }
+        }
+        // Without a post: the battery net's line heard by the own crew (its commander's headset on the net); a lone
+        // vehicle with no battery net in the session is told by its battery commander in person.
+        for (std::size_t i = 0; i < own_air_says_.size();) {
+            if (time_ + 1e-9 < own_air_says_[i].first + 0.5) {
+                ++i;
+                continue;
+            }
+            const int k = own_air_says_[i].second;
+            own_air_says_.erase(own_air_says_.begin() + static_cast<std::ptrdiff_t>(i));
+            if (c2_ && voice_ && HeardBy("battery net").empty()) {
+                Event("own aviation", "the battery commander's notice was not heard: the battery net is not on the crew's box");
+                continue;
+            }
+            CrewReadsNotice(static_cast<std::size_t>(k), command::NoticeWords(o.notices[static_cast<std::size_t>(k)].notice, world_.Frame()));
+        }
+    }
+    std::vector<std::pair<double, int>> own_air_says_;
+    // The crew has the notice as the words it heard (read back from them: what it keeps is what was said).
+    void CrewReadsNotice(std::size_t k, const std::string& words) {
+        OwnAirState& o = *own_air_;
+        command::OwnFlightNotice n;
+        if (!command::ReadNotice(words, world_.Frame(), def_.unit_position, ClockH(time_), n)) {
+            Event("own aviation", "a notice the crew could not read: " + words);
+            return;
+        }
+        for (command::OwnFlightNotice& e : o.crew_known) {
+            if (e.number == n.number) {
+                e = n;  // an amendment replaces it
+                n.number = -1;
+            }
+        }
+        if (n.number >= 0) o.crew_known.push_back(n);
+        NoticeLines();
+        if (k < o.traces.size()) {
+            if (o.traces[k].at_battery_h < 0.0) o.traces[k].at_battery_h = time_ / 3600.0;
+            if (o.traces[k].written_h < 0.0) o.traces[k].written_h = time_ / 3600.0;
+        }
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "own aviation", o.traces.size() > k ? o.traces[k].flight : std::string(), "notice received: " + words});
+    }
+    // The crew's lines on a notice (S1): the Osa commander tells his crew «В зоне свои самолёты!»; in the post the radio
+    // operator reports it to the battery commander, who warns every station on the battery net (the lines their crew data
+    // has; pvo_bu_x_1984 art. 17 and 30).
+    void NoticeLines() {
+        const std::string rule = "a notice of our own aircraft received";
+        if (def_.crew_data.FindCallout("own_air_told") != nullptr && NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "own_air_told", rule))) Say("own_air_told", Cmdr());
+        if (def_.crew_data.FindCallout("own_air_notice") != nullptr && NpcDoes("radio_operator", SeatDuty::Report("radio_operator", "own_air_notice", rule))) {
+            Say("own_air_notice", "radio_operator");
+        }
+        if (def_.crew_data.FindCallout("own_air_battery") != nullptr && NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "own_air_battery", rule))) Say("own_air_battery", Cmdr());
+    }
+    // The battery commander (PU-12M) prohibits fire as a notice's crossing opens: «Всем! Огонь запрещаю, свои!».
+    void CrossingLines() {
+        if (!own_air_ || def_.crew_data.FindCallout("fire_prohibited_battery") == nullptr) return;
+        OwnAirState& o = *own_air_;
+        const double h = ClockH(time_);
+        for (const command::OwnFlightNotice& n : o.crew_known) {
+            if (o.windows_said.count(n.number) != 0 || h < n.cross_from_h || h > n.cross_to_h) continue;
+            if (!NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "fire_prohibited_battery", "a notified flight's crossing has begun"))) continue;
+            o.windows_said.insert(n.number);
+            Say("fire_prohibited_battery", Cmdr());
+        }
+    }
+    // The NPC commander holds a track (S1): a silent one inside a notice, «Огонь запрещаю! Свои!»; one answering friend off
+    // every notice, a violator reported on the battery net (pvo_bu_x_1984 art. 56).
+    void OwnAirHoldLines(const EngagementModel& eng, const std::string& tracked, const KnownTarget* told, command::OwnAirCall call) {
+        if (!own_air_) return;
+        if (call == command::OwnAirCall::Hold && def_.crew_data.FindCallout("fire_prohibited_own") != nullptr &&
+            NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "fire_prohibited_own", "a silent track inside a notice: fire prohibited"))) {
+            Say("fire_prohibited_own", Cmdr());
+        }
+        if (call != command::OwnAirCall::Violator || own_air_->violators.count(tracked) != 0) return;
+        double az_deg = 0.0;  // a contact's azimuth runs -180..180: no sentinel value
+        bool has_az = false;
+        for (const Contact& c : eng.SearchPicture()) {
+            if (c.target_id != tracked) continue;
+            az_deg = c.azimuth_deg;
+            has_az = true;
+        }
+        if (!has_az && told != nullptr && told->has_azimuth) {
+            az_deg = told->azimuth_deg;
+            has_az = true;
+        }
+        if (!has_az) return;
+        violator_az_ = MilsText(az_deg);
+        const std::map<std::string, std::string> f{{"callsign", OwnCallsign()}, {"azimuth", violator_az_}};
+        if (def_.crew_data.FindCallout("report_violator") == nullptr || !callouts_) return;
+        if (!NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "report_violator", "a track answering friend off every notice: reported", f))) return;
+        own_air_->violators.insert(tracked);
+        callouts_->Say(time_, "report_violator", Cmdr(), f, 2.0);
+        Event("own aviation", "violator: " + tracked + " answers friend off every notice; reported on the battery net");
+    }
+
+    // The post heard the regiment's notice on its R-111 (UpdateRadios): the journal has it as said; the crew keeps it.
+    void HeardOwnAirNotice(const RegimentMessage& m) {
+        if (!own_air_ || m.own_air_notice <= 0) return;
+        const std::size_t k = static_cast<std::size_t>(m.own_air_notice - 1);
+        const std::string prefix = "Regiment to the battery: ";
+        CrewReadsNotice(k, m.text.compare(0, prefix.size(), prefix) == 0 ? m.text.substr(prefix.size()) : m.text);
+    }
+
+    // The codes now: each of our pilots' transponder, the battery's and the post's interrogators. A crew changes its code
+    // by the table it holds; without the table it keeps yesterday's (B10, soviet_iff).
+    void UpdateCodes() {
+        OwnAirState& o = *own_air_;
+        const double h = ClockH(time_);
+        o.codes.resize(def_.targets.size(), 0);
+        const double miss = def_.own_air.def.iff_change.pilot_miss;
+        if (def_.own_air.enemy_allies && def_.own_air.def.false_friend.on) {
+            o.allied.resize(def_.targets.size(), 2);
+            for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+                const ScenarioTarget& t = def_.targets[i];
+                if (o.allied[i] == 2) {
+                    o.allied[i] = !t.friendly && !t.weapon && command::AlliedAircraft(def_.own_air.def.false_friend, static_cast<std::uint64_t>(def_.seed),
+                                                                                      command::FighterDuty::Key(t.id)) ? 1 : 0;
+                }
+                if (o.allied[i] == 0) continue;
+                o.codes[i] = o.allied_schedule.FilterAt(h);
+                if (i < eng_targets_.size()) {
+                    eng_targets_[i].iff_code = o.codes[i];
+                    eng_targets_[i].transponder = true;
+                }
+            }
+        }
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (!t.friendly) continue;
+            if (t.iff_code < 0) o.codes[i] = -1;
+            else if (t.iff_table) o.codes[i] = command::PilotFilterAt(o.schedule, h, miss, static_cast<std::uint64_t>(def_.seed), command::FighterDuty::Key(t.id));
+            else o.codes[i] = t.iff_code > 0 ? t.iff_code : RegimentIffCode();
+            if (i < eng_targets_.size()) eng_targets_[i].iff_code = o.codes[i];
+        }
+        const int b = o.battery.FilterAt(o.schedule, h);
+        if (console_.panel.Find(kIffCodeControl) != nullptr) {
+            IffCodeSwitch(b);
+        } else if (b != o.battery_code) {
+            if (o.battery_code != 0) Event("IFF", "the crew sets the interrogator's code " + std::to_string(b) + " by the table it holds");
+            o.battery_code = b;
+        }
+        o.post_code = o.post.FilterAt(o.schedule, h);
+        engagement_.SetIffCode(o.battery_code);
+    }
+    // The Osa's КОД switch (S1, data/procedures/osa_ak.json "iff.code", positions 0-11 for filters 1-12; soviet_iff's twelve
+    // plug-in filters, the AK's real act and place unknown): set at the start to the code the crew holds (unless the scenario
+    // set it); when the table's code changes, the commander orders «Код опознавания сменить!», the senior operator sets the
+    // switch in the job's time and says «Код сменил!». The interrogator asks on the code the switch is at.
+    static constexpr const char* kIffCodeControl = "iff.code";
+    void IffCodeSwitch(int due) {
+        OwnAirState& o = *own_air_;
+        if (!o.knob_set) {
+            o.knob_set = true;
+            bool scenario_set = false;
+            for (const auto& c : def_.initial_controls) scenario_set = scenario_set || c.first == kIffCodeControl;
+            if (!scenario_set && due >= 1 && due <= 12) console_.panel.Set(kIffCodeControl, due - 1);
+        }
+        const int fitted = console_.panel.Get(kIffCodeControl) + 1;
+        if (fitted != o.battery_code) {
+            if (o.battery_code != 0) Event("IFF", "the interrogator's code switch at " + std::to_string(fitted));
+            o.battery_code = fitted;
+        }
+        if (fitted == due || due < 1 || due > 12) {
+            o.change_since_s = -1.0;
+            o.knob_at_s = -1.0;
+            return;
+        }
+        if (o.change_since_s < 0.0) {
+            o.change_since_s = time_;
+            Event("IFF", "the table's code is now " + std::to_string(due) + "; the interrogator still asks on " + std::to_string(fitted));
+        }
+        if (!PlayerGave("order_iff_code", 600.0) && !NpcOrdered("order", "order_iff_code", 600.0)) {
+            if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_iff_code", "the table's code changed: the interrogator's code to change"))) {
+                NpcGive("order_iff_code", 120.0);
+            }
+            return;
+        }
+        if (o.knob_at_s >= 0.0) {
+            if (time_ + 1e-9 < o.knob_at_s) return;
+            o.knob_at_s = -1.0;
+            // The turn itself is the act (a player who took the seat meanwhile owes it).
+            if (!NpcDoes("senior_operator", SeatDuty::Control("senior_operator", kIffCodeControl, due - 1, "the commander's order: the interrogator's code to the table's"))) return;
+            console_.panel.Set(kIffCodeControl, due - 1);
+            o.battery_code = due;
+            o.change_since_s = -1.0;
+            Event("IFF", "the senior operator sets the interrogator's code " + std::to_string(due) + " by the table the crew holds");
+            Say("iff_code_set", "senior_operator");
+            return;
+        }
+        if (NpcDoes("senior_operator", SeatDuty::Control("senior_operator", kIffCodeControl, due - 1, "the commander's order: the interrogator's code to the table's"))) {
+            const double speed = SeatSpeed("senior_operator");
+            o.knob_at_s = time_ + def_.own_air.def.iff_change.job_s / (speed > 0.1 ? speed : 0.1);
+        }
+    }
+
+    // The fighter regiments' duty (B10): our GCI's radar looks; on its picture, as old as the sector passes it, the rule
+    // table scrambles pairs; each pair enters the session as two of our aircraft its controller guides on the same picture,
+    // and the regiment sends its notice down the chain.
+    void UpdateOwnDuty() {
+        OwnAirState& o = *own_air_;
+        const command::OwnAirScenarioDef& d = def_.own_air;
+        if (d.regiments.empty() || !air_fight_) return;
+        if (!o.warned && d.raid_warning_s >= 0.0 && time_ >= d.raid_warning_s) {
+            o.warned = true;
+            o.duty.RaidWarning(time_);
+            // Airborne alert (S1, mt_turchin_coop pp. 6-7): a pair of each regiment to its zone behind the front line, low.
+            if (d.has_front && d.def.alert_pairs > 0) {
+                const std::uint64_t seed = static_cast<std::uint64_t>(def_.seed);
+                for (const command::Scramble& s : o.duty.Alert(time_, d.def.alert_pairs, [&](const command::FighterRegimentDef& r) {
+                         const command::AlertZone z = command::AlertZoneOf(d.def, d.front, d.to_enemy, true, seed, command::FighterDuty::Key(r.id));
+                         o.alert_alt_m[r.id] = z.alt_m;
+                         return z.centre;
+                     })) {
+                    LaunchPair(s);
+                }
+            }
+        }
+        if (o.gci.Due(time_)) {
+            std::vector<command::GciSeen> seen;
+            for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+                if (!targets_[i].spawned || targets_[i].gone) continue;
+                const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+                if (a == nullptr || !a->alive || def_.targets[i].weapon) continue;
+                command::GciSeen g;
+                g.truth = static_cast<int>(i);
+                g.id = def_.targets[i].id;
+                g.pos = a->position;
+                g.vel = a->velocity;
+                g.replies = AnswersOn(i, RegimentIffCode());
+                g.controlled = o.ours_controlled.count(g.id) != 0;
+                seen.push_back(g);
+            }
+            const Vec3 radar = o.gci.Radar();
+            const double mast = d.gci_mast_m;
+            const double ground = world_.GetTerrain().HeightAt(radar.x, radar.y);
+            const LocalFrame& fr = world_.Frame();
+            o.gci.Observe(time_, seen, [&](const Vec3& p) {  // the radio horizon over a 4/3 earth (no ground between: a game value)
+                const double ha = std::max(1.0, mast);
+                const double ht = std::max(1.0, fr.AltitudeOf(p) - ground);
+                const double dh = Vec3{p.x - radar.x, p.y - radar.y, 0.0}.Length();
+                return dh <= 4120.0 * (std::sqrt(ha) + std::sqrt(ht));
+            });
+        }
+        std::vector<command::SectorTrack> picture;
+        for (const command::GciTrack& k : o.gci.At(time_)) picture.push_back({k.id, k.pos, k.vel, k.Hostile()});
+        int busy = 0;  // the controller's channels taken: pairs still flying
+        for (const std::vector<std::size_t>& pair : o.pair_targets) {
+            bool flying = false;
+            for (std::size_t i : pair) {
+                if (i >= targets_.size() || targets_[i].gone) continue;
+                const Aircraft* a = targets_[i].spawned ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+                flying = flying || !targets_[i].spawned || (a != nullptr && a->alive);
+            }
+            if (flying) ++busy;
+        }
+        const int free_channels = std::max(0, d.def.gci.channels - busy);
+        for (const command::Scramble& s : o.duty.Step(time_, picture, free_channels)) LaunchPair(s);
+    }
+    void LaunchPair(const command::Scramble& s) {
+        OwnAirState& o = *own_air_;
+        const command::OwnAirScenarioDef& d = def_.own_air;
+        const command::FighterRegimentDef* r = o.duty.Regiment(s.regiment);
+        if (r == nullptr) return;
+        const int number = static_cast<int>(o.scrambles.size()) + 1;
+        command::OwnPairPlan plan = command::PlanPair(s, *r, number, 4000.0, 250.0);
+        if (s.alert) {  // up to its zone and round it until it is vectored, or its time there is up (S1)
+            const auto alt = o.alert_alt_m.find(r->id);
+            plan.alt_m = alt != o.alert_alt_m.end() ? alt->second : d.def.alert_low_max_m;
+            plan.speed_mps = 220.0;
+            const Vec3 c = Vec3{s.toward.x, s.toward.y, 0.0};
+            const double rad = 8000.0;
+            const double loop_s = 2.0 * 3.14159265358979 * rad / plan.speed_mps;
+            const int loops = std::max(1, static_cast<int>(std::ceil(d.def.alert_orbit_s / loop_s)));
+            std::vector<Vec3> route{plan.route.front()};
+            for (int k = 0; k < loops; ++k) {
+                for (int q = 0; q < 4; ++q) {
+                    const double a = 1.5707963267949 * q;
+                    route.push_back(c + Vec3{rad * std::sin(a), rad * std::cos(a), 0.0});
+                }
+            }
+            route.push_back(plan.route.front());
+            plan.route = route;
+        }
+        const std::string tag = r->id + "-";
+        const LocalFrame& fr = world_.Frame();
+        std::vector<ScenarioTarget> ts;
+        for (std::size_t k = 0; k < plan.ids.size(); ++k) {
+            ScenarioTarget t;
+            t.id = tag + plan.ids[k];
+            t.name = plan.callsign + "-" + std::to_string(k + 1) + ": " + r->name + " (" + r->id + ", ours)";
+            t.type = "Air+FixedWing";
+            t.model = r->type;
+            t.target_class = "fighter";
+            t.speed_mps = plan.speed_mps;
+            t.max_turn_rate_rad_s = DegToRad(10.0);
+            t.rcs_m2 = 3.0;
+            t.appear_at_s = s.airborne_s;
+            t.formation = static_cast<int>(plan.ids.size());
+            t.size_m = 10.0;
+            t.bottom_m = 1.5;
+            t.friendly = true;
+            t.iff_table = true;
+            const double side = 300.0 * static_cast<double>(k);
+            t.start = GroundPointInFrame(fr, plan.route.front().x + side, plan.route.front().y, plan.alt_m);
+            for (std::size_t w = 1; w < plan.route.size(); ++w) t.waypoints.push_back(GroundPointInFrame(fr, plan.route[w].x + side, plan.route[w].y, plan.alt_m));
+            ts.push_back(std::move(t));
+        }
+        std::string why;
+        const std::size_t first = def_.targets.size();
+        if (!AddTargets(ts, "our fighter regiment " + r->id, &why)) {
+            Event("own aviation", "the pair could not take off: " + why);
+            return;
+        }
+        o.scrambles.push_back(s);
+        o.pair_targets.emplace_back();
+        for (std::size_t k = 0; k < ts.size(); ++k) {
+            o.pair_targets.back().push_back(first + k);
+            o.ours_controlled.insert(ts[k].id);
+            airwar::AirFightFighterDef f;
+            f.target = ts[k].id;
+            f.type = r->type;
+            f.faction = "ours";
+            f.role = "intercept";
+            f.regiment = r->id;
+            f.controller = r->gci;
+            f.skill = r->skill;
+            f.has_home = true;  // recalled or out of fuel, the pair flies to its base (S1)
+            f.home = Vec3{r->base_pos.x, r->base_pos.y, 0.0};
+            OurHot(f);
+            std::string e;
+            if (!air_fight_->AddFighter(f, static_cast<int>(first + k), &e)) Event("air fight", e);
+        }
+        Event("own aviation", r->id + " scrambles " + plan.callsign + " (readiness " + std::to_string(s.readiness) + "): " + s.why);
+        command::OwnAirScenarioNotice n;
+        n.notice = command::NoticeOf(plan, 100 + number, def_.clock_start_s >= 0.0 ? def_.clock_start_s : 0.0, d.def.notice);
+        n.sent_s = s.ordered_s;
+        for (const ScenarioTarget& t : ts) n.aircraft.push_back(t.id);
+        o.notices.push_back(n);
+        o.traces.emplace_back();
+        o.sent.push_back(0);
+        o.regiment_at_s.push_back(-1.0);
+    }
+
+    void UpdateOwnAir() {
+        if (!def_.own_air.present) return;
+        if (!own_air_) StartOwnAir();
+        UpdateCodes();
+        UpdateOwnDuty();
+        SendNotices();
+        CrossingLines();
+        UpdatePursuit();
+        UpdateOwnAirReports();
+        FalseFriendsHeard();
+        ViolatorsSeen();
+    }
+
+    // A track answering friend off every notice the crew holds (S1, pvo_bu_x_1984 art. 56): the NPC commander reports it as a
+    // violator once he has the reply on his scope, whether or not it is the track his crew holds.
+    void ViolatorsSeen() {
+        if (!engagement_on_ || !callouts_ || own_air_->crew_known.empty()) return;
+        for (const Contact& c : engagement_.SearchPicture()) {
+            if (c.target_id.empty() || own_air_->violators.count(c.target_id) != 0 || !engagement_.KnownFriend(c.target_id)) continue;
+            const KnownTarget* told = pictures_[Cmdr()].Find(c.target_id);
+            if (CrewJudges(engagement_, c.target_id, told) == command::OwnAirCall::Violator) {
+                OwnAirHoldLines(engagement_, c.target_id, told, command::OwnAirCall::Violator);
+            }
+        }
+    }
+
+    // The pursuit limit (S1, mt_turchin_coop p. 9): one of our fighters past its regiment's line beyond the front is sent home.
+    void UpdatePursuit() {
+        OwnAirState& o = *own_air_;
+        const command::OwnAirScenarioDef& d = def_.own_air;
+        if (!d.has_front || !air_fight_) return;
+        for (std::size_t p = 0; p < o.pair_targets.size(); ++p) {
+            for (std::size_t i : o.pair_targets[p]) {
+                if (i >= targets_.size() || !targets_[i].spawned || o.recalled.count(def_.targets[i].id) != 0) continue;
+                const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+                if (a == nullptr || !a->alive) continue;
+                const double past = (a->position.x - d.front.x) * d.to_enemy.x + (a->position.y - d.front.y) * d.to_enemy.y;
+                const std::string reg = p < o.scrambles.size() ? o.scrambles[p].regiment : std::string();
+                const double limit = command::PursuitLimitM(d.def, static_cast<std::uint64_t>(def_.seed), command::FighterDuty::Key(reg));
+                if (past <= limit) continue;
+                o.recalled.insert(def_.targets[i].id);
+                char why[96];
+                std::snprintf(why, sizeof(why), "the pursuit limit, %.0f km past the front line", limit / 1000.0);
+                if (air_fight_->Recall(def_.targets[i].id, why)) Event("own aviation", def_.targets[i].id + " breaks off: " + why);
+            }
+        }
+    }
+
+    // The fighter regiments' reports (S1, docs/air_battle/08_OUR_FIGHTERS.md section 8): each of ours down, as its wingman
+    // and controller saw it (in air combat, by fire from the ground, or missing when nobody saw it), and each claim our
+    // pilots made, sent by the regiment's duty officer down the chain to the regiment's post, which says it on the battery's
+    // net (the post's journal takes it).
+    void UpdateOwnAirReports() {
+        OwnAirState& o = *own_air_;
+        const command::OwnAirScenarioDef& d = def_.own_air;
+        const command::ReportsDef& rd = d.def.reports;
+        const auto flight_of = [&](const std::string& id, std::string& flight, std::string& type) {
+            for (const command::OwnAirScenarioNotice& n : o.notices) {
+                for (const std::string& a : n.aircraft) {
+                    if (a == id) {
+                        flight = n.notice.flight;
+                        type = n.notice.type;
+                    }
+                }
+            }
+        };
+        for (std::size_t i = 0; i < def_.targets.size() && i < targets_.size(); ++i) {
+            const ScenarioTarget& tg = def_.targets[i];
+            if (!tg.friendly || tg.weapon || !targets_[i].spawned || o.down_reported.count(tg.id) != 0) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || a->alive) continue;
+            o.down_reported.insert(tg.id);
+            command::OwnAirReport r;
+            r.kind = command::OwnAirReportKind::Loss;
+            r.regiment = air_fight_ ? air_fight_->RegimentOf(tg.id) : std::string();
+            if (r.regiment.empty()) r.regiment = "fighter_rgt";
+            r.flight = tg.id;
+            r.type = tg.model.empty() ? std::string("MiG-21") : tg.model;
+            flight_of(tg.id, r.flight, r.type);
+            r.clock_h = ClockH(time_);
+            r.where = a->position;
+            bool in_combat = false;
+            if (air_fight_) {
+                for (const airwar::AirFightSession::Kill& k : air_fight_->Kills()) in_combat = in_combat || k.target == tg.id;
+            }
+            // Seen: another of ours within 15 km of it (its wingman), else nobody saw it go.
+            bool seen = false;
+            for (std::size_t j = 0; j < def_.targets.size() && j < targets_.size(); ++j) {
+                if (j == i || !def_.targets[j].friendly || !targets_[j].spawned) continue;
+                const Aircraft* b = world_.FindAircraft(targets_[j].world_id);
+                seen = seen || (b != nullptr && b->alive && (b->position - a->position).Length() < 15000.0);
+            }
+            r.cause = in_combat ? "in air combat" : seen ? "by fire from the ground" : "cause unknown";
+            double delay = rd.seen_s;
+            if (!seen) {
+                const double u = em::Uniform01(em::DrawHash(static_cast<std::uint64_t>(def_.seed), em::Stream::AirCombat, command::kOwnAirKey + 0x800ull,
+                                                            command::FighterDuty::Key(tg.id), 1));
+                delay = rd.missing_min_s + (rd.missing_max_s - rd.missing_min_s) * u;
+            }
+            o.reports.push_back({r, time_ + delay, false});
+            Event("own aviation", tg.id + " lost (" + r.cause + "): its regiment's report goes down the chain");
+        }
+        if (air_fight_) {
+            const std::vector<airwar::AirFightSession::Claim>& cl = air_fight_->Claims();
+            for (; o.claims_read < cl.size(); ++o.claims_read) {
+                const airwar::AirFightSession::Claim& c = cl[o.claims_read];
+                if (!air_fight_->IsOurs(c.shooter)) continue;
+                command::OwnAirReport r;
+                r.kind = command::OwnAirReportKind::Claim;
+                r.regiment = air_fight_->RegimentOf(c.shooter);
+                if (r.regiment.empty()) r.regiment = "fighter_rgt";
+                std::string type;
+                r.flight = c.shooter;
+                flight_of(c.shooter, r.flight, type);
+                r.type = c.target_believed.empty() ? std::string("aircraft") : c.target_believed;
+                r.clock_h = ClockH(c.t_s);
+                r.where = TargetPosition(c.shooter);
+                o.reports.push_back({r, c.t_s + rd.claim_s, false});
+            }
+        }
+        for (std::size_t k = 0; k < o.reports.size(); ++k) {
+            OwnAirState::PendingReport& pr = o.reports[k];
+            if (pr.sent || time_ + 1e-9 < pr.sent_s) continue;
+            pr.sent = true;
+            const std::string words = command::OwnAirReportWords(pr.report, world_.Frame());
+            double at_post_s = pr.sent_s + 600.0;  // without the chain's data: ten minutes, a game value
+            command::NoticeTrace tr;
+            if (d.has_chain) {
+                tr = command::RunOwnAirReport(d.chain, pr.report, static_cast<int>(k) + 1, words, d.origin, d.notice_post, pr.sent_s / 3600.0, rd,
+                                              static_cast<unsigned>(def_.seed) + 7919u * static_cast<unsigned>(k + 1), ClockH(0.0));
+                const double h = command::NoticeAtPostH(tr);
+                if (h < -1e17) {
+                    Event("own aviation", "the report of " + pr.report.flight + " did not reach the regiment within six hours");
+                    o.report_traces.push_back(tr);
+                    continue;
+                }
+                at_post_s = h * 3600.0;
+            }
+            o.report_traces.push_back(tr);
+            const double after = std::max(0.0, at_post_s - time_) + d.def.notice.liaison_s;
+            if (r111_) RegimentSays("Regiment to the battery: " + words, after);
+            else SayOnBatteryNet("Battery commander", words, after);
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "own aviation", pr.report.flight, "the regiment's report sent: " + words});
+        }
+    }
+
+    // A false friend answered (S1): the debrief says from the truth that it was the enemy's.
+    void FalseFriendsHeard() {
+        OwnAirState& o = *own_air_;
+        for (std::size_t i = 0; i < o.allied.size() && i < def_.targets.size(); ++i) {
+            if (o.allied[i] != 1 || o.false_friend_logged.count(def_.targets[i].id) != 0 || !engagement_on_) continue;
+            if (!engagement_.KnownFriend(def_.targets[i].id)) continue;
+            o.false_friend_logged.insert(def_.targets[i].id);
+            log_.Record({time_, DebriefEntry::Kind::Deviation, "own aviation", def_.targets[i].id,
+                         "answered friend on code " + std::to_string(o.codes[i]) + ": it was the enemy's, an allied aircraft of the Pact on our Kremniy filters"});
+        }
+    }
+
+    // A launch at one of ours (B10): the trace from the records, for the debrief: the journal's notice against the launch,
+    // the codes each side held. The truth names the aircraft ours; what the crew knew is what the trace shows. The fighter
+    // regiment's loss report comes down the chain later.
+    void OwnAirLaunchedAt(const std::string& target) {
+        if (!own_air_ || target.empty() || own_air_->traced.count(target) != 0) return;
+        std::size_t i = def_.targets.size();
+        for (std::size_t k = 0; k < def_.targets.size(); ++k) {
+            if (def_.targets[k].id == target) i = k;
+        }
+        if (i >= def_.targets.size() || !def_.targets[i].friendly) return;
+        OwnAirState& o = *own_air_;
+        o.traced.insert(target);
+        const command::NoticeTrace* trace = nullptr;
+        std::string flight;
+        for (std::size_t k = 0; k < o.notices.size(); ++k) {
+            for (const std::string& a : o.notices[k].aircraft) {
+                if (a == target) {
+                    trace = &o.traces[k];
+                    flight = o.notices[k].notice.flight;
+                }
+            }
+        }
+        const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+        const std::string square = a != nullptr ? command::SquareOf(world_.Frame(), a->position) : std::string();
+        command::FriendlyFireFinding f = command::TraceFriendlyFire(target, flight, time_ / 3600.0, square, trace, o.battery_code, TransponderCode(i), ClockH(0.0));
+        o.findings.push_back(f);
+        log_.Record({time_, DebriefEntry::Kind::Deviation, "own aviation", target, "launched at one of ours: " + f.why});
+        if (!f.chain.empty()) log_.Record({time_, DebriefEntry::Kind::Scenario, "own aviation", target, "the notice's way: " + f.chain});
+    }
+
+public:
+    // Our aviation (B10): the codes each holds now, the notices the own crew has, the scrambles, the friendly-fire traces.
+    int BatteryIffCode() const { return BatteryIffCodeNow(); }
+    int PostIffCodeNow() const { return PostIffCode(); }
+    int TargetIffCode(const std::string& id) const {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (def_.targets[i].id == id) return TransponderCode(i);
+        }
+        return 0;
+    }
+    std::vector<command::OwnFlightNotice> CrewNotices() const { return own_air_ ? own_air_->crew_known : std::vector<command::OwnFlightNotice>(); }
+    const std::vector<command::NoticeTrace>& NoticeTraces() const {
+        static const std::vector<command::NoticeTrace> kNone;
+        return own_air_ ? own_air_->traces : kNone;
+    }
+    std::vector<command::Scramble> OwnScrambles() const { return own_air_ ? own_air_->scrambles : std::vector<command::Scramble>(); }
+    std::vector<command::FriendlyFireFinding> FriendlyFire() const { return own_air_ ? own_air_->findings : std::vector<command::FriendlyFireFinding>(); }
+    const command::IffSchedule* IffCodes() const { return own_air_ ? &own_air_->schedule : nullptr; }
+    // S1: the fighter regiments' reports so far, the enemy aircraft that answered friend, and the regiment's check of the post's
+    // records against the notices and the loss reports its journal holds (false without a post).
+    std::vector<command::OwnAirReport> OwnAirReports() const {
+        std::vector<command::OwnAirReport> out;
+        if (own_air_) {
+            for (const OwnAirState::PendingReport& r : own_air_->reports) {
+                if (r.sent) out.push_back(r.report);
+            }
+        }
+        return out;
+    }
+    std::vector<std::string> FalseFriends() const {
+        return own_air_ ? std::vector<std::string>(own_air_->false_friend_logged.begin(), own_air_->false_friend_logged.end()) : std::vector<std::string>();
+    }
+    bool IsAlliedEnemy(const std::string& id) const {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (def_.targets[i].id == id) return Allied(i);
+        }
+        return false;
+    }
+    bool CheckOwnAirRecords(campaign::OwnAirCheck& out) const {
+        if (!post_ || !def_.own_air.present) return false;
+        out = campaign::CheckOwnAir(campaign::JournalLines(journal_, time_), campaign::BoardRecords(post_->Board().Marks()), commander_log_, world_.Frame(),
+                                    def_.unit_position, ClockH(0.0), def_.own_air.def.reports, 0.0, def_.own_air.def.notice.slack_s / 3600.0);
+        return true;
+    }
+
+private:
+    // ---- The air battle (roadmap B8, air_war/air_fight_session.hpp): the scenario's "air_fight" fighters find, identify,
+
+    // close and fire by what they know; a kill comes back through DestroyTarget with our regiment's id.
+    std::unique_ptr<airwar::AirFightSession> air_fight_;
+    bool air_fight_failed_ = false;
+
+    void UpdateAirFight() {
+        if (!def_.air_fight.present || air_fight_failed_) return;
+        if (!air_fight_) {
+            std::vector<std::string> ids;
+            for (const ScenarioTarget& t : def_.targets) ids.push_back(t.id);
+            air_fight_ = std::make_unique<airwar::AirFightSession>();
+            std::string e;
+            if (!air_fight_->Init(def_.air_fight, ids, static_cast<std::uint64_t>(def_.seed) ^ 0xB8F16ull, &e)) {
+                Event("air fight", e);
+                air_fight_.reset();
+                air_fight_failed_ = true;
+                return;
+            }
+        }
+        airwar::AirFightWorld w;
+        const Flights::Lookup look = FlightLookup();
+        w.air = [look](int t) -> const Aircraft* { return look(t); };
+        w.picture = [this](int t) -> const std::vector<airwar::Sighting>* { return &PilotPicture(def_.targets[static_cast<std::size_t>(t)].id); };
+        w.altitude = [this](const Vec3& p) { return world_.Frame().AltitudeOf(p); };
+        w.agl = [this](const Vec3& p) { return world_.Frame().AltitudeOf(p) - world_.GetTerrain().HeightAt(p.x, p.y); };
+        w.steer = [this](int t, const PilotOverride& ov) { flights_->Override(t, ov); };
+        w.release = [this](int t) { flights_->EndOverride(t); };
+        w.destroy = [this](int t, const std::string& by) { return DestroyTarget(def_.targets[static_cast<std::size_t>(t)].id, by); };
+        w.event = [this](const std::string& who, const std::string& what) { Event(who, what); };
+        if (air_radio_) {
+            w.say = [this](const std::string& post, int t, const std::string& words, double at) {
+                const int fi = flights_->FlightOf(t);
+                if (fi < 0) return -1;
+                return air_radio_->SayFrom(post, airwar::CallKind::Vector, flights_->All()[static_cast<std::size_t>(fi)].id, words, at);
+            };
+            w.heard = [this](int call, int t, double at) {
+                const int fi = flights_->FlightOf(t);
+                if (fi < 0) return -1.0;
+                const std::vector<FlightSlot>& sl = flights_->All()[static_cast<std::size_t>(fi)].slots;
+                for (std::size_t k = 0; k < sl.size(); ++k) {
+                    if (sl[k].target == t) return air_radio_->Reaches(call, fi, static_cast<int>(k), at, 2.0);
+                }
+                return -1.0;
+            };
+        }
+        if (own_air_ && !def_.own_air.regiments.empty()) {  // our controllers guide on our GCI's picture, never the truth (B10)
+            w.tracks = [this](const std::string&, double t) {
+                std::vector<airwar::AirTrack> out;
+                for (const command::GciTrack& k : own_air_->gci.At(t)) out.push_back({k.truth, k.pos, k.vel, k.Hostile()});
+                return out;
+            };
+        }
+        if (def_.air_fight.mode >= 1) {  // roadmap S3
+            if (em_link_ && em_link_->Ok()) {
+                if (!air_fight_radars_merged_) {
+                    air_fight_radars_merged_ = true;
+                    std::string e;
+                    if (!em_link_->MergeLibrary(def_.air_fight.radar_library, &e)) Event("air fight", "the fighters' radars: " + e);
+                }
+                w.radar = [this](int t, const std::string& radar_def, int state, int locked) {
+                    const std::string lid = locked >= 0 && static_cast<std::size_t>(locked) < def_.targets.size() ? def_.targets[static_cast<std::size_t>(locked)].id
+                                                                                                                 : std::string();
+                    em_link_->SetFighterRadar(def_.targets[static_cast<std::size_t>(t)].id, radar_def, state, lid);
+                };
+            }
+            if (reactions_.Configured()) {
+                w.dispense = [this](int t, bool infrared, double at) {
+                    if (!reactions_.On(t)) return false;
+                    std::vector<ReactionAct> acts;
+                    const bool did = reactions_.AnswerAam(t, infrared, at, acts);
+                    for (const ReactionAct& act : acts) ApplyReaction(act);
+                    return did;
+                };
+                w.countermeasure = [this](int t, bool infrared, double at) {
+                    if (!reactions_.On(t)) return 0.0;
+                    if (infrared) return reactions_.FlaresOut(t, at) ? def_.reactions.flare_decoy : 0.0;
+                    return reactions_.ChaffOut(t, at) ? 1.0 - def_.reactions.chaff_factor : 0.0;
+                };
+            }
+            w.leader = [this](int t) {
+                const int fi = flights_->FlightOf(t);
+                if (fi < 0) return -1;
+                const FlightSlot* l = flights_->All()[static_cast<std::size_t>(fi)].Leader();
+                return l != nullptr ? l->target : -1;
+            };
+            w.far_from_ours = [this](int t) { return FarFromOurGround(t); };
+        }
+        if (fx_on_) {  // the shots in the presentation feed (roadmap B13): pushed, never read back
+            w.fx_launch = [this](int shooter, int target, const airwar::AamDef& aam, int shot, double t, double arrive_s) {
+                FxAirShot(fx::EventKind::AamLaunch, shooter, target, aam.munition.empty() ? aam.id : aam.munition, shot, t, arrive_s, false, false);
+            };
+            w.fx_end = [this](int shooter, int target, const airwar::AamDef& aam, int shot, double t, bool kill, bool gone) {
+                FxAirShot(fx::EventKind::AamEnd, shooter, target, aam.munition.empty() ? aam.id : aam.munition, shot, t, t, kill, gone);
+            };
+            w.fx_gun = [this](int shooter, int target, const airwar::AirGunDef& gun, double t, double burst_s, bool kill) {
+                FxAirShot(fx::EventKind::AirGunBurst, shooter, target, gun.id, 0, t, t + burst_s, kill, false);
+            };
+        }
+        air_fight_->Step(time_, w);
+        if (em_link_ && def_.air_fight.mode >= 1) em_link_->PointFighterRadars();
+    }
+    bool air_fight_radars_merged_ = false;
+    // The far fight (roadmap S3, A1 of 07 section 5.6): a fighter beyond every reach of our ground units (the near points
+    // without our fighters', so two fighter groups far from the battery fight at A1 even beside each other).
+    bool FarFromOurGround(int t) {
+        const Aircraft* a = t >= 0 && static_cast<std::size_t>(t) < targets_.size() && targets_[static_cast<std::size_t>(t)].spawned
+                                ? world_.FindAircraft(targets_[static_cast<std::size_t>(t)].world_id)
+                                : nullptr;
+        if (a == nullptr) return false;
+        if (far_points_s_ != time_) {
+            far_points_s_ = time_;
+            AirLevelValues v = levels_.Values();
+            v.fighter_radar_m = 0.0;
+            std::vector<NearPoint> keep = std::move(near_points_);
+            NearPoints(v);
+            far_points_ = std::move(near_points_);
+            near_points_ = std::move(keep);
+        }
+        return NearRatio(a->position, far_points_, levels_.Values().margin_m) > 1.0;
+    }
+    std::vector<NearPoint> far_points_;
+    double far_points_s_ = -1.0;
+
+    // An air-to-air shot in the feed (fx/events.hpp: AamLaunch, AamEnd, AirGunBurst), from the session's aircraft as they
+    // are now. `gone`: the target left the session before the missile arrived (an Early end with no position).
+    void FxAirShot(fx::EventKind kind, int shooter, int target, const std::string& weapon, int number, double t, double end_t,
+                   bool kill, bool gone) {
+        const auto aircraft_of = [this](int ti) -> const Aircraft* {
+            if (ti < 0 || static_cast<std::size_t>(ti) >= targets_.size()) return nullptr;
+            const TargetState& ts = targets_[static_cast<std::size_t>(ti)];
+            return ts.spawned ? world_.FindAircraft(ts.world_id) : nullptr;
+        };
+        const Aircraft* from = aircraft_of(shooter);
+        const Aircraft* at = aircraft_of(target);
+        fx::Event e;
+        e.kind = kind;
+        e.t_s = t;
+        e.end_t_s = end_t;
+        e.weapon = weapon;
+        e.number = number;
+        if (shooter >= 0 && static_cast<std::size_t>(shooter) < def_.targets.size()) {
+            e.source = def_.targets[static_cast<std::size_t>(shooter)].id;
+            e.world_id = targets_[static_cast<std::size_t>(shooter)].world_id;
+        }
+        if (target >= 0 && static_cast<std::size_t>(target) < def_.targets.size()) {
+            e.target = def_.targets[static_cast<std::size_t>(target)].id;
+            e.target_world_id = targets_[static_cast<std::size_t>(target)].world_id;
+        }
+        if (kind == fx::EventKind::AamEnd) {
+            e.end = gone || at == nullptr ? fx::BurstEnd::Early : kill ? fx::BurstEnd::Hit : fx::BurstEnd::Wide;
+            if (e.end != fx::BurstEnd::Early) {
+                e.position = e.aim = at->position;
+                e.velocity = at->velocity;
+            }
+        } else {
+            if (from == nullptr) return;  // nothing to draw it leaving
+            e.position = from->position;
+            e.velocity = from->velocity;
+            if (at != nullptr) e.aim = at->position;
+            e.end = kill ? fx::BurstEnd::Hit : fx::BurstEnd::Wide;
+        }
+        fx_.Push(e);
+    }
+
+
+public:
+    const airwar::AirFightSession* AirFight() const { return air_fight_.get(); }
+
+private:
+    void UpdateReactions() {
+        if (DamageStatesOn() && !def_.waves) CrashDamaged();  // the testbed's run in FireNeighbourDefences
+        for (const std::pair<std::size_t, int>& h : hit_heavy_) {
+            DamageDraw d;
+            d.blast_heavy = true;
+            OnDamage(h.first, ApplyDamage(DamageTab(), targets_[h.first].damage, d, time_, damage_rng_, "missile " + std::to_string(h.second)));
+        }
+        hit_heavy_.clear();
+        if (!reactions_.Configured() || !reactions_.Pending()) return;
+        for (const ReactionAct& act : reactions_.Step(time_, *flights_, ReactionContext())) ApplyReaction(act);
+    }
+
+    void ApplyReaction(const ReactionAct& act) {
+        if (act.target < 0 || static_cast<std::size_t>(act.target) >= def_.targets.size()) return;
+        const std::size_t i = static_cast<std::size_t>(act.target);
+        const std::string& id = def_.targets[i].id;
+        Aircraft* a = targets_[i].spawned && !targets_[i].gone ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+        if (a == nullptr || !a->alive) return;
+        switch (act.kind) {
+            case ReactionAct::Kind::Manoeuvre:
+                if (flights_->Overriding(act.target)) targets_[i].pilot.OverrideEnded();
+                if (targets_[i].pilot.BeginReaction(act.dive, act.dive_agl_m, time_)) {
+                    Event(id, "drops behind cover (warned)");
+                    return;
+                }
+                flights_->Override(act.target, act.ov);  // a reflex: it does not wait for the leader
+                Event(id, act.what);
+                return;
+            case ReactionAct::Kind::Chaff:
+                Event(id, act.what);
+                CrewSeesTargetAct(i, true);
+                if (em_link_ && em_link_->Ok()) {
+                    em_link_->DropChaff(id, def_.reactions.chaff_rcs_m2, def_.reactions.chaff_life_s);
+                } else if (engagement_on_) {
+                    engagement_.NoteChaff(id, time_, def_.reactions.chaff_factor, def_.reactions.chaff_window_s);
+                }
+                FxDispense(fx::EventKind::ChaffDrop, i, *a, act.count);
+                return;
+            case ReactionAct::Kind::Flares:
+                Event(id, act.what);
+                FxDispense(fx::EventKind::FlareDrop, i, *a, act.count);
+                return;
+            case ReactionAct::Kind::JettisonTanks:
+                Event(id, act.what);
+                FxJettison(i, *a, "drop_tank", act.count);
+                return;
+            case ReactionAct::Kind::JettisonStores:
+                Event(id, act.what);
+                JettisonLoad(i, *a);
+                CrewSeesTargetAct(i, false);
+                return;
+            case ReactionAct::Kind::Abort: {
+                FlightOrder home;
+                home.kind = OrderKind::ReturnHome;
+                home.by = "pilot";
+                flights_->OrderMember(act.target, home, time_, true, "the lead turns for home");
+                Event(id, act.what);
+                return;
+            }
+            case ReactionAct::Kind::Event:
+                Event(id, act.what);
+                return;
+        }
+    }
+
+    // What our crew sees a target do (roadmap S4): chaff dropped by a target on the senior operator's search scope, a load
+    // thrown off by one the TV tracks (the deputy commander). Each is called once a target through NpcDoes, and the crew's
+    // record holds it (CrewCalls, the commander's report): what was seen, never what it did unseen.
+    void CrewSeesTargetAct(std::size_t i, bool chaff) {
+        if (!engagement_on_ || i >= def_.targets.size()) return;
+        const std::string& id = def_.targets[i].id;
+        std::set<std::string>& seen = chaff ? chaff_seen_ : jettison_seen_;
+        if (seen.count(id) != 0) return;
+        const KillLook l = KillLookOf(id);
+        if (chaff ? !l.on_scope : !l.on_tv) return;
+        const std::string seat = chaff ? def_.tuning.aim_az_role : def_.tuning.aim_el_role;
+        const char* line = chaff ? "target_chaff" : "target_jettison";
+        KnownTarget k;
+        k.target = id;
+        SeatDuty d = SeatDuty::Report(seat, line, chaff ? "a target dropping chaff on his scope" : "a target throwing off its load on the TV");
+        d.target = id;
+        if (!NpcDoes(seat, d.About(k))) return;
+        seen.insert(id);
+        Say(line, seat, {}, &k);
+        crew_calls_.push_back({time_, chaff ? "chaff" : "jettisoned", id});
+    }
+    // A load thrown off: the testbed's waves let theirs fall inert (TestWaves::Jettison); any other target's "stores"
+    // falls in the feed as a jettison.
+    void JettisonLoad(std::size_t i, const Aircraft& a) {
+        const std::string& id = def_.targets[i].id;
+        if (waves_) {
+            airwar::WaveScene scene;
+            scene.frame = &world_.Frame();
+            scene.terrain = &world_.GetTerrain();
+            scene.centre = def_.unit_position;
+            for (airwar::WaveRelease& r : waves_->Jettison(id, time_, a.position, a.velocity, scene)) ReleaseWaveLoad(std::move(r));
+            return;
+        }
+        FxJettison(i, a, def_.targets[i].reactions.stores, 1);
+    }
+    // The feed's jettison: it falls from the aircraft along its track, by its fall time, onto the ground below.
+    void FxJettison(std::size_t i, const Aircraft& a, const std::string& weapon, int count) {
+        if (!fx_on_ || weapon.empty()) return;
+        const double h = std::max(1.0, AboveGround(a.position));
+        const double fall_s = std::sqrt(2.0 * h / kStandardGravity);
+        const Vec3 ahead = a.position + Vec3{a.velocity.x, a.velocity.y, 0.0} * (0.8 * fall_s);
+        fx::Event e;
+        e.kind = fx::EventKind::WeaponRelease;
+        e.t_s = time_;
+        e.end_t_s = time_ + fall_s;
+        e.position = a.position;
+        e.velocity = a.velocity;
+        e.aim = GroundEnu(ahead.x, ahead.y);
+        e.source = def_.targets[i].id;
+        e.world_id = a.id;
+        e.number = count;
+        e.weapon = weapon;
+        e.delivery = "jettison";
+        fx_.Push(e);
+    }
+    void FxDispense(fx::EventKind kind, std::size_t i, const Aircraft& a, int count) {
+        if (!fx_on_) return;
+        fx::Event e;
+        e.kind = kind;
+        e.t_s = e.end_t_s = time_;
+        e.position = e.aim = a.position;
+        e.velocity = a.velocity;
+        e.source = def_.targets[i].id;
+        e.world_id = a.id;
+        e.number = count;
+        fx_.Push(e);
+    }
+    // What the eye makes of a defence's launch by its size (reaction_chain.hpp EyeSamClass): a shoulder or Strela SAM
+    // (IR, no radar), a large SAM (a long reach), else one of the Osa's size.
+    static const char* EyeSamWord(const airwar::DefenceDef& d) {
+        return !d.radar ? "shoulder SAM" : d.radius_m > 20000.0 ? "large SAM" : "SAM";
+    }
+    static bool IrDefence(const airwar::DefenceDef* d) { return d != nullptr && !d->radar && d->missiles >= 0; }
+
+public:
+    // The reactions under fire (roadmap B4): every pilot's chain, its jettisons and its counts.
+    const ReactionChain& Reactions() const { return reactions_; }
+    // Damage states in this session.
+    bool DamageStates() const { return DamageStatesOn(); }
+    // Bring damage states into a session that had none (a package's raid that brought them, package_injector.hpp).
+    void UseDamageStates(const DamageTable& t) {
+        if (DamageStatesOn()) return;
+        def_.damage = t;
+        def_.has_damage = true;
+        SplitOsaHits();
+    }
+    // Bring the reaction tables into a session that had none (a package's raid, package_injector.hpp).
+    void UseReactionTable(const ReactionTable& t) {
+        if (def_.reactions.loaded) return;
+        def_.reactions = t;
+        ConfigureReactionChain();
+    }
+    // Our missile hit it and it flew on, heavily damaged (DAMAGE.md 5): not a kill unless it crashes later.
+    bool SurvivedHit(const std::string& id) const { return survived_hits_.count(id) != 0; }
+    // Its load is gone by its own release (the mission bridge's): only its tanks are left to jettison.
+    void NoteReleased(const std::string& id) {
+        const std::size_t i = TargetIndexOf(id);
+        if (i < def_.targets.size()) reactions_.Released(static_cast<int>(i));
+    }
+    // Its stores went by a jettison (reaction_chain.hpp): it has nothing left to release.
+    bool StoresJettisoned(const std::string& id) const {
+        const std::size_t i = TargetIndexOf(id);
+        return i < def_.targets.size() && (reactions_.StoresGone(static_cast<int>(i)) || targets_[i].damage.jettison);
+    }
+    // ---- Attack passes (roadmap B6, air_war/attack_pass.hpp): a pilot's pass at a ground target, flown on the flights'
+    // override layer (PilotOverride::Kind::Attack); and a mover on the roads put out of action by one.
+    bool FlyPass(const std::string& id, const PilotOverride& ov) {
+        const std::size_t i = TargetIndexOf(id);
+        if (i >= def_.targets.size() || !targets_[i].spawned || targets_[i].gone || !TargetAlive(id)) return false;
+        if (flights_->Overriding(static_cast<int>(i)) && flights_->OverrideOf(static_cast<int>(i))->kind != PilotOverride::Kind::Attack)
+            return false;  // breaking, diving or jinking: no pass now
+        flights_->Override(static_cast<int>(i), ov);
+        return true;
+    }
+    // The pass he is flying (null: none; a break under fire ends it).
+    const PilotOverride* PassOf(const std::string& id) const {
+        const std::size_t i = TargetIndexOf(id);
+        if (i >= def_.targets.size()) return nullptr;
+        const PilotOverride* o = flights_->OverrideOf(static_cast<int>(i));
+        return o != nullptr && o->kind == PilotOverride::Kind::Attack ? o : nullptr;
+    }
+    void EndPass(const std::string& id) {
+        if (PassOf(id) != nullptr) flights_->EndOverride(static_cast<int>(TargetIndexOf(id)));
+    }
+    bool StrikeMover(const std::string& mover, const std::string& by) {
+        nav::Mover* m = nav_ ? nav_->GetMovers().Find(mover) : nullptr;
+        if (m == nullptr || m->state == nav::MoverState::BrokenDown) return false;
+        m->state = nav::MoverState::BrokenDown;
+        Event(by, "puts " + mover + " out of action on the road");
+        return true;
+    }
+    // A defence missile at its end at a target (the mission bridge's neighbours): with damage states its kill drawn into
+    // destroyed or heavily damaged (damage.hpp ApplyMissile); without, a kill destroys it. True if it is destroyed now.
+    bool MissileDamage(const std::string& id, bool kill, double charge_kg, const std::string& by) {
+        const std::size_t i = TargetIndexOf(id);
+        if (i >= def_.targets.size()) return false;
+        if (!DamageStatesOn()) return kill && DestroyTarget(id, by);
+        const Aircraft* a = targets_[i].spawned ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+        if (a == nullptr || !a->alive) return false;
+        const DamageTable& t = DamageTab();
+        OnDamage(i, ApplyMissile(t, targets_[i].damage, kill, charge_kg, PresentedAreaM2(t, def_.targets[i].size_m), time_, damage_rng_, by));
+        return !TargetAlive(id);
+    }
+    // Did its flares decoy an IR missile at it (a keyed draw per shot), flares out within their window before now?
+    bool FlaresDecoy(const std::string& id, std::uint64_t shot) const {
+        const std::size_t i = TargetIndexOf(id);
+        const int t = static_cast<int>(i);
+        return i < def_.targets.size() && reactions_.FlaresOut(t, time_) && reactions_.FlareDecoys(t, shot);
+    }
+
+private:
+public:
+    // Perception off (the cost bench's baseline): no pilot sees or hears anything, no event is recorded.
+    void SetPerception(bool on) { percep_on_ = on; }
+    // What the pilots saw (roadmap B3): the hub, for the mission bridge, tests and overlays; null before anything was.
+    const airwar::PerceptionHub* Perception() const { return percep_ ? &percep_->hub : nullptr; }
+    // Our launches the other side's pilots saw (by their eyes), and the first sighting each pilot made of one.
+    int PerceivedLaunches() const { return percep_ ? static_cast<int>(percep_->hub.LaunchesSeen().size()) : 0; }
+    const std::vector<std::pair<std::string, airwar::Sighting>>* LaunchSightings() const {
+        return percep_ ? &percep_->hub.LaunchSightings() : nullptr;
+    }
+    // A target's pilot's picture now (empty for one that has seen nothing).
+    const std::vector<airwar::Sighting>& PilotPicture(const std::string& target_id) const {
+        static const std::vector<airwar::Sighting> kNone;
+        return percep_ ? percep_->hub.Picture(airwar::ObjectKeyOf(target_id)) : kNone;
+    }
+    // The post's radar as an emitter in this runner's EM world (a battery link: the post is another runner, the aircraft's
+    // receivers are in this one).
+    void HearPostRadarOf(const ScenarioRunner& post) {
+        if (!em_link_ || !em_link_->Ok() || !post.post_em_ || !post.post_em_->Ok()) return;
+        if (const em::EmitterDef* d = post.post_em_->SearchEmitterDef()) {
+            em_link_->SetForeignEmitter("post_radar", post.def_.post_radar.position, *d, !post.PostRadarOff());
+        }
+    }
+
+private:
     // ---- Anti-radiation missiles (roadmap E6, em/arm.hpp). A carrier (a target's "arms") fires on what its warning
     // receiver hears: a hostile radar in its weapon's band, with the place it believes the radar is within its launch
     // range; each ARM is set to the signal heard. After its last one it turns away (the sign the crew watches for:
@@ -2880,6 +5070,7 @@ private:
     int arms_fired_ = 0;
     static constexpr int kArmAcmiBase = 0x7E000;
     static constexpr double kArmBearingTolRad = 0.35;  // sam3d: about 20 degrees, a warning receiver's bearing on the briefed target
+    static constexpr double kArmTurnAwayM = 40000.0;   // sam3d: an ARM carrier, its missiles gone, turns away this far and out
     std::vector<int> arm_acmi_shown_;
 
     void UpdateArms() {
@@ -2945,13 +5136,21 @@ private:
                 Event(t.id, "fires an anti-radiation missile (" + weapon.name + ") at " + (sig.name.empty() ? std::string("a radar") : sig.name) +
                                 ", " + km + " km");
             } else if (t.arms.turn_away && !c.turned && time_ - c.last_s >= 1.0) {
+                // Its missiles gone, a hard turn away from the radar and out, 40 km off: the pilot's own (an override
+                // that ends there; a leader's flight goes home behind him).
                 c.turned = true;
                 Vec3 away = a->position - aim;
                 away.z = 0.0;
                 away = away.LengthSquared() > 1.0 ? away.Normalized() : Vec3{0.0, 1.0, 0.0};
-                a->waypoints = {Vec3{a->position.x + away.x * 40000.0, a->position.y + away.y * 40000.0, a->position.z}};
-                a->next_waypoint = 0;
-                a->max_turn_rate_rad_s = std::max(a->max_turn_rate_rad_s, t.evade_turn_rate_rad_s);  // a hard turn
+                PilotOverride ov;
+                ov.kind = PilotOverride::Kind::TurnAway;
+                ov.end = PilotOverride::End::Point;
+                ov.after = PilotOverride::After::Home;
+                ov.point = Vec3{a->position.x + away.x * kArmTurnAwayM, a->position.y + away.y * kArmTurnAwayM, a->position.z};
+                ov.turn_rate_rad_s = std::max(a->max_turn_rate_rad_s, t.evade_turn_rate_rad_s);  // a hard turn
+                ov.until_s = time_ + 1e6;  // at the point
+                if (flights_->Overriding(static_cast<int>(i))) targets_[i].pilot.OverrideEnded();
+                flights_->Override(static_cast<int>(i), ov);
                 Event(t.id, "turns away from the radar");
             }
         }
@@ -2981,15 +5180,17 @@ private:
     }
 
     // A missile was launched at a target (`launch`), or the tracking radar holds it: its pilot may evade.
-    void CueTarget(const std::string& id, bool launch) {
+    // `believed`: where he believes the threat is (a sighting's, a receiver's bearing), never the unit's true place.
+    void CueTarget(const std::string& id, bool launch, const Vec3* believed = nullptr) {
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             TargetState& s = targets_[i];
             if (def_.targets[i].id != id || !s.spawned || s.gone) continue;
             Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr) return;
-            const std::string what = launch ? s.pilot.OnLaunch(*a, def_.unit_position, time_)
-                                            : s.pilot.OnLocked(*a, def_.unit_position, time_);
-            if (!what.empty()) Event(id, what);
+            const Vec3 from = believed != nullptr ? *believed : def_.unit_position;
+            const Evasion ev = launch ? s.pilot.OnLaunch(*a, from, time_) : s.pilot.OnLocked(*a, from, time_);
+            if (!ev.what.empty()) Event(id, ev.what);
+            if (ev.steer) flights_->Override(static_cast<int>(i), ev.ov);  // a reflex: it does not wait for the leader
             return;
         }
     }
@@ -3345,7 +5546,7 @@ private:
     // "1:05:30" for a session second.
     static std::string SessionClock(double s) {
         const long long t = std::llround(std::max(0.0, s));
-        char buf[24];
+        char buf[96];
         std::snprintf(buf, sizeof(buf), "%lld:%02lld:%02lld", t / 3600, (t / 60) % 60, t % 60);
         return buf;
     }
@@ -3422,11 +5623,11 @@ private:
     void StepNav(double dt) {
         if (!nav_) return;
         const Vec3 eye = battery_ && battery_->Own() != nullptr ? battery_->Own()->position : def_.unit_position;
-        const double range = nav::VisualRangeM(def_.weather.visibility_km * 1000.0, light_.sun_elevation_deg, nav_->Range());
+        const double range = nav::VisualRangeM(def_.weather.visibility_km * 1000.0, light_.sun_elevation_deg, nav_->Range(), light_.moon_share);
         // A vehicle of ours under the battery's light discipline drives without lights (roadmap C2): seen at night only
         // from close by.
         if (nav::Mover* tzm = tzm_id_.empty() ? nullptr : nav_->GetMovers().Find(tzm_id_)) tzm->lit = !own_blackout_;
-        const double unlit = nav::VisualRangeUnlitM(def_.weather.visibility_km * 1000.0, light_.sun_elevation_deg, nav_->Range());
+        const double unlit = nav::VisualRangeUnlitM(def_.weather.visibility_km * 1000.0, light_.sun_elevation_deg, nav_->Range(), light_.moon_share);
         nav_->Step(time_, dt, {{eye.x, eye.y}}, range, unlit);
     }
 
@@ -3817,7 +6018,7 @@ private:
     std::string DayClock(double s) const {
         if (def_.clock_start_s < 0.0) return SessionClock(s);
         const long long m = (std::llround(def_.clock_start_s + std::max(0.0, s)) / 60) % (24 * 60);
-        char buf[16];
+        char buf[64];
         std::snprintf(buf, sizeof(buf), "%02lld:%02lld", m / 60, m % 60);
         return buf;
     }
@@ -4389,7 +6590,10 @@ private:
                     Radio("regiment net", "Regiment", text);
                     if (!plan.messages[i].destroyed.empty()) HeardDestroyed(plan.messages[i].destroyed);
                     if (!plan.messages[i].road_crossing.empty()) HeardRoad(plan.messages[i]);
+                    if (plan.messages[i].own_air_notice > 0 && m.said == 1) HeardOwnAirNotice(plan.messages[i]);
+                    if (plan.messages[i].sharing >= 0) HeardSharing(plan.messages[i]);
                     r111_call_until_ = time_ + r111_->Def().call_s;
+
                     if (heard_back && talker) {
                         Transmitted("regiment", "Radiotelephone operator", 3.0);
                         r111_tx_until_ = time_ + kOwnTransmissionS;
@@ -4730,7 +6934,31 @@ private:
     }
 
     // ---- once a step
+    struct NetSay {
+        double at_s = 0.0;
+        std::string from;
+        std::string text;
+    };
+    std::vector<NetSay> net_says_;  // lines to be said on the battery net (SayOnBatteryNet)
+    void UpdateNetSays() {
+        for (std::size_t i = 0; i < net_says_.size();) {
+            if (time_ + 1e-9 < net_says_[i].at_s) {
+                ++i;
+                continue;
+            }
+            const NetSay n = net_says_[i];
+            net_says_.erase(net_says_.begin() + static_cast<std::ptrdiff_t>(i));
+            Radio("battery net", n.from, n.text);
+            // A battery whose post keeps no journal that hears the net: the commander's own page takes it, as it takes his orders.
+            bool kept = false;
+            if (post_ && !console_.post_journal_keeper.empty()) {
+                for (const std::string& h : HeardBy("battery net")) kept = kept || h == console_.post_journal_keeper;
+            }
+            if (!kept && order_net_) GiverJournal().Heard(time_, "battery net", n.from, n.text);
+        }
+    }
     void UpdateVoice() {
+        UpdateNetSays();
         if (voice_) voice_->Update(console_);
         UpdateBoxCalls();
         if (!nets_) return;
@@ -5640,7 +7868,7 @@ private:
         }
     }
     std::map<std::string, std::string> PlotFields(const BoardMark& m) const {
-        char n[8];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", m.number);
         const Vec3 d = m.position - post_->Position();
         double az = RadToDeg(std::atan2(d.x, d.y));
@@ -5782,7 +8010,7 @@ private:
         // A target's number is read back when it is first given; the post's updates of it need none (sam3d: a raid of
         // sixteen updated every few seconds read back every time kept the commander on the air).
         if (!read_back_.insert(e.number).second) return;
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", e.number);
         callouts_->Say(time_, "readback", Cmdr(), {{"number", n}, {"callsign", OwnCallsign()}, {"post", "10"}}, SpeakDelayS(Cmdr()));
         if (LinkedToPost()) own_readbacks_.push_back(e.number);
@@ -5833,7 +8061,7 @@ private:
         if (callout_id == "readback") {
             f["post"] = "10";
             if (!designations_heard_.empty()) {
-                char n[16];
+                char n[64];
                 std::snprintf(n, sizeof(n), "%04d", designations_heard_.back().number);
                 f["number"] = n;
             }
@@ -6009,6 +8237,11 @@ public:
         Event("C2 source", id + (down ? " out of action: " : " working again: ") + reason);
         return true;
     }
+    // More of the chain of command's deliveries for the running session, `after_s` counted from its start (roadmap B9).
+    void AddDeliveries(const std::vector<DeliveryDef>& more) { deliveries_.Add(more); }
+    // Something said on the battery's net `after_s` from now (roadmap B9: our intercept's fast road, said by the liaison): it is on the
+    // net like the commander's own lines, so whoever keeps the post's journal and hears the net writes it down as heard.
+    void SayOnBatteryNet(const std::string& from, const std::string& text, double after_s) { net_says_.push_back({time_ + after_s, from, text}); }
     // The regiment says something to the battery on its command net `after_s` from now: heard on the post's R-111 when
     // it is on the net, said again until the post receipts it, as the scenario's own messages. False without the R-111
     // worked as a set.
@@ -6065,6 +8298,20 @@ public:
         m.road_entry = entry;
         return true;
     }
+    // The regiment tells the battery the sky's sharing in its sector (track F, F4.4; command/own_air.hpp TellSharing): said on
+    // its command net `after_s` from now; once heard at the post, the battery's plan of cooperation (its task's, and the
+    // session's own-air plan where it has one) is shared that way, `split_m` the split height of one zone when the plan has
+    // none. False without the R-111 worked as a set.
+    bool RegimentTellsSharing(command::CooperationMethod method, double split_m, const std::string& text, double after_s) {
+        if (!RegimentSays(text, after_s)) return false;
+        RegimentMessage& m = def_.radio_plan.messages.back();
+        m.sharing = static_cast<int>(method);
+        m.sharing_split_m = split_m;
+        return true;
+    }
+    // When the post last heard the regiment's word on the sky's sharing (< 0: never), and how many times it changed the plan.
+    double SharingHeardS() const { return sharing_heard_s_; }
+    int SharingChanges() const { return sharing_changes_; }
     // The battery commander sends the TZM to the regiment's technical battery for missiles (roadmap 17.4): an order on the
     // battery net to its chief, who plans the way on the roads the commander knows. Refused (last_refusal_ why) without a
     // TZM on the net, while a run stands, on the march (the radio ban), with the TZM full by his reckoning or not at the
@@ -6174,7 +8421,7 @@ public:
     // The post hears a launcher's read-back (a linked Osa's) if its box is on the battery net and the net carries it.
     void HearReadback(const std::string& callsign, int number) {
         const bool heard = NetHears() && (!nets_ || nets_->GetsThrough("battery", time_));
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", number);
         if (heard) {
             ++readbacks_heard_;
@@ -6288,7 +8535,7 @@ public:
     // Is it this command: its group, or its two digits?
     static bool RegimentCommandIs(const RegimentCommand& c, const std::string& what) {
         if (!c.group.empty()) return c.group == what;
-        char code[8];
+        char code[64];
         std::snprintf(code, sizeof(code), "%02d", c.code);
         return what == code || what == std::to_string(c.code);
     }
@@ -6528,7 +8775,8 @@ private:
             if (!targets_[i].spawned) continue;
             const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
             const ScenarioTarget& t = def_.targets[i];
-            if (a != nullptr) post_em_->SyncTarget(t.id, a->alive && !targets_[i].gone, a->position, a->velocity, t.rcs_m2, t.friendly);
+            if (a != nullptr) post_em_->SyncTarget(t.id, a->alive && !targets_[i].gone, a->position, a->velocity, t.rcs_m2, t.friendly, TransponderCode(i));
+
         }
         const bool on = !PostRadarOff();
         post_em_->SetSearch(on, false);
@@ -6656,9 +8904,10 @@ private:
             c.position = a->position;
             c.altitude_m = world_.Frame().AltitudeOf(a->position);
             c.height_agl_m = c.altitude_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
-            c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
+            c.type = t.board_type >= 0 ? t.board_type : (AnswersOn(i, PostIffCode()) ? 1 : 9);
             c.formation = t.formation;
-            c.transponder = t.friendly;
+            c.transponder = AnswersOn(i, PostIffCode());  // it answers the post's interrogator only on the code the post holds (B10)
+
             contacts.push_back(c);
         }
         return contacts;
@@ -6678,9 +8927,10 @@ private:
             c.position = a->position;
             c.altitude_m = world_.Frame().AltitudeOf(a->position);
             c.height_agl_m = c.altitude_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
-            c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
+            c.type = t.board_type >= 0 ? t.board_type : (AnswersOn(i, RegimentIffCode()) ? 1 : 9);  // the regiment's radars' interrogators
             c.formation = t.formation;
             contacts.push_back(c);
+
         }
         if (comms_) {  // the R-123M sets and the R-124 box as the console has them now
             for (const CrewComms::Event& e : comms_->Step(console_, c2_.get(), c2_link_.get())) {
@@ -7416,6 +9666,7 @@ private:
                 from = " from " + launcher_->Selected(ch) + ", channel " + Launcher::ChannelName(ch);
             }
             ++launches_;
+            PerceiveOwnLaunch();
             if (engagement_on_ && !engagement_.TrackedTarget().empty()) ++npc_launched_at_[engagement_.TrackedTarget()];
             if (engagement_on_) {  // a salvo (doctrine salvo): this launch opens one if nothing is in the air, else adds to it
                 if (!engagement_.ShotsInFlight() || salvo_target_ != engagement_.TrackedTarget()) {
@@ -7425,6 +9676,8 @@ private:
                 ++salvo_count_;
             }
             if (engagement_on_) OwnReport(BatteryFire::Event::Kind::Launch, engagement_.TrackedTarget());
+            if (engagement_on_) OwnAirLaunchedAt(engagement_.TrackedTarget());
+
             crew_calls_.push_back({time_, "launch", engagement_on_ ? engagement_.TrackedTarget() : std::string()});
             log_.Record({time_, DebriefEntry::Kind::Launch, std::string(), console_.launch_button,
                          "missile " + std::to_string(launches_) + from +
@@ -7433,7 +9686,6 @@ private:
                 const std::string& jam = console_.has_launcher ? console_.launcher.jam_control : std::string();
                 engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_, !jam.empty() && console_.panel.Get(jam) == 1);
                 FxLaunch(launches_);
-                if (!HasRwr(engagement_.TrackedTarget())) CueTarget(engagement_.TrackedTarget(), true);
             }
             if (launcher_) {
                 const double flight_s = engagement_on_ ? engagement_.ShotFlightTime(launches_) : 0.0;
@@ -7550,6 +9802,15 @@ private:
     RidgeTerrain ground_;  // the scenario's flat ground and its ridges
     std::unique_ptr<MapTerrain> map_ground_;  // or its map's ground (terrain.type "map")
     Weather weather_;      // the scenario's "weather" (still, clear air without one)
+    // What the pilots see and hear (roadmap B3, air_war/perception.hpp): made on first use.
+    std::unique_ptr<airwar::PerceptionFeed> percep_;
+    bool percep_on_ = true;
+    std::uint64_t percep_unit_ground_ = 0;
+    double percep_ground_next_s_ = 0.0;
+    std::map<std::string, std::uint64_t> percep_shooters_;
+    std::vector<double> percep_contrail_area_m2_;
+    std::vector<double> percep_contrail_next_s_;
+    airwar::RwrSetDisplay default_rwr_set_;  // for a receiver the data gives no display (measured bearing, named, a launch shown)
     World world_;
     AcmiWriter acmi_;
     std::mt19937 rng_;
@@ -7894,7 +10155,7 @@ private:
             // The target's number from its designation, as his words would have it (SpeakOrder).
             for (const C2Network::Event& e : designations_heard_) {
                 if (!shadow_target_.empty() && e.subject == shadow_target_ && e.number > 0) {
-                    char n[16];
+                    char n[64];
                     std::snprintf(n, sizeof(n), "%04d", e.number);
                     d.fields["number"] = n;
                 }
@@ -8023,6 +10284,8 @@ private:
     std::unique_ptr<Battery> battery_;
     std::unique_ptr<command::BatteryOrderNet> order_net_;  // battery orders carried by a means (G10.5)
     std::unique_ptr<nav::SessionNav> nav_;                 // the roads, the places and the world's movers (G2.3, G11)
+    std::vector<std::uint64_t> percep_dummies_;              // the dummies as the pilots' ground objects (B6)
+    std::map<std::string, std::uint64_t> percep_movers_;     // the roads' movers as ground objects, by mover id (B6)
 
     // ---- The TZM's runs to the regiment's technical battery (roadmap 17.4; campaign/stocks.hpp): the battery commander's
     // order on the net, its chief's run on the session's roads, his report back, and what the commander reckons and
@@ -8185,6 +10448,21 @@ private:
             if (s.callsign == callsign) was = std::max(0, s.missiles);
         }
         tzm_reckoned_ = std::max(0, tzm_reckoned_ - std::max(0, missiles - was));
+    }
+    // The regiment's word on the sky's sharing, heard (F4.4): the plan of cooperation the battery holds is shared that way.
+    double sharing_heard_s_ = -1.0;
+    int sharing_changes_ = 0;
+    void HeardSharing(const RegimentMessage& m) {
+        const command::CooperationMethod method = m.sharing == 1 ? command::CooperationMethod::OneZone : command::CooperationMethod::ByZones;
+        const int was = def_.task.own_air.version;
+        def_.task.own_air = command::TellSharing(def_.task.own_air, method, m.sharing_split_m);
+        if (def_.own_air.present) def_.own_air.plan = command::TellSharing(def_.own_air.plan, method, m.sharing_split_m);
+        sharing_heard_s_ = time_;
+        if (def_.task.own_air.version != was) {
+            ++sharing_changes_;
+            Event("regiment net", std::string("the plan of cooperation: the sky shared ") +
+                                      (method == command::CooperationMethod::OneZone ? "in one zone by height" : "by zones"));
+        }
     }
     // The regiment's word on a road's bridge, heard: the commander's roads have it down from now, or open again.
     void HeardRoad(const RegimentMessage& m) {
@@ -8360,7 +10638,7 @@ private:
     void SlipDesignation(char (&az)[16], char (&r)[16], KnownTarget& k) {
         const std::string right = std::string(az) + ", " + r;
         std::string digits = std::string(az, 2) + std::string(az + 3, 2) + r;
-        const unsigned pick = relay_rng_();
+        const unsigned pick = static_cast<unsigned>(relay_rng_());
         const std::size_t at = pick % digits.size();
         digits[at] = static_cast<char>('0' + (digits[at] - '0' + 1 + static_cast<int>((pick / 7u) % 9u)) % 10);
         const int mils = std::atoi(digits.substr(0, 4).c_str()) % 6000;
@@ -8602,7 +10880,7 @@ private:
             if (assigned_target_.empty() || e.subject == assigned_target_) number = e.number;
         }
         if (number > 0) {
-            char n[16];
+            char n[64];
             std::snprintf(n, sizeof(n), "%04d", number);
             fields["number"] = n;
         }
@@ -8771,6 +11049,11 @@ private:
                 if (acted) {
                     npc_arm_off_s_ = time_;
                     Event(Cmdr(), "radiation off against the ARM");
+                    // An engagement order of his still waiting its turn on the intercom is overtaken: he doesn't say it
+                    // after «Излучение выключить!» (its drills were cancelled above).
+                    if (!shadow_ && callouts_ && SeatHolder(Cmdr()).empty()) {
+                        callouts_->Withdraw(Cmdr(), {"order_take_target", "order_take_contact", "order_prepare", "order_jammer"});
+                    }
                 }
             }
             if (!radiating && engagement_on_ && engagement_.Method() != TrackMethod::None && time_ - npc_arm_off_s_ >= 3.0 &&
@@ -8959,11 +11242,12 @@ private:
             };
             for (const KnownTarget& k : recent) {
                 if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs(k) && !beside_theirs(k) &&
-                    decoys_known_.count(k.target) == 0 && reported_kills_.count(k.target) == 0 && arms_heard_.count(k.target) == 0) {
+                    decoys_known_.count(k.target) == 0 && reported_kills_.count(k.target) == 0 && arms_heard_.count(k.target) == 0 &&
+                    CrewJudges(eng, k.target, &k) != command::OwnAirCall::Hold) {  // one of ours by the notices it holds (B10)
                     known.push_back(k);
                 }
             }
-            std::sort(known.begin(), known.end(), [](const KnownTarget& a, const KnownTarget& b) { return a.range_m < b.range_m; });
+            std::stable_sort(known.begin(), known.end(), [](const KnownTarget& a, const KnownTarget& b) { return a.range_m < b.range_m; });
             // With the battery commander in a real post, what he gave this vehicle comes first: the latest designation
             // to it of a target still in the picture (the post reads out only this vehicle's on its net).
             if (LinkedToPost()) {
@@ -9055,16 +11339,24 @@ private:
             }
             return;
         }
-        // Never at a friend: "Пуск запрещаю!" and the track let go ("Цель сбросить!").
+        // Never at a friend: "Пуск запрещаю!" and the track let go ("Цель сбросить!"). With our aviation's notices (B10): a
+        // silent track inside a notified corridor at its heights and hours is held too, as one above the split height in
+        // one zone; a friend's reply off every notice is a violator, reported, not engaged.
         const KnownTarget* told = pictures_[Cmdr()].Find(tracked);
-        if (eng.KnownFriend(tracked) || (told != nullptr && told->friendly)) {
+        const command::OwnAirCall call = CrewJudges(eng, tracked, told);
+        if (eng.KnownFriend(tracked) || (told != nullptr && told->friendly) || call == command::OwnAirCall::Hold) {
             if (npc_held_ != tracked) {
                 npc_held_ = tracked;
                 SpeakOrder("hold_fire");
+                OwnAirHoldLines(eng, tracked, told, call);
                 GiveCrewOrder("order_drop_target");
+                if (!shadow_ && call != command::OwnAirCall::Free && call != command::OwnAirCall::Friend) {
+                    Event("own aviation", std::string(command::OwnAirCallName(call)) + ": " + tracked + ", fire held by the plan of cooperation and the notices the crew holds");
+                }
             }
             return;
         }
+
         // In a battery whose commander is in a linked post: the crew has locked a target he gave another launcher (they
         // took an echo beside it): "Цель сбросить!", and look again.
         if (LinkedToPost() && GivenElsewhere(tracked)) {
@@ -9264,6 +11556,7 @@ private:
     struct ScopeTrail {
         std::vector<std::pair<double, Vec3>> marks;  // when and where (the crew's frame, the vehicle at the origin)
         double last_seen_s = 0.0;
+        double taken_s = -1e9;  // when the mark took this trail over from another (InheritTrail): its own looks since
         bool heading_in = false;
         bool called = false;
     };
@@ -9691,10 +11984,23 @@ private:
             const double speed = v.Length();
             const double closing = p.Length() > 1.0 ? -Dot(v, p.Normalized()) : 0.0;
             const bool at_us = speed > 1.0 && closing > kZeroParameterCos * speed;
-            if (speed > kArmMarkSpeedMps && at_us) {
-                tr.called = true;
-                ArmSignSeen(c, "arm_launch");
-                continue;
+            // The ARM's sign by the mark's own looks since it came up: a trail taken over from another mark (InheritTrail)
+            // keeps that mark's earlier looks, and between bursts a formation's marks come up beside each other, so a
+            // trail stitched from one aircraft to its wingman reads a jump of a slot's spacing as a speed no aircraft
+            // flies (the Pact's DEAD raid: two MiG-27s called ARMs as they popped up). The turn away below still reads
+            // the whole trail, which is what the stitch is for.
+            std::size_t own = 0;
+            while (own + 1 < tr.marks.size() && tr.marks[own].first < tr.taken_s) ++own;
+            const double own_span = time_ - tr.marks[own].first;
+            if (own_span >= 1.5) {
+                const Vec3 vo = (p - tr.marks[own].second) / own_span;
+                const double own_speed = vo.Length();
+                const double own_closing = p.Length() > 1.0 ? -Dot(vo, p.Normalized()) : 0.0;
+                if (own_speed > kArmMarkSpeedMps && own_closing > kZeroParameterCos * own_speed) {
+                    tr.called = true;
+                    ArmSignSeen(c, "arm_launch");
+                    continue;
+                }
             }
             if (regime_crew_.kind != EmissionKind::Arm || span < 3.0) continue;
             if (at_us && speed > 100.0) tr.heading_in = true;
@@ -9738,6 +12044,7 @@ private:
         }
         if (best.empty()) return;
         ScopeTrail moved = scope_trails_[best];
+        moved.taken_s = time_;
         scope_trails_.erase(best);
         scope_trails_[id] = moved;
     }
@@ -10639,12 +12946,14 @@ private:
         return DirectionFromAzEl(AzimuthOf(toward - from), DegToRad(kFxLaunchElevationDeg)) * kFxLaunchSpeedMps;
     }
     // A scenario target's aircraft (appeared, alive or not), and its index (def_.targets.size(): none).
+    // The targets are only ever appended (AddTargets): a map kept up with them, the first of an id as before (roadmap B12).
     std::size_t TargetIndexOf(const std::string& id) const {
-        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
-            if (def_.targets[i].id == id) return i;
-        }
-        return def_.targets.size();
+        for (; target_index_n_ < def_.targets.size(); ++target_index_n_) target_index_.emplace(def_.targets[target_index_n_].id, target_index_n_);
+        const auto it = target_index_.find(id);
+        return it == target_index_.end() ? def_.targets.size() : it->second;
     }
+    mutable std::unordered_map<std::string, std::size_t> target_index_;
+    mutable std::size_t target_index_n_ = 0;
     const Aircraft* AircraftOf(const std::string& id) const {
         const std::size_t i = TargetIndexOf(id);
         return i < def_.targets.size() && targets_[i].spawned ? world_.FindAircraft(targets_[i].world_id) : nullptr;
@@ -11175,9 +13484,10 @@ private:
             t.velocity = a->velocity;
             t.agl_m = world_.Frame().AltitudeOf(a->position) - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
             t.target_class = def_.targets[i].target_class;
-            t.friendly = def_.targets[i].friendly;
+            t.friendly = RegimentHoldsFire(i, a->position);  // by its interrogators and the notices the regiment has (B10)
             targets.push_back(t);
         }
+
         neighbour_fire_->Step(time_, targets, neighbour_fire_rng_, nullptr, [](const std::string&) {});
         const std::vector<BatteryFire::Shooter>& shooters = neighbour_fire_->Shooters();
         for (std::size_t k = 0; k < shooters.size(); ++k) {
@@ -11192,6 +13502,7 @@ private:
                 ++neighbour_launches_[nb.id];
                 Event(e.target, "missile launched at it by " + nb.name);
                 FxSamLaunch(shooters[k], e.target, FxSystem(nb.system));
+                PerceiveSamLaunch(shooters[k], e.target);
             } else if (e.kind == BatteryFire::Event::Kind::Hit) {
                 FxSamEnd(shooters[k], e.target, FxSystem(nb.system), true);
                 if (DestroyTarget(e.target, nb.name)) neighbour_kills_[e.target] = nb.id;
@@ -11250,8 +13561,9 @@ private:
             t.velocity = a->velocity;
             t.agl_m = world_.Frame().AltitudeOf(a->position) - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
             t.target_class = def_.targets[i].target_class;
-            t.friendly = def_.targets[i].friendly;
+            t.friendly = RegimentHoldsFire(i, a->position);  // by its interrogators and the notices the regiment has (B10)
             for (const BoardMark& m : marks) {
+
                 if (m.target_id == t.id) t.number = m.number;
             }
             targets.push_back(t);
@@ -11333,7 +13645,10 @@ private:
             const BatteryFire::Shooter* sh = battery_fire_->Find(e.callsign);
             if (sh != nullptr && !sh->external) {  // the feed: its missile, and the wreck of what it hit
                 const std::string sys_id = FxSystem(def_.has_launcher_tuning ? def_.launcher_tuning.system_id : def_.tuning.system_id);
-                if (e.kind == BatteryFire::Event::Kind::Launch) FxSamLaunch(*sh, e.target, sys_id);
+                if (e.kind == BatteryFire::Event::Kind::Launch) {
+                    FxSamLaunch(*sh, e.target, sys_id);
+                    PerceiveSamLaunch(*sh, e.target);
+                }
                 if (e.kind == BatteryFire::Event::Kind::Hit || e.kind == BatteryFire::Event::Kind::Miss) {
                     FxSamEnd(*sh, e.target, sys_id, e.kind == BatteryFire::Event::Kind::Hit);
                 }
@@ -11362,6 +13677,7 @@ public:
         int number = 0;     // its number on the board (0: not known)
         int missiles = -1;  // missiles left (-1: not said)
         bool taken_back = false;  // a Miss taking back the Hit reported before: the target flies on
+        bool damaged = false;     // ...taken back as a hit: seen burning, it flies on (roadmap S4)
     };
     // The battery commander sits in a linked PU-12M (scenario "battery_commander": "post").
     bool LinkedToPost() const { return def_.battery_commander == "post"; }
@@ -11402,6 +13718,7 @@ public:
             a->velocity = b->velocity;
             a->speed_mps = b->speed_mps;
             a->next_waypoint = b->next_waypoint;
+            a->demand = b->demand;  // what the truth's command layer told it (flights.hpp)
             if (!b->alive) a->alive = false;
             if (o.gone) s.gone = true;
         }
@@ -11535,22 +13852,30 @@ public:
             case InstructorOrder::Kind::Turn: {
                 double deg = std::fmod(o.value, 360.0);
                 if (deg < 0.0) deg += 360.0;
-                s.held_heading_rad = DegToRad(deg);
+                HoldOn(i, DegToRad(deg));
                 std::snprintf(text, sizeof(text), "turns it onto %03.0f degrees", deg);
                 break;
             }
             case InstructorOrder::Kind::Height:
-                s.pilot.SetAgl(o.value);
+                s.pilot.SetAgl(o.value);  // the height layer is the pilot's (target_behaviour.hpp)
                 std::snprintf(text, sizeof(text), "sends it to %.0f m above the ground", o.value);
                 break;
             case InstructorOrder::Kind::Speed:
-                a->speed_mps = o.value;
+                a->speed_mps = o.value;  // it keeps his speed when he lets it go, as it always has
+                HoldOn(i, HeldHeading(i), o.value);
                 std::snprintf(text, sizeof(text), "sets its speed to %.0f m/s", o.value);
                 break;
             case InstructorOrder::Kind::Evade: {
-                const std::string what = s.pilot.EvadeNow(*a, def_.unit_position, time_);
-                if (what.empty()) return fail(id + " is manoeuvring already");
-                std::snprintf(text, sizeof(text), "makes it manoeuvre: %s", what.c_str());
+                if (!reactions_.On(static_cast<int>(i)) && !reactions_.Scripted(static_cast<int>(i))) {
+                    EvadeDef e = def_.targets[i].evade;  // ordered once, his pilot's row is on from now (EvadeNow), as before
+                    e.present = true;
+                    reactions_.RegisterScripted(static_cast<int>(i), id, e);
+                }
+                reactions_.OrderedScripted(static_cast<int>(i));  // a cue of source `order` on his scripted row (S4)
+                const Evasion ev = s.pilot.EvadeNow(*a, def_.unit_position, time_);
+                if (ev.what.empty()) return fail(id + " is manoeuvring already");
+                if (ev.steer) flights_->Override(static_cast<int>(i), ev.ov);
+                std::snprintf(text, sizeof(text), "makes it manoeuvre: %s", ev.what.c_str());
                 break;
             }
             default:
@@ -11579,7 +13904,10 @@ public:
         std::snprintf(text, sizeof(text), "enters %s: %.1f km out at %03.0f degrees, %.0f m up", t.name.c_str(),
                       std::hypot(rel.x, rel.y) / 1000.0, az, t.start.z);
         const std::string id = t.id;
+        t.flight.clear();  // a flight of one
+        const std::size_t first = def_.targets.size();
         EnterTarget(std::move(t));
+        RegisterFlights(first);
         Instructed(id, text);
         return true;
     }
@@ -11602,11 +13930,13 @@ public:
         }
         if (ts.empty()) return fail("no aircraft");
         double first_s = 1e18;
+        const std::size_t first = def_.targets.size();
         for (ScenarioTarget& t : ts) {
             t.appear_at_s = std::max(t.appear_at_s, time_);
             first_s = std::min(first_s, t.appear_at_s);
             EnterTarget(std::move(t));
         }
+        RegisterFlights(first);  // their flights (AddFlights first), or each a flight of one
         char text[160];
         std::snprintf(text, sizeof(text), "%zu aircraft come into the mission, the first at %.0f s", ts.size(), first_s);
         log_.Record({time_, DebriefEntry::Kind::Scenario, from, "enters", text});
@@ -11630,6 +13960,8 @@ public:
         const auto it = nb_damaged_.find(level);
         return it == nb_damaged_.end() ? 0 : it->second;
     }
+    // Wingmen sent home with a damaged aircraft as its escort (roadmap S4).
+    int DamagedEscorts() const { return nb_escorts_; }
     // What the testbed's defences did to a target so far (damage.hpp).
     const AircraftDamage* TargetDamage(const std::string& id) const {
         const std::size_t i = TargetIndexOf(id);
@@ -11770,11 +14102,12 @@ private:
         }
         TargetState& s = targets_[i];
         const ScenarioTarget& def = def_.targets[i];
-        const auto route = s.pilot.Route(a);
-        s.route_waypoints = route.first;
-        s.route_next = route.second;
         s.route_pilot = s.pilot;
-        s.held_heading_rad = std::atan2(a.velocity.x, a.velocity.y);
+        if (flights_->Overriding(static_cast<int>(i))) {  // its own manoeuvre ends: he flies it now
+            flights_->EndOverride(static_cast<int>(i));
+            s.route_pilot.OverrideEnded();
+        }
+        HoldOn(i, std::atan2(a.velocity.x, a.velocity.y));
         TargetBehaviourDef hold;
         hold.kind = TargetBehaviourDef::Kind::TerrainFollowing;
         const double agl = world_.Frame().AltitudeOf(a.position) - world_.GetTerrain().HeightAt(a.position.x, a.position.y);
@@ -11795,18 +14128,30 @@ private:
         return true;
     }
 
-    // He lets it go: its own pilot again, and the route it was on (its next waypoint); with none left it flies on.
+    // His heading for a held target: an order to it as a flight of one (a vector, until he says otherwise), out of its
+    // flight's formation while he holds it.
+    void HoldOn(std::size_t i, double heading_rad, double speed_mps = -1.0) {
+        FlightOrder o;
+        o.kind = OrderKind::Divert;
+        o.has_heading = true;
+        o.heading_rad = heading_rad;
+        const FlightSlot* s = flights_->SlotOf(static_cast<int>(i));
+        o.speed_mps = speed_mps >= 0.0 ? speed_mps : (s != nullptr ? s->order.speed_mps : 0.0);
+        o.by = "instructor";
+        flights_->OrderMember(static_cast<int>(i), o, time_, true, "the instructor takes the lead");
+    }
+    double HeldHeading(std::size_t i) const {
+        const FlightSlot* s = flights_->SlotOf(static_cast<int>(i));
+        return s != nullptr ? s->order.heading_rad : 0.0;
+    }
+
+    // He lets it go: its own pilot again, back into its flight, and on along its route from the waypoint it was flying
+    // to when he took it (never overwritten: held, it passes none).
     void ReleaseTarget(TargetState& s, Aircraft& a) {
         s.held = false;
         s.pilot = s.route_pilot;
         a.max_turn_rate_rad_s = std::max(a.max_turn_rate_rad_s, 1e-3);
-        if (s.route_next < s.route_waypoints.size()) {
-            a.waypoints = s.route_waypoints;
-            a.next_waypoint = s.route_next;
-        } else {
-            a.waypoints = {a.position + Vec3{std::sin(s.held_heading_rad), std::cos(s.held_heading_rad), 0.0} * kHeldLegM};
-            a.next_waypoint = 0;
-        }
+        flights_->Rejoin(static_cast<int>(&s - targets_.data()));
     }
 
     std::set<std::string> external_launchers_;
@@ -11843,7 +14188,7 @@ private:
         // The post hears a launcher on its net through any jamming, while the launchers can transmit (not Д. ПРИЁМ).
         const bool hears = NetHears() && (!post_ || !nets_ || ((nets_->GetsThrough("battery", time_)) && (LaunchersCanTransmit() ||
                                                                                                        r.kind == BatteryFire::Event::Kind::Assigned)));
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", r.number);
         const std::string number = r.number > 0 ? std::string(n) : r.target;
         switch (r.kind) {
@@ -11884,12 +14229,15 @@ private:
                 }
                 break;
             case BatteryFire::Event::Kind::Miss:
-                if (r.taken_back) {  // the kill it reported flies on: back on the board
-                    Event(r.callsign, "takes back the kill of " + r.target);
+                if (r.taken_back) {  // the kill it reported flies on: back on the board (hit and burning: roadmap S4)
+                    Event(r.callsign, (r.damaged ? "reports hit, flying on: " : "takes back the kill of ") + r.target);
                     if (hears) {
-                        LogLauncher(r, "not destroyed");
+                        LogLauncher(r, r.damaged ? "hit" : "not destroyed");
                         reported_kills_.erase(ReportedTarget(r));
-                        if (callouts_) callouts_->Say(time_, "report_not_destroyed", "battery", {{"callsign", r.callsign}, {"number", number}});
+                        if (callouts_) {
+                            callouts_->Say(time_, r.damaged ? "report_hit_flies_on" : "report_not_destroyed", "battery",
+                                           {{"callsign", r.callsign}, {"number", number}});
+                        }
                     }
                     break;
                 }
@@ -11938,7 +14286,7 @@ private:
             OnAir(1.0);  // a player's words go out as he speaks them; the data reaches the post
             return;
         }
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", r.number);
         const std::string number = r.number > 0 ? std::string(n) : target;
         if (kind == BatteryFire::Event::Kind::Ready) {
@@ -12299,7 +14647,7 @@ private:
             if (best->id != d.mark.target_id && !d.group) Event(d.callsign, "takes " + best->id + ", not the designated " + d.mark.target_id);
             battery_fire_->Assign(d.callsign, best->id, d.mark.number, time_);
             // Its read-back (rrs_1986): heard at the post if the launcher can transmit and the post hears the net.
-            char rn[16];
+            char rn[64];
             std::snprintf(rn, sizeof(rn), "%04d", d.mark.number);
             if (d.by_line) {
                 Radio("line " + std::to_string(LineToLauncher(d.callsign)->line), d.callsign,
@@ -12370,7 +14718,7 @@ public:
             }
         }
         if (!battery_fire_->Assign(callsign, target, number, time_)) return false;
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", number);
         if (callouts_) callouts_->Say(time_, "order_assign", "battery", {{"callsign", callsign}, {"number", number > 0 ? std::string(n) : target}});
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", callsign, "target " + target});
@@ -12457,7 +14805,7 @@ public:
         f.marked_arrival_s = marked_arrival_s_;
         const int target = KeypadTarget();
         if (target >= 0) {
-            char n[8];
+            char n[64];
             std::snprintf(n, sizeof(n), "%02d", target % 100);
             f.keypad = n;
         }
@@ -12550,23 +14898,32 @@ private:
     int kill_calls_ = 0, kill_calls_wrong_ = 0, still_flying_ = 0, kill_reports_taken_back_ = 0;
     std::set<std::string> results_reported_;  // targets the commander reported destroyed on the battery net
     std::set<std::string> corrections_due_;   // ...that the scope then showed flying on: the report to take back
+    std::set<std::string> burning_seen_;      // targets the judge called destroyed with fire on the TV among the signs (S4)
+    std::set<std::string> chaff_seen_, jettison_seen_;  // targets the crew called dropping chaff, throwing off its load (S4)
     // A target reported destroyed on the battery net that flies on: the commander takes the report back on the net, so
     // the post puts it back on its board (voenizdat_osa_1991 p267: a target whose motion is unchanged is not destroyed).
+    // One the crew saw burning on the TV at the hit is taken back as a hit that flies on (roadmap S4), the rest as not
+    // destroyed.
     void CorrectKillReport(const std::string& target) {
         std::map<std::string, std::string> f = RadioFields();
         const int number = BoardNumberOf(target);
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", number);
         f["number"] = number > 0 ? std::string(n) : target;
-        SeatDuty d = SeatDuty::Report(Cmdr(), "report_not_destroyed", "a target reported destroyed flies on: take the report back on the battery net", f);
+        const bool burning = burning_seen_.count(target) != 0;
+        const char* line = burning ? "report_hit_flies_on" : "report_not_destroyed";
+        SeatDuty d = SeatDuty::Report(Cmdr(), line,
+                                      burning ? "a target reported destroyed flies on burning: report it hit on the battery net"
+                                              : "a target reported destroyed flies on: take the report back on the battery net",
+                                      f);
         d.target = target;
-        if (NpcDoes(Cmdr(), d) && SayOnRadio("report_not_destroyed", f, false)) KillReportTakenBack(target);
+        if (NpcDoes(Cmdr(), d) && SayOnRadio(line, f, false)) KillReportTakenBack(target, burning);
     }
     // The correction went on the air: a linked post hears it.
-    void KillReportTakenBack(const std::string& target) {
+    void KillReportTakenBack(const std::string& target, bool damaged = false) {
         results_reported_.erase(target);
         ++kill_reports_taken_back_;
-        Event(target, "the kill report taken back on the battery net: it flies on");
+        Event(target, damaged ? "reported hit on the battery net: it flies on burning" : "the kill report taken back on the battery net: it flies on");
         if (!LinkedToPost()) return;
         LinkReport r;
         r.kind = BatteryFire::Event::Kind::Miss;
@@ -12575,6 +14932,7 @@ private:
         r.number = BoardNumberOf(target);
         r.missiles = launcher_ ? launcher_->LoadedCount() : -1;
         r.taken_back = true;
+        r.damaged = damaged;
         own_reports_.push_back(r);
     }
     // The target's number on the post's board, from its designation or a group's pick (0: none heard).
@@ -12652,6 +15010,9 @@ private:
             if (judge.empty()) continue;
             crew_calls_.push_back({time_, j.call == KillAssessment::Call::Hit ? "destroyed" : j.call == KillAssessment::Call::Miss ? "missed" : "unknown", j.target});
             if (j.call == KillAssessment::Call::Hit) {
+                for (KillSign k : j.known) {
+                    if (k == KillSign::TvFire) burning_seen_.insert(j.target);  // seen burning on the TV (roadmap S4)
+                }
                 if (regime_cmdr_.kind == EmissionKind::Arm) npc_ssc_off_due_ = true;  // under the least emission the tracking transmitter goes off after the burst
                 Say("hit", judge);
                 HeardDestroyed(j.target);
@@ -12662,7 +15023,7 @@ private:
                     std::map<std::string, std::string> f = RadioFields();
                     f["number"] = j.target;
                     for (const C2Network::Event& d : designations_heard_) {
-                        char n[16];
+                        char n[64];
                         std::snprintf(n, sizeof(n), "%04d", d.number);
                         if (d.subject == j.target && d.number > 0) f["number"] = n;
                     }
@@ -12698,6 +15059,8 @@ private:
                 if (!NpcDoes(scope, SeatDuty::Report(scope, "target_still_flying", "a target called destroyed still on his scope", words).About(k))) continue;
                 Say("target_still_flying", scope, words, &k);
                 ++still_flying_;
+                // Seen burning at the hit and flying on: the crew's word for it is a hit (roadmap S4), not a miss.
+                if (burning_seen_.count(c.target_id) != 0) crew_calls_.push_back({time_, "hit", c.target_id});
             }
             it = own_kills_.erase(it);
         }
@@ -13198,6 +15561,13 @@ public:
                     }
                     if (f.count("azimuth") == 0) f["azimuth"] = arm_sign_az_;
                 }
+                if (callout_id == "report_violator") {  // the violator he held last (OwnAirHoldLines)
+                    if (violator_az_.empty()) {
+                        last_refusal_ = "no violator held";
+                        return false;
+                    }
+                    if (f.count("azimuth") == 0) f["azimuth"] = violator_az_;
+                }
                 if (callout_id == "request_tzm" && (!launcher_ || launcher_->LoadedCount() > 0)) {
                     last_refusal_ = "the launcher still has missiles";
                     return false;
@@ -13213,6 +15583,7 @@ public:
                 if (callout_id == "report_arm_attack") ArmAttackReported(f["azimuth"]);
                 if (callout_id == "report_result" && !target.empty()) results_reported_.insert(target);
                 if (callout_id == "report_not_destroyed" && !target.empty()) KillReportTakenBack(target);
+                if (callout_id == "report_hit_flies_on" && !target.empty()) KillReportTakenBack(target, true);
                 return true;
             }
         }

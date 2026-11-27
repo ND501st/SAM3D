@@ -81,18 +81,48 @@ SC_TEST("obstacles: a ray through the Lazne woods 8 m up is blocked, 40 m up it 
     // The same geometry over the ground alone (a terrain with no obstacles): clear.
     const FlatTerrain bare(std::max(ga, gb));
     SC_EXPECT(HasLineOfSight(bare, a, bare.HeightAt(0, 0) + 8.0, b, bare.HeightAt(0, 0) + 8.0));
-    // The radio path's profile sees the same wood (AnalysePath), and not without it.
+    // The radio path (roadmap E9, ITU-R P.2108 section 3.1). Both ends 300 m out stand in the woods' other blocks (18-20 m
+    // of canopy over an antenna 8 m up), so each is its end's own loss and the path is worked out from the canopy's top;
+    // until E9 the ray from 8 m ran into the block between and the path was blocked.
     const em::PathGeometry g = em::AnalysePath(t, a, ga + 8.0, b, gb + 8.0, 25.0);
-    SC_EXPECT(!g.line_of_sight);
+    SC_EXPECT_NEAR(g.clutter_a_m, t.ObstacleHeightAt(a.x, a.y), 1e-9);
+    SC_EXPECT_NEAR(g.clutter_b_m, t.ObstacleHeightAt(b.x, b.y), 1e-9);
+    SC_EXPECT(g.clutter_a_m > 8.0 && g.clutter_b_m > 8.0);
+    SC_EXPECT_NEAR(g.antenna_a_m, 8.0, 1e-9);
+    SC_EXPECT_NEAR(g.antenna_b_m, 8.0, 1e-9);
+    std::printf("    ends 8 m up in %.1f and %.1f m of canopy: %.1f dB of the ends' clutter at 50 MHz\n", g.clutter_a_m,
+                g.clutter_b_m, em::TerminalClutterLossDb(g, 50e6));
+    SC_EXPECT(em::TerminalClutterLossDb(g, 50e6) > 12.0);  // about 9 dB an end (P.2108 eq. 2a, hand-checked in test_em_environment)
+    // The radio path's profile still sees the block between: from the open ground 65 m beyond its edges (past the 60 m
+    // an end's own obstacles are skipped), 8 m up, it is blocked, and over the ground alone it is clear.
+    const auto open_beyond = [&](double dir) {
+        double s = 0.0;
+        while (std::fabs(s) < 300.0 && t.ObstacleHeightAt(wood->east_m + s, wood->north_m) > 0.0) s += 5.0 * dir;
+        return Vec3{wood->east_m + s + 65.0 * dir, wood->north_m, 0.0};
+    };
+    const Vec3 oa = open_beyond(-1.0), ob = open_beyond(1.0);
+    const double goa = t.HeightAt(oa.x, oa.y), gob = t.HeightAt(ob.x, ob.y);
+    SC_EXPECT(t.ObstacleHeightAt(oa.x, oa.y) == 0.0 && t.ObstacleHeightAt(ob.x, ob.y) == 0.0);
+    const em::PathGeometry open = em::AnalysePath(t, oa, goa + 8.0, ob, gob + 8.0, 25.0);
+    SC_EXPECT(open.clutter_a_m == 0.0 && open.clutter_b_m == 0.0);
+    SC_EXPECT(!open.line_of_sight);
+    SC_EXPECT(em::AnalysePath(bare, oa, bare.HeightAt(0, 0) + 8.0, ob, bare.HeightAt(0, 0) + 8.0, 25.0).line_of_sight);
 }
 
-SC_TEST("obstacles: woods within 60 m of an end do not hide it; with no skip they would") {
+SC_TEST("obstacles: woods within 60 m of an end do not hide it; with no skip the sight would be; a radio path takes them as its end's loss") {
     const ObstacleTerrain around(0.0, Around20);
     const Vec3 a{0.0, 0.0, 2.0}, b{2000.0, 0.0, 300.0};
     SC_EXPECT(HasLineOfSight(around, a, 2.0, b, 300.0, 10.0));
     SC_EXPECT(!HasLineOfSight(around, a, 2.0, b, 300.0, 10.0, kStandardRefractionK, 0.0, 0.0));
     SC_EXPECT(em::AnalysePath(around, a, 2.0, b, 300.0, 10.0).line_of_sight);
-    SC_EXPECT(!em::AnalysePath(around, a, 2.0, b, 300.0, 10.0, 600, kStandardRefractionK, 0.0).line_of_sight);
+    // The radio path (roadmap E9, ITU-R P.2108 section 3.1): the wood the antenna stands in is its end's own loss, and the
+    // path is worked out from the canopy's top, so with no skip it is no longer blocked by its own wood (until E9's last
+    // part it was: the ray from 2 m ran into the 20 m wood round it).
+    const em::PathGeometry no_skip = em::AnalysePath(around, a, 2.0, b, 300.0, 10.0, 600, kStandardRefractionK, 0.0);
+    SC_EXPECT(no_skip.line_of_sight);
+    SC_EXPECT_NEAR(no_skip.clutter_a_m, 20.0, 1e-12);
+    SC_EXPECT_NEAR(no_skip.antenna_a_m, 2.0, 1e-12);
+    SC_EXPECT(em::TerminalClutterLossDb(no_skip, 50e6) > 10.0);
 }
 
 SC_TEST("obstacles: a 20 m strip of woods across a flat path blocks it and makes a diffraction edge (P.1812 clutter)") {
@@ -484,7 +514,7 @@ SC_TEST("obstacles: the Kesmark map's buildings and woods block a ray cutting a 
     const Terrain& t = ground;
     const GroundOnly bare(t);
     const double c = std::sqrt(0.5);
-    int tried = 0, stepped_los = 0, stepped_path = 0;
+    int tried = 0, stepped_los = 0, stepped_path = 0, from_clutter = 0;
     std::size_t index = 0;
     for (const MapBox& b : m->Layout().boxes) {
         if (!OpaqueForSight(b.part) || (index++ % 5) != 0) continue;  // every fifth, for the time
@@ -511,10 +541,20 @@ SC_TEST("obstacles: the Kesmark map's buildings and woods block a ray cutting a 
         if (t.ObstacleTopAt(pe, pn) < up) continue;
         ++tried;
         if (HasLineOfSight(t, a, up, z, up, 100.0)) ++stepped_los;
-        if (em::AnalysePath(t, a, up, z, up, 100.0).line_of_sight) ++stepped_path;
+        // The radio path (roadmap E9, ITU-R P.2108 section 3.1): an end that stands in a wood or among buildings taller
+        // than the ray is its end's own loss, and the path is worked out from the clutter's top, which may pass over the
+        // corner. Those are counted apart; every other cut must still be blocked.
+        const em::PathGeometry g = em::AnalysePath(t, a, up, z, up, 100.0);
+        if (g.clutter_a_m > 0.0 || g.clutter_b_m > 0.0) {
+            ++from_clutter;
+            continue;
+        }
+        if (g.line_of_sight) ++stepped_path;
     }
-    std::printf("    %d corner and side cuts: %d stepped over by HasLineOfSight, %d by AnalysePath\n", tried, stepped_los, stepped_path);
+    std::printf("    %d corner and side cuts: %d stepped over by HasLineOfSight, %d by AnalysePath (%d radio paths from an end's clutter)\n",
+                tried, stepped_los, stepped_path, from_clutter);
     SC_EXPECT(tried > 1000);
+    SC_EXPECT(tried - from_clutter > 1000);
     SC_EXPECT(stepped_los == 0 && stepped_path == 0);
 }
 

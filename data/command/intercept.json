@@ -1,0 +1,53 @@
+{
+  "intercept_id": "pannonia_army_intercept",
+  "status": "B9, 17 November 2026. Our side's radio intercept service for the enemy's air radio: its posts in the chain of command (chain_pannonia.json), their linguists, what they write wrong, and how fast what they read reaches the battery (simcore/command/intercept.hpp, docs/air_battle/09_COMMS_AND_INTERCEPT.md section 4 and 5).",
+  "source": "osipov_2013 (a Soviet voice intercept operator, 1981-83: English learnt in civilian life, forms and tape, a doubtful translation checked the same day by telephone); nsa_purple_dragon_1993 pp. 60-61, 68-69 (the relay of intercepted traffic in about five minutes; a company of 130 processed 7,745 messages in a month); npic_1981_intercept; bischoff_fufutakl (liaison at the intercept centres, 1989-90)",
+  "confidence": "low",
+  "notes": "Every number here is a game value ordered by those sources, not a measurement: the tiers' delays and error rates (osipov_2013 says only that a weak telegraphist mis-wrote words and a doubt was checked by telephone), the liaison's five minutes (anchored to the relay of nsa_purple_dragon_1993 pp. 60-61), the posts' linguists (the forward posts keep one language each; the centre has all). The liaison's date is open: it is documented only for 1989-90 (docs/air_battle/09 section 1.7), so for the 1985 war the fast road is a design choice and this file says so.",
+
+  "tiers": {
+    "recruit": { "delay_s": 120.0, "digit_error": 0.30, "word_drop": 0.25, "doubt_chance": 0.60 },
+    "class3":  { "delay_s": 80.0,  "digit_error": 0.15, "word_drop": 0.12, "doubt_chance": 0.35 },
+    "class2":  { "delay_s": 50.0,  "digit_error": 0.06, "word_drop": 0.05, "doubt_chance": 0.15 },
+    "class1":  { "delay_s": 30.0,  "digit_error": 0.02, "word_drop": 0.02, "doubt_chance": 0.05 },
+    "master":  { "delay_s": 20.0,  "digit_error": 0.005, "word_drop": 0.005, "doubt_chance": 0.02 },
+    "notes": "The form's writing time by the linguist's tier (20-120 s: docs/air_battle/09 section 4.3); the chance that one digit in the call is written wrong, that a word is dropped, and that the doubt is checked by telephone up the chain before it goes on."
+  },
+
+  "fast_road": {
+    "liaison_s": 300.0,
+    "doubt_check_s": 300.0,
+    "relay_untranslated_s": 300.0,
+    "area_m": 20000.0,
+    "names_battery_m": 3000.0,
+    "habit_after": 2,
+    "daily_summary_hour": 18.0,
+    "notes": "liaison_s: the liaison passes a call that names a time and a place to the division's air defence command post in about five minutes (comms-03, nsa_purple_dragon_1993 pp. 60-61). doubt_check_s: a doubtful call is checked by telephone first, as at Torgau. relay_untranslated_s: a post with no linguist for the language passes the call untranslated to a post that has one. area_m: a call naming a place this near the battery (or an object it covers) is precedence 2, else 1. names_battery_m: a written square this near the battery is the battery's square. habit_after: a codeword heard this many times after attacks is a learned habit (strike complete). daily_summary_hour: the air section's day summary is written at this local hour."
+  },
+
+  "posts": [
+    { "id": "intercept_centre", "position": "intercept_centre", "kind": "centre", "liaison": "",
+      "linguists": [ { "language": "en", "tier": "class1", "count": 4 }, { "language": "de", "tier": "class2", "count": 2 },
+                     { "language": "ru", "tier": "class2", "count": 3 }, { "language": "pannonian", "tier": "class2", "count": 2 } ],
+      "notes": "The company's centre has every language the theatre's airmen speak; it reads what the forward posts could not." },
+    { "id": "intercept_post_1", "position": "intercept_post_1", "kind": "forward", "relay_to": "intercept_centre", "liaison": "ad_liaison_1",
+      "linguists": [ { "language": "en", "tier": "class2", "count": 1 }, { "language": "pannonian", "tier": "class3", "count": 1 } ] },
+    { "id": "intercept_post_2", "position": "intercept_post_2", "kind": "forward", "relay_to": "intercept_centre", "liaison": "ad_liaison_2",
+      "linguists": [ { "language": "en", "tier": "class3", "count": 1 }, { "language": "ru", "tier": "class2", "count": 1 } ] }
+  ],
+
+  "enemy_listeners": {
+    "notes": "section 6 of docs/air_battle/09: where the enemy's receivers stand, so that our nets are heard by link margin and not all at once. Positions are the theatre's east and north in km; heights and sensitivities are game values (no tier 1-4 source gives a 1985 set).",
+    "warsaw_pact": [ { "id": "pact_front_intercept_1", "east_km": 30.0, "north_km": 160.0, "height_m": 30.0, "gain_db": 6.0, "sensitivity_dbw": -140.0,
+                       "notes": "A front's radio and radar intercept regiment behind its line (the north-eastern border, about 20 km back): VHF about 40 km, HF ground wave about 80 km (fm_100_2_1_1984 p. 15-2). Placed behind the line in roadmap S6 (B9 had it inside our country)." },
+                     { "id": "pact_il20_orbit", "east_km": 20.0, "north_km": 200.0, "height_m": 8000.0, "gain_db": 3.0, "sensitivity_dbw": -140.0,
+                       "notes": "The Il-20M's orbit behind the line (docs/air_war/11_SUPPORT.md; fm_100_2_1_1984 p. 15-2: intercept ranges greatly extended when airborne). Place, height and set game values." } ],
+    "nato": [ { "id": "nato_ground_intercept_1", "east_km": -200.0, "north_km": 40.0, "height_m": 30.0, "gain_db": 6.0, "sensitivity_dbw": -140.0,
+                "notes": "NATO's ground intercept of Pact voice in Europe was not found in the research (comms_emcon.md section 7): a game value, behind the western border (placed there in roadmap S6)." },
+              { "id": "nato_rc135_orbit", "east_km": -240.0, "north_km": 20.0, "height_m": 9000.0, "gain_db": 3.0, "sensitivity_dbw": -140.0,
+                "notes": "The RC-135's orbit behind the line (docs/air_war/11_SUPPORT.md). Place, height and set game values." } ],
+    "rebels":  [ { "id": "rebel_listener_1", "east_km": 12.0, "north_km": -4.0, "height_m": 10.0, "gain_db": 2.0, "sensitivity_dbw": -135.0,
+                   "notes": "A few posts with native speakers near their home ground (comms-25): game values." } ],
+    "neutral": []
+  }
+}

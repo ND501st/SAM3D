@@ -78,18 +78,29 @@ flies the same waypoints with their heights (terrain following below the apex, `
 | Level | from medium altitude over the target | the type's medium height |
 | Stand-off | to the weapon's range and away | the profile's |
 | Hover (helicopters) | from the hide to the firing point 4 km out | 30 m |
+| Strafe (a gun, B6) | low to the release 1.1 km out | the type's low height |
+| Gentle dive (rockets or a gun, B6) | low to the pull-up 4 km out, the apex, a 10-25 degree dive, the release 1.5 km out | apex 600 m, release 300 m |
 
 `delivery.exposure_*` is the share of the target's own guns each attack meets (a laydown all of them, a pop-up two
 thirds, a dive a third, a toss less than a third, level and stand-off none: medium altitude is above them),
 `delivery.release_*_m` how far short of the target the weapons go. A jet in a played raid may climb at 120 m/s so it
 flies its pop-up.
 
+Since B6 (`docs/air_battle/06_OPPORTUNITY.md` §10) a jet whose planned load is a gun or rockets with a `"pass"` flies its
+attack in a played raid as passes (`attack_pass.hpp`): from `opportunity.run_in_m` out, it opens fire within the
+weapon's `open_fire_m` near its nose, recovers, and may come round again. Its first burst or salvo is its release, in
+place of the one-shot release gate; each pass is one draw against the weapon's `per_pass` for the class of what is
+really at the aim. Bombs keep the release gate. The GAU-8 and the GSh-30 lost their `popup` and `dive` deliveries for
+`strafe` (and the GSh-30 `gentle_dive`); the rockets gained `gentle_dive`. In the abstract resolver these are deliveries
+like the others: their CEP (`cep_strafe_m` 45 m, `cep_gentle_dive_m` 50 m) and exposure (0.8, 0.7).
+
 ## Calibration
 
 `simcore/examples/air_war_bench.cpp` (`air_war_bench [data] [runs] [--why] [--set key=value]`) flies historical
 analogues and prints the model beside the record (`09_BALANCE.md` §9): a massive bridge against dumb and laser-guided
 bombs, the misses, low against medium altitude, runways cut, ARMs against disciplined crews, low-level fuzing, a SAM belt,
-a suppression package. `--set` tries a tuning value; `--why` prints the losses by role and defence.
+a suppression package, and the gun pass against Array 20 (B6). `--set` tries a tuning value; `--why` prints the
+losses by role and defence.
 
 ## Tests
 

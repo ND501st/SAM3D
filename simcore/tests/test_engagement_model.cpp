@@ -302,7 +302,16 @@ SC_TEST("engagement: an evading target breaks away and the manoeuvre lowers the 
     const Run r = Play(Engage(Target(24000, 1000, R"(, "evade_on_launch": true, "evade_turn_rate_deg_s": 12)"),
                               kAcquireAndFire));
     SC_EXPECT(Has(r, "breaks away onto a beam heading"));
-    SC_EXPECT(Has(r, "manoeuvre 0.52 (12 deg/s)"));
+    // Roadmap S4: the manoeuvre counts over the last manoeuvre_window_s (8 s) of the missile's flight only. This break,
+    // flown on the launch at 12 deg/s, is over (90 degrees in 7.5 s) long before the missile closes 17.6 s later: it gains
+    // nothing (checo_1967_tactics p. 31: a break finished before the missile closed gains little).
+    SC_EXPECT(Has(r, "manoeuvre 1.00 (0 deg/s)"));
+    // Without the window (the whole flight, as before S4) the same break would be the full 12 deg/s: 1 - 0.04 x 12.
+    EngagementTuning t;
+    std::string e;
+    SC_EXPECT(LoadEngagementTuningFile(std::string(SIMCORE_DATA_DIR) + "/gameplay/osa_ak.json", t, &e));
+    SC_EXPECT_NEAR(t.manoeuvre_window_s, 8.0, 1e-12);
+    SC_EXPECT_NEAR(std::fmax(t.manoeuvre_factor_min, 1.0 - t.manoeuvre_penalty_per_deg_s * 12.0), 0.52, 1e-9);
 }
 
 SC_TEST("engagement: a pair's second missile waits the launch interval; the next pair waits for its preparation") {

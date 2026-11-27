@@ -8,6 +8,10 @@
 // another crossing, or cuts it until the bridge carries traffic again; without a map a line runs straight through its
 // waypoints and a bridge down on it cuts it. The enemy finds the columns on the move by armed reconnaissance
 // (MissionKind::ArmedRecce: the planner's estimate here, the search in resolve.hpp).
+//
+// With the ground war (track F, F3.7): a line ending at troops that have moved with their unit ends where they are now
+// (MoveEnd: its last stretch on local roads redrawn, routed again from the network once they have moved further than
+// logistics.snap_m), and a line whose depot the enemy has overrun carries nothing until it is ours again.
 #pragma once
 
 #include <algorithm>
@@ -18,6 +22,7 @@
 #include <vector>
 
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/front_line.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
 #include "simcore/country_map.hpp"
@@ -80,6 +85,10 @@ public:
     void Init(const AirWarData& d, std::vector<ObjectState>& truth) {
         const std::vector<SupplyLineDef>& lines = d.theatre.supply_lines;
         paths_.assign(lines.size(), SupplyPath());
+        end_.clear();
+        routed_end_.clear();
+        from_.assign(lines.size(), -1);
+        for (std::size_t li = 0; li < lines.size(); ++li) from_[li] = d.theatre.IndexOf(lines[li].from);
         last_function_.assign(truth.size(), 1.0);
         bridge_crossings_.assign(truth.size(), std::vector<std::string>());
         served_.clear();
@@ -154,7 +163,7 @@ public:
                 st.along_m = 0.0;
             }
             last_function_[i] = st.function;
-            const bool may_move = !path.cut && (!l.night_only || dark);
+            const bool may_move = !path.cut && !DepotLost(static_cast<std::size_t>(o.supply_line), truth) && (!l.night_only || dark);
             const double step_m = may_move ? l.speed_mps * 3600.0 * dt : 0.0;
             switch (st.leg) {
                 case 0:
@@ -220,21 +229,79 @@ public:
         return 1.0 - std::pow(1.0 - moving * stretch, l.columns);
     }
 
-    // Where an armed reconnaissance of line li searches: the point of its way nearest the enemy's front.
-    Vec3 PatrolPoint(std::size_t li, const std::vector<Vec3>& front_line) const {
+    // Where an armed reconnaissance of line li searches: the point of its way nearest the enemy's front: the line of contact
+    // when given (track F, F3.7; at zero offsets the front's line to the bit), else the front's line.
+    Vec3 PatrolPoint(std::size_t li, const std::vector<Vec3>& front_line, const LineOfContact* contact = nullptr) const {
         if (li >= paths_.size() || paths_[li].pts.empty()) return Vec3{};
         const SupplyPath& p = paths_[li];
         Vec3 best = p.pts.front();
         double best_d = 1e18;
+        const bool on_contact = contact != nullptr && !contact->Empty();
         for (double s = 0.0; s <= p.Length(); s += 2000.0) {
             const Vec3 at = p.At(s);
-            const double dist = DistanceToLine(front_line, at);
+            const double dist = on_contact ? contact->AbsDistance(at) : DistanceToLine(front_line, at);
             if (dist < best_d) {
                 best_d = dist;
                 best = at;
             }
         }
         return best;
+    }
+
+    // The troops object `object` has moved to `to` with its unit (track F, F3.7): every line ending at it ends there now. A
+    // line routed on the network keeps its way and redraws its last stretch (the local roads from the network to the
+    // troops) until they have moved further than logistics.snap_m from where it was last routed to; then it is routed again
+    // (bridges down as they are). Its columns on the way keep their share of it, as on a reroute. Returns the lines routed
+    // again.
+    int MoveEnd(const AirWarData& d, int object, const Vec3& to, std::vector<ObjectState>& truth) {
+        const std::vector<SupplyLineDef>& lines = d.theatre.supply_lines;
+        int routed = 0;
+        for (std::size_t li = 0; li < lines.size(); ++li) {
+            if (d.theatre.IndexOf(lines[li].to) != object) continue;
+            if (end_.size() != lines.size()) {
+                end_.assign(lines.size(), Vec3{});
+                routed_end_.assign(lines.size(), Vec3{});
+                has_end_.assign(lines.size(), 0);
+                for (std::size_t k = 0; k < lines.size(); ++k) {
+                    const TheatreObject* t = d.theatre.Find(lines[k].to);
+                    routed_end_[k] = t != nullptr ? t->pos : Vec3{};
+                }
+            }
+            end_[li] = to;
+            has_end_[li] = 1;
+            SupplyPath& p = paths_[li];
+            SupplyPath np;
+            if (Dist2d(to, routed_end_[li]) > d.tuning.Get("logistics.snap_m")) {
+                np = Route(d, li, cut_);
+                routed_end_[li] = to;
+                ++routed;
+                if (np.cut) {
+                    p.cut = true;  // no way to them now: the columns hold where they are, as on a reroute
+                    continue;
+                }
+            } else {
+                np = p;
+                if (!np.pts.empty()) np.pts.back() = to;
+                np.Measure();
+            }
+            const double scale = p.Length() > 0.0 ? np.Length() / p.Length() : 0.0;
+            for (std::size_t i = 0; i < truth.size(); ++i) {
+                if (d.theatre.objects[i].supply_line != static_cast<int>(li)) continue;
+                truth[i].along_m *= scale;
+                truth[i].pos = np.At(truth[i].along_m);
+            }
+            p = np;
+        }
+        return routed;
+    }
+    // Where line li ends now (its troops' place, F3.7) and whether its depot is in the enemy's hands.
+    Vec3 EndOf(const AirWarData& d, std::size_t li) const {
+        if (li < has_end_.size() && has_end_[li] != 0) return end_[li];
+        const TheatreObject* t = d.theatre.Find(d.theatre.supply_lines[li].to);
+        return t != nullptr ? t->pos : Vec3{};
+    }
+    bool DepotLost(std::size_t li, const std::vector<ObjectState>& truth) const {
+        return li < from_.size() && from_[li] >= 0 && truth[static_cast<std::size_t>(from_[li])].overrun;
     }
 
     const SupplyPath& Path(std::size_t li) const { return paths_[li]; }
@@ -271,7 +338,7 @@ private:
         const SupplyLineDef& l = d.theatre.supply_lines[li];
         std::vector<Vec3> way{d.theatre.Find(l.from)->pos};
         for (const std::string& v : l.via) way.push_back(d.theatre.Find(v)->pos);
-        way.push_back(d.theatre.Find(l.to)->pos);
+        way.push_back(EndOf(d, li));
         SupplyPath p;
         if (d.country) {
             // The network's shortest way leg by leg, the last stretches at each end on local roads.
@@ -360,6 +427,10 @@ private:
     }
 
     std::vector<SupplyPath> paths_;
+    std::vector<Vec3> end_;                                  // per line: where its troops are now (F3.7; has_end_)
+    std::vector<Vec3> routed_end_;                           // per line: the end it was last routed to
+    std::vector<char> has_end_;
+    std::vector<int> from_;                                  // per line: its depot's theatre object
     std::vector<double> last_function_;                      // per theatre object
     std::vector<std::vector<std::string>> bridge_crossings_;  // per theatre object: the map's crossings a bridge stands on
     std::vector<int> served_;

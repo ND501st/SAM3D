@@ -117,6 +117,38 @@ the march, a raid, the fight, stowing and marching on). It starts with one missi
 comes within the mission. A battery vehicle may have a sector of fire, `"sector_deg": [from, to]` (true azimuths,
 clockwise): in free fire it takes only targets there, and the NPC battery commander gives it targets there first.
 
+**The air battle (track B, B8; `simcore/air_war/air_fight_session.hpp`, `docs/air_battle/07_AIR_TO_AIR.md`).** An
+optional `"air_fight"` makes some targets fight in the air: `{ "year": 1985, "combat": "air_war/air_combat.json",
+"sensors": "air_war/sensors.json", "fighters": [ { "target", "type", "faction", "role", "regiment", "controller",
+"skill" } ], "controllers": [ { "id", "side", "kind", "east_m", "north_m", "alt_m", "range_m", "post" } ] }`. A
+fighter's `type` needs a fit and its `faction` a doctrine in the combat file (`"ours"` for our side, with its
+`regiment`); `role` is escort, sweep, cap, intercept or strike (a striker only defends itself). A controller is a GCI
+post (`radar_control`) or an AWACS (`airborne_warning`) of `ours` or `enemy`; with a `post` of `"air_radio"` its vectors
+go out on that post's net and may be jammed or lost (B9), else they are heard at once. The fighters find, identify and
+fire by what they know (their pilots' picture, their radar, the controller's word); kills come back through the
+runner's `DestroyTarget`, ours with the regiment's id.
+
+**Our aviation (track B, B10; `simcore/command/own_air.hpp`, `own_flights.hpp`, `docs/air_battle/08_OUR_FIGHTERS.md`).**
+An optional `"own_air"` gives the session our side's air: `{ "data": "command/own_air.json", "codes":
+"command/iff_codes.json", "war": true, "fixed_code", "battery_table_s", "battery_last_code", "post_table_s",
+"post_last_code", "chain": "command/chain_pannonia.json", "origin": "fighter_rgt_duty", "notice_post": "rgt_cp_duty",
+"plan": { "method", "split_height_m", "zones", ... }, "notices": [ { "flight", "type", "count", "route_m": [[e, n], ...],
+"half_width_m", "floor_m", "ceiling_m", "cross_from_s", "cross_to_s", "back_s", "sent_s", "lost", "aircraft" } ],
+"regiments": [ { "id", "base", "base_east_m", "base_north_m", "type", "name", "skill", "function", "area_east_m",
+"area_north_m", "area_radius_m", "gci" } ], "gci": { "east_m", "north_m", "mast_m" }, "raid_warning_s" }`. The day's
+codes come from the table (or `fixed_code`); a holder whose table never came (`*_table_s` < 0) keeps its last code. A
+target of ours may have `"iff_code"` (fixed; -1 its transponder off) or `"iff_table": true` (its pilot sets the table's
+code, and may miss a change). Each notice goes down the chain from `origin` to `notice_post` with each post's work, then
+on the regiment's net into the post's journal (or, without a post, as the battery commander's line); the crew keeps what
+it read from the words. Regiments need an `"air_fight"` with our controller `gci` (its fighters may then be empty): the
+duty scrambles pairs on our GCI's picture, guided on that picture. Since S1: `"front": { "east_m", "north_m",
+"enemy_bearing_deg" }` is a point of the front line and the bearing across it to the enemy (each regiment puts
+`alert_pairs` on airborne alert behind it on the raid warning, and recalls a pair past its pursuit limit beyond it);
+`"enemy_allies": true` puts some of the enemy's aircraft on our Kremniy filters by the allies' own schedule (the Pact's
+false friend); without a `"plan"` the scenario's regiment's task (`"task"`) gives it. The regiments' loss and claim
+reports come down the same chain, and the Osa's interrogator code is its `iff.code` switch, set by the senior operator
+on the commander's order when the table's code changes.
+
 **The Osa and the PU-12M in one battery (a battery link, `simcore/battery_link.hpp`, docs/PU12_DEVELOPMENT.md P8).** A
 link file names two scenarios that share a battery and a sky, `{ "link_id", "name", "description", "osa", "post",
 "callsign", "source", "confidence", "notes" }`:

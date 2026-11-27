@@ -125,7 +125,9 @@ one-way loss = FSPL(R, f)  +  J(v_max)  +  gases(R, h1, h2, f)  −  20 log10 F
   spacing, at most 600 samples); records line of sight, minimum clearance and the worst
   `h·√(1/d₁+1/d₂)`. That last number is frequency-independent: `v = it · √(2/λ)`, so one profile
   serves radar, ESM, jammer and radio at any band.
-* **Diffraction**: ITU-R P.526 eq. (31), single dominant edge.
+* **Diffraction**: ITU-R P.526 eq. (31) knife edges, the dominant one and Deygout's two sub-edges
+  (`TerrainEdgesLossDb`); from 10 MHz to 1 GHz the smooth spherical earth's loss is added beyond and near
+  the horizon (`DiffractionLossDb`, §36). Radar calibration anchors use the edges alone.
 * **Gases**: ITU-R P.676 sea-level table, thinned with altitude.
 * **Ground reflection**: ≥ 1 GHz: spherical-Earth two-ray with effective heights, effective
   reflection `ρ₀·exp(−8(π σh sinψ/λ)²)`, antenna-pattern weighting of the reflected ray (radar).
@@ -369,8 +371,11 @@ Co-operative crews share one node.
 
 ## 22. Known limitations
 
-* Single dominant knife edge (no Deygout multi-edge); no buildings, forest canopy or land-use clutter.
-* Two-ray multipath uses a smooth-earth reflection point; real terrain reflections are not traced.
+* Knife edges by Deygout (three at most) and the smooth earth below 1 GHz (§36); woods and buildings on the profile
+  (§27) and round an antenna (§37), water under a path (§37). Above 1 GHz past the horizon the two rays and the edges
+  lose less than P.526's smooth earth (§36). No ducting.
+* Two-ray multipath uses a smooth-earth reflection point (over land or, by the share under its Fresnel zone, water:
+  §37); real terrain reflections are not traced.
 * Search-radar elevation measurement is the beam centre; no height-finding radars yet.
 * Tracker is GNN (no JPDA/MHT); no manoeuvre-adaptive filter.
 * VGPO, angle deception against non-monopulse radars, repeater false targets and sweep jamming not
@@ -503,7 +508,7 @@ the update rates or the data rules.
 
 The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C2Network`) holds selectable sources, each with its own plotting board: the PU-12 (main, from `command_post`), and library types (EWR voice net, division early-warning net, neighbouring battery, observation post, data link; `data/command/c2_sources.json`). Sources share voice nets (one message at a time), go down (outages, `c2_fail`, link range, a `C2LinkModel`), and the crew listens to one at a time: `RequestSource` (player/UI/trigger) or the NPC commander's fallback on silence (2.5 / 5 periods, as the EM C2 status) and return to the main source. The EM link budget is now the `C2LinkModel` for sources with a position (`EmSensorLink::AddRadioSource`). Voice designations as EM messages are still to do. Evidence: `docs/research/EM_C2_SOURCES_2026-10.md`.
 
-## 27. Environment depth (E9, started 16 October 2026)
+## 27. Environment depth (E9, started 16 October 2026; done 23 November 2026, §37)
 
 * **Deygout diffraction.** `AnalysePath` keeps, besides the main edge, the worst crest on each side of it measured against the line to the main edge's top (`sub_v_geometry_a/b`); `DiffractionLossDb` sums J(v) over the three. A sub-edge must be a crest of its own, with a 20 m valley between it and the main edge, so the flat top of one wide ridge stays one edge. Sub-edges are only looked for when the main edge blocks the ray. Two 300 m ridges on a 20 km path: 21 dB at 50 MHz for one, 38 dB for two.
 * **Rain.** `Environment::rain_rate_mmh` (scenario `own_unit.em.rain_mmh`) adds ITU-R P.838-3 specific attenuation (k R^alpha, horizontal polarisation, 1-40 GHz table; f^2 below 1 GHz) times the P.530 distance factor to a path's atmospheric loss, for radars and radios. Radar and radio calibration always uses the dry environment (`EmWorld::Dry`), so rain lowers ranges instead of being fitted away. 10 GHz, 50 mm/h: 1.66 dB/km; over 30 km 17.7 dB.
@@ -530,7 +535,9 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     the same way, beyond the map proper too (the forests' 100 m blocks running out past it, the far ground's woods, the
     towns laid beyond it such as Novo Varosd); where no box stands in the far ground's towns the map does not lay out, a
     representative clutter height (`data/gameplay/clutter.json`: dense urban 20 m within 0.45 of the radius, suburban
-    10 m beyond; villages suburban), so what the game draws there blocks sight too. The obstacle grids
+    10 m beyond; villages suburban; `simcore/clutter.hpp` `TownClutterClass`), so what the game draws there blocks
+    sight too. The heights are P.1812-6's section 3.2 Table 2 (checked against the text, S9, 20 Nov 2026; the same in
+    P.1812-8's section 3.2.1). The obstacle grids
     (`ObstacleGrid`, `DetailObstacleGrids`) remain as a picture: each node holds what stands over it.
   * **Footprints between the samples** (`terrain.hpp` `ObstaclesAlong`; `Terrain::ObstacleSpacingM`, `ObstacleTopAt`,
     `ObstacleTopBoundM`). A path sampled every 50-100 m would step over a 7 m house, so where the terrain has footprints
@@ -556,7 +563,15 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     obstacles, here and ahead (the footprints between its 100 m look-ahead points too, where one may top what he holds
     over already); a terrain-following helicopter over a forest flies its height over the treetops. The
     ground floor (R5) is still over the bare ground.
-  * The country's own ground (`command/em_radio.hpp`'s `CountryGround`) carries no obstacles yet.
+  * **The country's own ground** (`command/em_radio.hpp` `CountryGround`, the PU-12M's radios and the information
+    pipeline's means over the whole country; roadmap S9, 20 Nov 2026) carries P.1812's representative clutter a class
+    per 250 m cell from the country's land cover (`CountryMap::BakeClutter`, `ClutterClassAt`; `simcore/clutter.hpp`
+    `ClutterRaster`): lakes and rivers water/sea, forest urban/trees/forest (15 m), a town's middle dense urban (20 m)
+    and the rest of it suburban (10 m) by `TownClutterClass`, marsh and everything else open/rural (0 m). The heights
+    are `data/gameplay/clutter.json`'s (`LoadClutterHeights`; the game passes them, `USimAirCampaignSubsystem`); a
+    `CountryGround` made without them stays bare, as before. It has no footprints: the samples alone, as P.1812 adds
+    its clutter to the profile's points. The map's far ground keeps its own: its woods are boxes the map lays out (what
+    is drawn blocks sight), its towns not laid out the same `TownClutterClass` by distance.
   * **What is drawn is what blocks sight.** The game draws the woods as trees and masses from the same boxes
     (`scenery/map_dressing.hpp` `PlaceTrees`), each tree's top clamped to the ground plus `ObstacleHeight` where it
     stands: nothing drawn stands above the profile the sight lines use. The other way round, a ray is blocked only
@@ -568,10 +583,16 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     where the ray runs under the blocks' bound (`ObstacleTopCeilingM` first: the tallest top anywhere). The dynamic
     campaign test's hour in `ground_check data 3600`: 64.1 s of wall time with the exact cuts (69.4 s at the
     narrowest side's spacing, 88.6 s before the footprints), against r-track's 48.4 s, run in turn on one machine: a
-    third slower than before the obstacles; Kesmark's raid 0.5 s against 0.4 s. If it tells in the game's fixed step:
-    obstacle profiles cached per path.
-* Left: sea areas and ducting; obstacles on the country's ground for the radios; a land-cover clutter class per cell
-  (fields, orchards) in place of the towns' two heights.
+    third slower than before the obstacles; Kesmark's raid 0.5 s against 0.4 s. **Profiles cached per path: not
+    built** (S9, 20 Nov 2026). Measured in turn on a shared machine, the hour took 132.5 s and 181.7 s before S9 and
+    122.3 s after it (one run after it took 917 s while the machine was loaded: the 600 s school missions slowed
+    fivefold with it), so S9 added nothing measurable; and the hour at about 125 s is some 35 ms of one core per
+    simulated second, a few per cent of the game's fixed step at real time. A cache keyed on a path's two ends would
+    seldom hit (every target moves every step) and would need invalidating when a wood or a building changes. To
+    revisit if a profile of the game's step shows the sight lines on top.
+* The clutter an antenna stands in and water under a path: §37 (23 November 2026).
+* Left: ducting; orchards, vineyards and parkland as clutter classes of their own (the country's land cover has none);
+  the map's far ground still clutters only its towns (its woods are boxes).
 
 ## 28. Scale (E8, started 16 October 2026)
 
@@ -784,3 +805,123 @@ senior operator it is hit in 4 of 4. Against the Shrike class the drill makes ev
 (HARM class: 271 m). A dummy position's decoy that radiates while the radar is silent takes the first HARM in 4 of 4.
 The burst rhythm alone (no drill) does not save the vehicle: the last burst before the impact gives the HARM its lock
 back.
+
+## 36. Smooth-earth diffraction (roadmap S6's follow-ups, 20 November 2026)
+
+Until now a path past the radio horizon lost only the knife edge over the earth's bulge at its worst point, about 24-27 dB
+for a 3 m whip and an aircraft at 8,000 m 670 km apart at 50 MHz: an airborne listener heard far past its horizon. From
+10 MHz to 1 GHz `DiffractionLossDb` (`propagation.hpp`) now adds ITU-R P.526-16's (11/2025) smooth spherical earth, joined
+with the terrain's knife edges by the recommendation's own rule:
+
+* **The first term of the residue series** (section 3.1.1): the surface admittance K for Fig. 2's medium land (relative
+  permittivity 15, conductivity 0.001 S/m) and vertical polarisation (eqs. 11a, 12a), beta (eq. 16), X and Y (eqs. 14a,
+  15a), the distance term F(X) (eqs. 17a, 17b) and the height gains G(Y) (eqs. 18, 18a, 18b) with their floor
+  2 + 20 log K: 20 log E/E0 = F(X) + G(Y1) + G(Y2) (eq. 13). `SphericalFirstTermDb`.
+* **Any distance** (section 3.2): past the marginal line of sight (eq. 21) the first term; short of it the clearance h
+  of the curved path (eqs. 22-22e) against h_req = 0.552 sqrt(d1 d2 lambda / d) (eq. 23), the notional radius for which
+  the path grazes (eq. 24) and A = (1 - h / h_req) A_h (eq. 25); nothing when the clearance exceeds 0.552 of the first Fresnel zone's radius.
+  `SphericalEarthLossDb`. Below 10 MHz section 3 sends the user to P.368: none here.
+* **With terrain** (section 4.5.2): `AnalysePath` fits the least-squares smooth surface to the profile without the
+  bulge (eqs. 58-60), lowers it so no ground stands above it seen from either end (eqs. 61-62), clamps it to the ends'
+  ground (eq. 63) and gives the antennas' heights over it (eq. 64, `smooth_h1_m`, `smooth_h2_m`) and the smooth path's
+  worst knife-edge geometry (`smooth_v_geometry`). The total is L = L_edges + max(L_sph - L_bs, 0) (eq. 66), this layer's
+  Deygout edges (`TerrainEdgesLossDb`) in the place of Bullington's: the spherical earth counts only for what it loses
+  beyond one knife edge over the smooth path, so the bulge is never counted twice.
+
+Not changed: above 1 GHz the two rays over the sphere already take the curve within the horizon, and adding P.526 there
+would count the ground twice; past the horizon they lose less than P.526 (10 GHz, 5 m to 50 m: 19 dB against 15 dB at the
+horizon, 35 dB against 56 dB 22 km past it), which is left. Radar calibration anchors (`AnchorLook`) take the edges alone,
+so no radar's calibration moved.
+
+Tests (`test_em_models.cpp`): F, G, K and beta against hand calculations and Fig. 2; the first term at 500 km (50 MHz,
+3 m to 8,000 m, k = 4/3) 73.976 dB by hand; no step at the marginal line of sight (33.00 dB either side), growth past
+it, zero well inside; flat ground's smooth surface is the ground; a plateau; two ridges by eq. 66; microwaves unchanged.
+The prototype mirrors the functions (`prototype/samproto/em.py`, `test_em.py`).
+
+What moved: em_demo's 11 checks all pass and its timeline is unchanged; only the C2 radio links' margins fell (the battery
+CP to SAM-2, 19 to 16 dB; the others 10 to 6 dB and 6 to 2 dB), all still up. em_bench's result checksum is unchanged
+(eee3c1357697d113); its tick costs about 7 % more (`em_bench data 500 60 24`, the same machine back to back: 15.8 to
+16.9 ms, radars 4.17 to 4.55, ESM 10.7 to 11.4), the smooth surface's fit in every new profile. To keep it there the smooth
+path's edge is found by golden section on its one peak rather than sample by sample, the obstruction's slopes are worked
+only where the line is obstructed, and the clearance geometry of section 3.2 is kept with the profile, so a path clear of
+h_req at a band does no more work. In sessions the VHF nets past their horizon lose more and stay out of range where the
+bulge's one edge had let them through; inside the horizon nothing changes unless the first Fresnel zone grazes the earth:
+our intercept post's two calls in the B9 table test lose 1.4 and 4.7 dB of their 31 and 40 dB margins, and the
+information net's test listener 90 km off on a 15 m mast (past its 23 km horizon to a whip) hears a call with chance 0.00
+where the bulge's edge gave it 0.11. The crew's voice nets, the R-111 and R-407 sets, the battery link and the comms tests
+print the same numbers as before.
+
+
+## 37. The clutter round an antenna and water under a path (roadmap E9's last parts, 23 November 2026)
+
+What E9 had left after the Deygout edges, the rain and R6's woods and buildings on the profile (§27): what stands round
+an antenna, and water. One source of numbers throughout: what stands where is what the terrain says
+(`Terrain::ObstacleHeightAt`: the map's boxes, P.1812's representative heights in `data/gameplay/clutter.json` where it
+has none); water is what the map says is water (`Terrain::WaterAt`). The fictional country has lakes, reservoirs and rivers
+and no sea, so water is fresh water throughout; a sea would need only its own permittivity (P.527 section 5.1.2).
+
+* **The clutter an antenna stands in** (ITU-R P.2108-1 section 3.1, the height gain terminal correction model;
+  `TerminalClutterLossDb`). The profile leaves out what stands within 60 m of either end (§27's skip), so until now an
+  antenna in a wood or a street lost nothing for the cover round it. `AnalysePath` now asks what stands where each
+  antenna is: when its antenna stands lower than that height R, `PathGeometry` keeps R and the antenna's height
+  (`clutter_a_m`, `antenna_a_m`, the same for b), the ray and the profile's edges start from the clutter's top (section
+  3.1: the basic transmission loss "to/from the height of the representative clutter height"), and `LinkLossCore` adds
+  the end's loss as `LinkLossResult::clutter_db`: A_h = J(nu) - 6.03 for woods and buildings (eq. 2a), nu = 0.342
+  sqrt(f GHz) sqrt(h_dif theta_clut), h_dif = R - h, theta_clut = atan(h_dif / 27 m) in degrees. Open ground and water
+  stand at 0 m in the same data, so eq. (2b)'s height gain never applies (P.2108's Table 3 would put them at 10 m; the
+  layer's open ground was calibrated without it). The ground's two rays and the plane earth keep the antennas' own
+  heights: raising a whip among trees to the canopy for them would make it reach further than one in a field. Section 3.1
+  holds from 30 MHz to 3 GHz; a radar above it takes the 3 GHz loss. A 3 m whip in a 15 m wood at 50 MHz loses 9.7 dB,
+  a 5 m mast among 20 m blocks 11.2 dB, a 5 m radar mast in a wood 25.3 dB each way. The gameplay line of sight
+  (`HasLineOfSight`) is not changed: the skip still keeps a radar at a wood's edge from being hidden by its own cell.
+* **Water under the path** (`Terrain::WaterAt`, `HasWater`). `AnalysePath` looks at the middles of 64 equal stretches of
+  the path and keeps a bit for each one over water (`PathGeometry::water_mask`; `WaterFraction`, `WaterShareBetween`):
+  frequency-free, cached with the profile, never asked on a terrain without water. The map (`MapData::WaterAt`): its
+  rivers and its detail areas' within half their width, its lakes, and beyond the map proper its country's lakes and
+  rivers; a grid of 100 m cells over the water's bounds (about 1 MB for Kesmark and its country) says no at once where
+  no river's or lake's bounds reach, and the exact test (`WaterAtExact`) runs only where they do. The country's own ground (`CountryGround`): the clutter raster's water/sea cells (250 m; baked with the clutter
+  heights, as before).
+* **Water's permittivity** (ITU-R P.527-6 section 5.1.1, `PureWaterPermittivity`): pure water's double Debye model at
+  10 C (a game value), eqs. (5)-(13), and eq. (3a)'s conductivity. 10 GHz and 20 C: 60.8 - j 32.7 (the recommendation's
+  Fig. 2: about 61 and 33).
+* **The reflection off water** (above 1 GHz, `PathReflection`, `WaterReflection`). The two rays' coefficient is land's
+  (`EffectiveReflection`, unchanged) and water's weighted by the share of water under the reflection's first Fresnel zone
+  along the path: the ground points whose path via them is within half a wavelength of the specular one, Delta =
+  sqrt(lambda d1 d2 / d) / tan(psi) either side of it (`ReflectionWaterShare`; kilometres for a low ray, so a lake under
+  it reflects and a river crossing it is a small part). Water's coefficient is Fresnel's for horizontal polarisation
+  (the emitters carry none; within a degree of grazing both are near 1 over water) times the Rayleigh factor of the
+  lake's waves (`Environment::water_roughness_m`, 5 cm rms, a game value). A 5 m radar and a target 50 m up 10 km away
+  at 6 GHz: over the rolling land 0.41, over a lake 0.997, so over water the low target fades in lobes from a factor of
+  2 to nearly nothing along its range, as over the sea; over land it stays within 0.65-1.26.
+* **The smooth earth over water** (below 1 GHz, `DiffractionLossDb`): P.526's surface admittance with water's
+  permittivity and conductivity (`SphericalEarthLossDb`'s new surface arguments), mixed with land's by ITU-R P.1546-6
+  Annex 5 section 8 (`MixedPathLossDb`: L = (1 - A) L_land + A L_water, A = A0^V, A0 = 1 - (1 - F)^(2/3), V = max(1, 1 +
+  Delta/40)), stated for the sea and used for the lakes. Past the horizon VHF carries further over water: two 3 m whips
+  40 km apart at 50 MHz lose 66.4 dB to the smooth earth over land, 51.8 dB over water, the height gains' floor
+  2 + 20 log K being 7.2 dB higher at each end. The plane earth below 1 GHz holds over any surface (both rays at grazing,
+  reflection -1).
+
+Tests (`test_em_environment.cpp`): the clutter loss by hand at 50 MHz, 1, 3 and 6 GHz, at and over the canopy; a whip in
+a wood costs exactly its end's loss over the same link in a field, the clutter kept the right way round; water's
+permittivity at 1 MHz and 10 GHz, its conductivity, Fresnel at normal incidence and near grazing; the mixed path by hand;
+the water mask and its shares; a lake under the reflection's zone reflects and one beyond it does not, asked from either
+end; the lobes over water and over land; the smooth earth over water and the mixed path through `DiffractionLossDb`; the
+map's river and its country's lakes found by both grounds, and the map's grid never saying no where the exact test finds water (`test_map_leftovers.cpp`). `test_map_obstacles.cpp`'s
+"no skip" case changed: the radio path no longer hides an antenna behind the wood it stands in, it takes the wood as its
+end's loss. The prototype mirrors all of it (`prototype/samproto/em.py`, `test_em.py`).
+
+What moved, and what it costs. `test_map_obstacles.cpp`: three radio paths whose ends stand in the map's woods now
+start from the canopy's top with their ends' loss (P.2108), where the ray from under it used to run into the trees: the
+"no skip" case (above); the Lazne woods' 8 m ends, 300 m either side of a block, stand in 18.5 and 19.8 m of canopy
+(18.3 dB of the ends' clutter at 50 MHz), and the block itself is now shown from the open ground beyond its edges; the
+corner cuts count the 3333 of 8084 whose ends stand in clutter apart, and every other one is still blocked. Every other
+test is unchanged, the comms, intercept, battery and mission ones included. `em_bench data 500 60 24` (its grid terrain
+has no water and no boxes) gives the same checksum, eee3c1357697d113, at 17.26 and 17.37 ms a tick before and 17.28 and
+16.86 ms after, run alternately (noise). On the Kesmark map with its country (a scratch bench of 4000 paths 5-40 km
+from posts 5 m up, 291 of them over water and 242 with an end in clutter) a path costs 44.1 us against 41.3 us before
+E9: +7 %, the 64 water looks almost free behind the grid (without it they cost +34 %).
+
+Left out: sea paths' ducting and anomalous propagation (P.452's and P.1812's sea fractions; the country has no sea);
+vertical polarisation over water (the emitters carry none); P.2108 section 3.2's statistical clutter loss above 3 GHz;
+the clutter of the far ground's woods as a class of its own on the country's ground (orchards, vineyards, parkland: the
+land cover has none); rivers narrower than a 250 m cell on the country's own ground are whole cells of water.

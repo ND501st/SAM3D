@@ -109,6 +109,11 @@ namespace SimFxAudio
 		double RecordedAt(FName Sample) const { const double* M = RecordedAtM.Find(Sample); return M != nullptr ? *M : 0.0; }
 		// Events.
 		FEventSoundDef Launch, ArmLaunch, RocketLaunch, BombRush, Debris, Cluster, Crack, Fireball;
+		// The air battle (roadmap B13): a flare's pop out of its dispenser, an air-to-air missile leaving its rail.
+		FEventSoundDef FlarePop, AamLaunch;
+		double FlarePopS = 0.25;  // a salvo's pops this far apart (effects.json air_battle.flare_salvo_s's picture)
+		int32 FlarePopsMax = 6;
+		double AamFlyOnS = 4.0;   // a missile that missed bursts this long after its end (effects.json air_battle.aam_fly_on_s)
 		// A gun pass's rhythm (effects.json "guns", set by the subsystem from FSimFxTuning: the picture's bursts).
 		double GunBurstMinS = 0.2, GunBurstMaxS = 0.35, GunPauseMinS = 2.0, GunPauseMaxS = 3.0;
 		TArray<TPair<FString, int32>> GunBurstMinRounds;  // effects.json guns.burst_min_rounds: the picture's

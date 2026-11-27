@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "simcore/em/comms_intercept.hpp"
 #include "simcore/em/detection.hpp"
 #include "simcore/em/knowledge.hpp"
 #include "simcore/em/model.hpp"
@@ -188,7 +189,7 @@ inline std::vector<KnowledgeTrack> PictureItems(const NodeState& n, double now) 
 
 // Put a spoken message on a net with the timing its sender worked out (the voice net is shared with other senders
 // the sender knows about). It radiates while it is on the air and is delivered or lost like any other message.
-inline long long SendVoice(EmScene& s, NetState& net, const NodeState& from, int to, double start_s, double end_s) {
+inline long long SendVoice(EmScene& s, NetState& net, const NodeState& from, int to, double start_s, double end_s, int payload = -1) {
     Message m;
     m.id = s.next_message_id++;
     m.kind = MessageKind::Voice;
@@ -199,6 +200,7 @@ inline long long SendVoice(EmScene& s, NetState& net, const NodeState& from, int
     m.queued_s = s.time_s;
     m.start_s = start_s;
     m.end_s = end_s;
+    m.payload = payload;
     if (end_s > net.busy_until_s) net.busy_until_s = end_s;
     s.messages.push_back(m);
     s.Log(EmEventKind::MessageSent, from.id, static_cast<int>(m.id), from.name + " -> " + std::to_string(to) + " on " + net.name + ": voice");
@@ -281,6 +283,8 @@ inline void RunComms(EmScene& s, bool evaluate_links) {
             if (const NetState* net = s.FindNet(m.net)) e->freq_hz = net->freq_hz;
         }
     }
+    // Comms intercept receivers hear the calls that have just started (roadmap B9).
+    RunCommsIntercept(s);
     // Transmissions that ended this tick are delivered (or not).
     std::vector<Message> due;
     for (Message& m : s.messages) {
